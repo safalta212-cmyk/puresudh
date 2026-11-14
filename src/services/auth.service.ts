@@ -49,7 +49,7 @@ export function formatFirebaseAuthError(error: any): string {
   switch (code) {
     case 'auth/invalid-credential':
     case 'auth/invalid-login-credentials':
-      return 'Invalid email or password in Firebase Authentication (auth/invalid-credential). Please check your password or verify the account exists in Firebase Console.';
+      return 'Invalid email or password (auth/invalid-credential). Check for typos, verify this account exists under Firebase Console → Authentication → Users, or use Google Sign-In / "Forgot password?" if your account has no password set yet.';
     case 'auth/wrong-password':
       return 'Incorrect password (auth/wrong-password). Please verify your password or click "Forgot password?".';
     case 'auth/user-not-found':

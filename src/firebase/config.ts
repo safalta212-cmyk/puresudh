@@ -13,19 +13,23 @@ try {
 }
 
 const env = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
+const cleanEnv = (val: unknown): string => (typeof val === 'string' ? val.trim() : '');
+
+const envProjectId = cleanEnv(env.VITE_FIREBASE_PROJECT_ID);
+const isCustomProjectOverride = Boolean(envProjectId && envProjectId !== firebaseAppletConfig.projectId);
 
 export const resolvedFirebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || firebaseAppletConfig.apiKey,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || firebaseAppletConfig.authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || firebaseAppletConfig.projectId,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || firebaseAppletConfig.storageBucket,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseAppletConfig.messagingSenderId,
-  appId: env.VITE_FIREBASE_APP_ID || firebaseAppletConfig.appId,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || firebaseAppletConfig.measurementId || undefined,
+  apiKey: cleanEnv(env.VITE_FIREBASE_API_KEY) || (isCustomProjectOverride ? '' : firebaseAppletConfig.apiKey),
+  authDomain: cleanEnv(env.VITE_FIREBASE_AUTH_DOMAIN) || (isCustomProjectOverride ? `${envProjectId}.firebaseapp.com` : firebaseAppletConfig.authDomain),
+  projectId: envProjectId || firebaseAppletConfig.projectId,
+  storageBucket: cleanEnv(env.VITE_FIREBASE_STORAGE_BUCKET) || (isCustomProjectOverride ? `${envProjectId}.firebasestorage.app` : firebaseAppletConfig.storageBucket),
+  messagingSenderId: cleanEnv(env.VITE_FIREBASE_MESSAGING_SENDER_ID) || (isCustomProjectOverride ? '' : firebaseAppletConfig.messagingSenderId),
+  appId: cleanEnv(env.VITE_FIREBASE_APP_ID) || (isCustomProjectOverride ? '' : firebaseAppletConfig.appId),
+  measurementId: cleanEnv(env.VITE_FIREBASE_MEASUREMENT_ID) || (isCustomProjectOverride ? undefined : firebaseAppletConfig.measurementId || undefined),
 };
 
 export const resolvedFirestoreDatabaseId: string =
-  env.VITE_FIREBASE_DATABASE_ID || firebaseAppletConfig.firestoreDatabaseId || '(default)';
+  cleanEnv(env.VITE_FIREBASE_DATABASE_ID) || (isCustomProjectOverride ? '(default)' : firebaseAppletConfig.firestoreDatabaseId || '(default)');
 
 const app = getApps().length === 0 ? initializeApp(resolvedFirebaseConfig) : getApp();
 const auth = getAuth(app);

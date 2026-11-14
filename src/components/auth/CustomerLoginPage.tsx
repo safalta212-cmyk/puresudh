@@ -132,9 +132,9 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
     if (result.success) {
       showToast('Customer account created successfully! Welcome to PURE SUDH.', 'success');
       if (onNavigate) {
-        onNavigate('account');
+        onNavigate('account', result.profile);
       } else if (onNavigateDashboard) {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = '/account';
       }

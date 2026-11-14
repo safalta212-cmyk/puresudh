@@ -55,7 +55,7 @@ interface AuthContextType {
     pass: string,
     name: string,
     phone: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   registerVendor: (
     email: string,
     pass: string,
@@ -64,7 +64,7 @@ interface AuthContextType {
     shopName: string,
     fssai?: string,
     gst?: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   logout: () => Promise<void>;
   sendPasswordReset: (
     email: string,
@@ -820,7 +820,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return {
         success: false,
-        error: firebaseErrorMsg || serverErrorMessage || 'Invalid credentials. Please verify your email/phone and password, or create an account.',
+        error:
+          firebaseErrorMsg ||
+          serverErrorMessage ||
+          (isPhoneNumber
+            ? 'Mobile number password login requires an active local/server session. Please sign in using your registered email address and password, or Continue with Google.'
+            : 'Invalid credentials. Please verify your email and password, or create an account.'),
       };
     } finally {
       setIsLoading(false);
