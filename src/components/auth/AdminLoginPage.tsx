@@ -15,7 +15,7 @@ import { useToast } from '../../context/ToastContext';
 
 interface AdminLoginPageProps {
   onBackToStore: () => void;
-  onNavigateDashboard?: () => void;
+  onNavigateDashboard?: (profile?: { role: string }) => void;
 }
 
 export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
@@ -45,7 +45,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     if (result.success) {
       showToast('Authenticated as Administrator. Access granted to Admin Console.', 'success');
       if (onNavigateDashboard) {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = '/admin';
       }
@@ -79,7 +79,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     if (result.success) {
       showToast('Authenticated as Administrator with Google.', 'success');
       if (onNavigateDashboard) {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = '/admin';
       }

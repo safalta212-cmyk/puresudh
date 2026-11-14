@@ -19,8 +19,8 @@ import { isTemporaryEmail, isTemporaryOrFakePhone, sanitizePhoneInput10, formatI
 
 interface CustomerLoginPageProps {
   onBackToStore: () => void;
-  onNavigate?: (dest: string) => void;
-  onNavigateDashboard?: () => void;
+  onNavigate?: (dest: string, profile?: { role: string }) => void;
+  onNavigateDashboard?: (profile?: { role: string }) => void;
   initialMode?: 'login' | 'register' | 'forgot-password';
 }
 
@@ -85,9 +85,9 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
       const dest = redirectMap[userRole] || '/account';
       showToast('Welcome back to PURE SUDH! Signed in successfully.', 'success');
       if (onNavigate) {
-        onNavigate(dest);
+        onNavigate(dest, result.profile);
       } else if (onNavigateDashboard && userRole === 'customer') {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = dest;
       }
@@ -176,9 +176,9 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
       const dest = redirectMap[userRole] || '/account';
       showToast('Welcome to PURE SUDH! Signed in with Google.', 'success');
       if (onNavigate) {
-        onNavigate(dest);
+        onNavigate(dest, result.profile);
       } else if (onNavigateDashboard && userRole === 'customer') {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = dest;
       }

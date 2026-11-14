@@ -54,6 +54,10 @@ export function formatFirebaseAuthError(error: any): string {
       return 'Incorrect password (auth/wrong-password). Please verify your password or click "Forgot password?".';
     case 'auth/user-not-found':
       return 'No account found in Firebase Authentication for this email (auth/user-not-found).';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists (auth/email-already-in-use). Please sign in instead.';
+    case 'auth/weak-password':
+      return 'Password is too weak (auth/weak-password). Please use at least 6 characters.';
     case 'auth/invalid-email':
       return 'Invalid email address format (auth/invalid-email).';
     case 'auth/user-disabled':
@@ -63,7 +67,15 @@ export function formatFirebaseAuthError(error: any): string {
     case 'auth/operation-not-allowed':
       return 'Email/Password sign-in is disabled in Firebase Console (auth/operation-not-allowed). Enable Email/Password provider under Authentication → Sign-in method.';
     case 'auth/unauthorized-domain':
-      return 'This domain is not authorized in Firebase Authentication (auth/unauthorized-domain). Add your Vercel domain under Firebase Console → Authentication → Settings → Authorized domains.';
+      return 'This domain is not authorized in Firebase Authentication (auth/unauthorized-domain). Add your current domain under Firebase Console → Authentication → Settings → Authorized domains.';
+    case 'auth/popup-blocked':
+      return 'Sign-in popup was blocked by your browser (auth/popup-blocked). Please allow popups for this site and try again.';
+    case 'auth/popup-closed-by-user':
+      return 'Google sign-in popup was closed before completing sign-in.';
+    case 'auth/cancelled-popup-request':
+      return 'Another sign-in popup is already open. Please complete or close it and try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method (auth/account-exists-with-different-credential).';
     case 'auth/network-request-failed':
       return 'Network error while connecting to Firebase Authentication (auth/network-request-failed). Please check your connection and try again.';
     case 'auth/invalid-api-key':
@@ -81,11 +93,21 @@ export function formatFirebaseAuthError(error: any): string {
  */
 export async function getCustomClaims(user: FirebaseUser): Promise<Record<string, any>> {
   try {
-    const tokenResult: IdTokenResult = await user.getIdTokenResult(true);
+    const tokenResult: IdTokenResult = await Promise.race([
+      user.getIdTokenResult(true),
+      new Promise<IdTokenResult>((_, reject) =>
+        setTimeout(() => reject(new Error('Token refresh timeout')), 4000)
+      ),
+    ]);
     return tokenResult.claims || {};
   } catch (err) {
-    console.warn('Failed to fetch ID token claims:', err);
-    return {};
+    try {
+      const cached = await user.getIdTokenResult(false);
+      return cached.claims || {};
+    } catch {
+      console.warn('Failed to fetch ID token claims:', err);
+      return {};
+    }
   }
 }
 
@@ -131,8 +153,11 @@ export function resolveEffectiveRole(
 export async function checkFirestoreAdminDoc(uid: string): Promise<boolean> {
   if (!uid) return false;
   try {
-    const adminSnap = await getDoc(doc(db, 'admins', uid));
-    return adminSnap.exists();
+    const adminSnap = await Promise.race([
+      getDoc(doc(db, 'admins', uid)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+    return Boolean(adminSnap && adminSnap.exists());
   } catch {
     return false;
   }

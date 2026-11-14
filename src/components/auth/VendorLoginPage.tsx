@@ -17,7 +17,7 @@ import { useToast } from '../../context/ToastContext';
 
 interface VendorLoginPageProps {
   onBackToStore: () => void;
-  onNavigateDashboard?: () => void;
+  onNavigateDashboard?: (profile?: { role: string }) => void;
   onNavigateRegister?: () => void;
 }
 
@@ -49,7 +49,7 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
     if (result.success) {
       showToast('Welcome to your Vendor Partner Hub!', 'success');
       if (onNavigateDashboard) {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = '/vendor';
       }

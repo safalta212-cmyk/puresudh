@@ -273,8 +273,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let firestoreData: Partial<UserProfile> = {};
       try {
         const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) {
+        const snap = await Promise.race([
+          getDoc(userRef),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+        if (snap && snap.exists()) {
           snapExists = true;
           firestoreData = snap.data() as Partial<UserProfile>;
         }
@@ -465,8 +468,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           let firestoreData: Partial<UserProfile> = {};
           try {
-            const snap = await getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid));
-            if (snap.exists()) {
+            const snap = await Promise.race([
+              getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+            ]);
+            if (snap && snap.exists()) {
               firestoreData = snap.data() as Partial<UserProfile>;
             }
           } catch (fsReadErr) {
@@ -757,8 +763,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           let firestoreData: Partial<UserProfile> = {};
           try {
-            const snap = await getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid));
-            if (snap.exists()) {
+            const snap = await Promise.race([
+              getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+            ]);
+            if (snap && snap.exists()) {
               firestoreData = snap.data() as Partial<UserProfile>;
             }
           } catch (fsErr) {
@@ -1228,8 +1237,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let firestoreData: Partial<UserProfile> = {};
       try {
-        const snap = await getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid));
-        if (snap.exists()) {
+        const snap = await Promise.race([
+          getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+        if (snap && snap.exists()) {
           firestoreData = snap.data() as Partial<UserProfile>;
         }
       } catch {}

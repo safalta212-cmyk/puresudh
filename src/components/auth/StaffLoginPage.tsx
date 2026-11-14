@@ -16,7 +16,7 @@ import { useToast } from '../../context/ToastContext';
 
 interface StaffLoginPageProps {
   onBackToStore: () => void;
-  onNavigateDashboard?: () => void;
+  onNavigateDashboard?: (profile?: { role: string }) => void;
 }
 
 export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
@@ -46,7 +46,7 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
     if (result.success) {
       showToast('Authenticated into Staff Fulfillment Desk.', 'success');
       if (onNavigateDashboard) {
-        onNavigateDashboard();
+        onNavigateDashboard(result.profile);
       } else {
         window.location.href = '/staff';
       }

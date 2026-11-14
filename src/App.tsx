@@ -707,77 +707,79 @@ const AppContent: React.FC = () => {
     }
   }, [currentView, selectedCategorySlug, selectedProduct, categories]);
 
-  const handleNavigateView = (view: string) => {
+  const handleNavigateView = (view: string, authenticatedProfile?: { role: string } | null) => {
+    const activeUser = authenticatedProfile || user;
+
     // 1. Separate Authentication Routes
     if (view === 'customer-login' || view === '/customer/login' || view === 'login') {
-      if (user) {
+      if (activeUser) {
         const redirectMap: Record<string, string> = {
           admin: '/admin',
           staff: '/staff',
           vendor: '/vendor',
           customer: '/account',
         };
-        const dest = redirectMap[user.role] || '/account';
-        handleNavigateView(dest);
+        const dest = redirectMap[activeUser.role] || '/account';
+        handleNavigateView(dest, activeUser);
         return;
       }
       setCurrentView('customer-login');
       try { window.history.pushState(null, '', '/customer/login'); } catch {}
     } else if (view === 'customer-register' || view === '/customer/register' || view === 'register' || view === 'signup') {
-      if (user) {
+      if (activeUser) {
         const redirectMap: Record<string, string> = {
           admin: '/admin',
           staff: '/staff',
           vendor: '/vendor',
           customer: '/account',
         };
-        const dest = redirectMap[user.role] || '/account';
-        handleNavigateView(dest);
+        const dest = redirectMap[activeUser.role] || '/account';
+        handleNavigateView(dest, activeUser);
         return;
       }
       setCurrentView('customer-register');
       try { window.history.pushState(null, '', '/customer/register'); } catch {}
     } else if (view === 'admin-login' || view === '/admin/login') {
-      if (user && user.role === 'admin') {
-        handleNavigateView('/admin');
+      if (activeUser && activeUser.role === 'admin') {
+        handleNavigateView('/admin', activeUser);
         return;
-      } else if (user) {
+      } else if (activeUser) {
         showToast('Access Denied: You are not authorized for Administrator login. Redirected to your dashboard.', 'error');
-        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
+        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
         return;
       }
       setCurrentView('admin-login');
       try { window.history.pushState(null, '', '/admin/login'); } catch {}
     } else if (view === 'staff-login' || view === '/staff/login') {
-      if (user && (user.role === 'staff' || user.role === 'admin')) {
-        handleNavigateView('/staff');
+      if (activeUser && (activeUser.role === 'staff' || activeUser.role === 'admin')) {
+        handleNavigateView('/staff', activeUser);
         return;
-      } else if (user) {
+      } else if (activeUser) {
         showToast('Access Denied: Not authorized for Staff operations. Redirected to your dashboard.', 'error');
-        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
+        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
         return;
       }
       setCurrentView('staff-login');
       try { window.history.pushState(null, '', '/staff/login'); } catch {}
     } else if (view === 'vendor-login' || view === '/vendor/login') {
-      if (user && (user.role === 'vendor' || user.role === 'admin')) {
-        handleNavigateView('/vendor');
+      if (activeUser && (activeUser.role === 'vendor' || activeUser.role === 'admin')) {
+        handleNavigateView('/vendor', activeUser);
         return;
-      } else if (user) {
+      } else if (activeUser) {
         showToast('Access Denied: Not authorized for Vendor Partner Hub. Redirected to your dashboard.', 'error');
-        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
+        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
         return;
       }
       setCurrentView('vendor-login');
       try { window.history.pushState(null, '', '/vendor/login'); } catch {}
     } else if (view === 'admin' || view.startsWith('/admin')) {
-      if (!user) {
+      if (!activeUser) {
         handleNavigateView('/admin/login');
         return;
       }
-      if (user.role !== 'admin') {
+      if (activeUser.role !== 'admin') {
         showToast('Access Denied: Administrator role required. Redirected to your dashboard.', 'error');
-        handleNavigateView('/account');
+        handleNavigateView('/account', activeUser);
         return;
       }
       setCurrentView('admin');
@@ -819,13 +821,13 @@ const AppContent: React.FC = () => {
       }
       try { window.history.pushState(null, '', view.startsWith('/') ? view : `/${view}`); } catch {}
     } else if (view === 'staff' || view.startsWith('/staff')) {
-      if (!user) {
+      if (!activeUser) {
         handleNavigateView('/staff/login');
         return;
       }
-      if (user.role !== 'staff' && user.role !== 'admin') {
+      if (activeUser.role !== 'staff' && activeUser.role !== 'admin') {
         showToast('Access Denied: Staff fulfillment access required. Redirected to your dashboard.', 'error');
-        handleNavigateView('/account');
+        handleNavigateView('/account', activeUser);
         return;
       }
       setCurrentView('staff');
@@ -835,20 +837,20 @@ const AppContent: React.FC = () => {
         setCurrentView('vendor-register');
         try { window.history.pushState(null, '', '/vendor-register'); } catch {}
       } else {
-        if (!user) {
+        if (!activeUser) {
           handleNavigateView('/vendor/login');
           return;
         }
-        if (user.role !== 'vendor' && user.role !== 'admin') {
+        if (activeUser.role !== 'vendor' && activeUser.role !== 'admin') {
           showToast('Access Denied: Vendor Partner authorization required. Redirected to your dashboard.', 'error');
-          handleNavigateView('/account');
+          handleNavigateView('/account', activeUser);
           return;
         }
         setCurrentView('vendor');
         try { window.history.pushState(null, '', '/vendor'); } catch {}
       }
     } else if (view === 'account' || view === '/account') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to access your account.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -966,8 +968,8 @@ const AppContent: React.FC = () => {
       <CustomerLoginPage
         initialMode={currentView === 'customer-register' ? 'register' : 'login'}
         onBackToStore={() => handleNavigateView('home')}
-        onNavigate={(dest) => handleNavigateView(dest)}
-        onNavigateDashboard={() => handleNavigateView('account')}
+        onNavigate={(dest, profile) => handleNavigateView(dest, profile)}
+        onNavigateDashboard={(profile) => handleNavigateView('account', profile)}
       />
     );
   }
@@ -976,7 +978,7 @@ const AppContent: React.FC = () => {
     return (
       <AdminLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={() => handleNavigateView('admin')}
+        onNavigateDashboard={(profile) => handleNavigateView('admin', profile)}
       />
     );
   }
@@ -985,7 +987,7 @@ const AppContent: React.FC = () => {
     return (
       <StaffLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={() => handleNavigateView('staff')}
+        onNavigateDashboard={(profile) => handleNavigateView('staff', profile)}
       />
     );
   }
@@ -994,7 +996,7 @@ const AppContent: React.FC = () => {
     return (
       <VendorLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={() => handleNavigateView('vendor')}
+        onNavigateDashboard={(profile) => handleNavigateView('vendor', profile)}
         onNavigateRegister={() => handleNavigateView('vendor-register')}
       />
     );
