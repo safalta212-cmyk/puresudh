@@ -166,11 +166,21 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
     setFormError(null);
     const result = await loginWithGoogle();
     if (result.success) {
+      const userRole = result.profile?.role || 'customer';
+      const redirectMap: Record<string, string> = {
+        admin: '/admin',
+        staff: '/staff',
+        vendor: '/vendor',
+        customer: '/account',
+      };
+      const dest = redirectMap[userRole] || '/account';
       showToast('Welcome to PURE SUDH! Signed in with Google.', 'success');
-      if (onNavigateDashboard) {
+      if (onNavigate) {
+        onNavigate(dest);
+      } else if (onNavigateDashboard && userRole === 'customer') {
         onNavigateDashboard();
       } else {
-        window.location.href = '/account';
+        window.location.href = dest;
       }
     } else {
       setFormError(result.error || 'Google sign-in could not be completed.');

@@ -71,7 +71,9 @@ interface AuthContextType {
     portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor'
   ) => Promise<{ success: boolean; message: string }>;
   updateUserPassword: (newPass: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (
+    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   updateUserProfileData: (updates: {
     displayName?: string;
     phone?: string;
@@ -259,8 +261,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.role]);
 
   // Load user profile from Firestore when Firebase Auth state changes
-  const syncFirebaseUser = useCallback(async (fbUser: FirebaseUser | null) => {
-    if (!fbUser) return;
+  const syncFirebaseUser = useCallback(async (fbUser: FirebaseUser | null): Promise<UserProfile | null> => {
+    if (!fbUser) return null;
     try {
       const [claims, hasAdminDoc] = await Promise.all([
         getCustomClaims(fbUser),
@@ -309,6 +311,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(fullProfile);
         setRole(fullProfile.role);
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(fullProfile));
+        return fullProfile;
       } else {
         // First-time profile creation in Firestore
         const effRole = resolveEffectiveRole(claims, undefined, fbUser.email, hasAdminDoc);
@@ -334,9 +337,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(newProfile);
         setRole(effRole);
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(newProfile));
+        return newProfile;
       }
     } catch (err) {
       console.warn('Sync Firebase Auth user fallback:', err);
+      return null;
     }
   }, []);
 
@@ -1196,8 +1201,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /**
    * Google Sign-In Architecture
    */
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  const loginWithGoogle = async (
+    target?: 'customer' | 'admin' | 'staff' | 'vendor'
+  ): Promise<{ success: boolean; error?: string; profile?: UserProfile }> => {
     setIsLoading(true);
+    isVerifyingLoginRef.current = true;
     try {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
@@ -1208,28 +1216,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cred.user.email) {
         const check = isTemporaryEmail(cred.user.email);
         if (check.isTemporary) {
-          await signOut(auth);
+          await signOut(auth).catch(() => {});
           return { success: false, error: 'Temporary or disposable email addresses are not permitted.' };
         }
       }
 
-      await syncFirebaseUser(cred.user);
-      closeAuthModal();
-      return { success: true };
-    } catch (err: any) {
-      console.warn('Google sign-in attempt notice:', err.message);
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-allowed' || err.code === 'auth/unauthorized-domain') {
+      const [claims, hasAdminDoc] = await Promise.all([
+        getCustomClaims(cred.user),
+        checkFirestoreAdminDoc(cred.user.uid),
+      ]);
+
+      let firestoreData: Partial<UserProfile> = {};
+      try {
+        const snap = await getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid));
+        if (snap.exists()) {
+          firestoreData = snap.data() as Partial<UserProfile>;
+        }
+      } catch {}
+
+      const effectiveRole = resolveEffectiveRole(
+        claims,
+        firestoreData.role,
+        cred.user.email,
+        hasAdminDoc
+      );
+
+      if (target && !verifyRoleAccess(effectiveRole, target)) {
+        await signOut(auth).catch(() => {});
         return {
           success: false,
-          error: 'Google sign-in popup was blocked or unavailable in this preview window. Please sign in with your email and password.',
+          error: `Access Denied: Google account (${cred.user.email}) has role '${effectiveRole}' and does not have ${target.toUpperCase()} privileges.`,
         };
       }
-      let errorMsg = err.message || 'Google sign-in is ready. Ensure popups are allowed and Google provider is enabled.';
+
+      hadFirebaseUserRef.current = true;
+      const syncedProfile = await syncFirebaseUser(cred.user);
+      closeAuthModal();
+      return { success: true, profile: syncedProfile || undefined };
+    } catch (err: any) {
+      console.warn('Google sign-in attempt notice:', err.message);
+      if (err.code === 'auth/popup-blocked') {
+        return {
+          success: false,
+          error: 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.',
+        };
+      }
+      if (err.code === 'auth/unauthorized-domain') {
+        return {
+          success: false,
+          error: formatFirebaseAuthError(err),
+        };
+      }
+      if (err.code === 'auth/operation-not-allowed') {
+        return {
+          success: false,
+          error: 'Google sign-in is disabled in Firebase Console (auth/operation-not-allowed). Enable Google provider under Authentication → Sign-in method.',
+        };
+      }
+      let errorMsg = formatFirebaseAuthError(err);
       if (err.code === 'auth/popup-closed-by-user') {
         errorMsg = 'Sign in cancelled by closing popup.';
       }
       return { success: false, error: errorMsg };
     } finally {
+      isVerifyingLoginRef.current = false;
       setIsLoading(false);
     }
   };
