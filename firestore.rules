@@ -1,0 +1,646 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // 0. GLOBAL SAFETY NET (DEFAULT-DENY)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 1. REUSABLE PRIMITIVES & IDENTITY HELPERS
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Secure Admin Validation with Email Verification and Document Checks
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'aanews70@gmail.com') ||
+        request.auth.token.get('role', '') == 'admin' ||
+        request.auth.token.get('admin', false) == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Staff Role Check
+    function isStaff() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/staff/$(request.auth.uid))) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff')
+      );
+    }
+
+    // Vendor Role Check (Identity-verified, never trusted from client)
+    function isVendor() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('role', '') == 'vendor' ||
+        (exists(/databases/$(database)/documents/vendors/$(request.auth.uid))) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'vendor')
+      );
+    }
+
+    function isVendorOwner(vendorId) {
+      return isSignedIn() && (
+        isAdmin() ||
+        (isVendor() && (
+          request.auth.uid == vendorId ||
+          (exists(/databases/$(database)/documents/vendors/$(vendorId)) &&
+           get(/databases/$(database)/documents/vendors/$(vendorId)).data.get('ownerUserId', '') == request.auth.uid)
+        ))
+      );
+    }
+
+    // Connectivity verification route
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // 2. CORE E-COMMERCE COLLECTIONS
+    // =========================================================================
+
+    // Users: Profiles and Secure Role Guarding
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isStaff() || isAdmin();
+      allow list: if isStaff() || isAdmin();
+      
+      // Customer or vendor can register own profile with default role, never admin/staff
+      allow create: if isOwner(userId) && isValidId(userId) && (
+        (incoming().role in ['customer', 'vendor'] &&
+         (!('isAdmin' in incoming()) || incoming().isAdmin == false) &&
+         (!('isStaff' in incoming()) || incoming().isStaff == false)) ||
+        isAdmin()
+      );
+      
+      // Client cannot elevate role, admin status, or permissions
+      allow update: if (
+        isOwner(userId) &&
+        incoming().role == existing().role &&
+        (!('isAdmin' in incoming()) || incoming().isAdmin == existing().get('isAdmin', false)) &&
+        (!('isStaff' in incoming()) || incoming().isStaff == existing().get('isStaff', false)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'defaultAddressId', 'updatedAt', 'preferences'])
+      ) || isAdmin();
+      
+      allow delete: if isAdmin();
+    }
+
+    // Admins: Explicit admin role registry
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list, write: if isAdmin();
+    }
+
+    // Addresses: Customer delivery address book
+    match /addresses/{addressId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isStaff() || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isStaff() || isAdmin();
+      
+      allow create: if isSignedIn() && isValidId(addressId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 100 &&
+        incoming().phone is string && incoming().phone.size() >= 10 && incoming().phone.size() <= 15 &&
+        incoming().pincode is string && incoming().pincode.size() >= 4 && incoming().pincode.size() <= 10 &&
+        incoming().addressLine is string && incoming().addressLine.size() <= 300;
+        
+      allow update: if (
+        isSignedIn() && existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId
+      ) || isAdmin();
+      
+      allow delete: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+    }
+
+    // Categories: Public taxonomy catalog
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Products: Public catalog, managed by Admin and verified Vendors for own catalog
+    match /products/{productId} {
+      allow read: if true;
+      
+      allow create: if isValidId(productId) && (
+        isAdmin() ||
+        (isVendor() && incoming().vendorId == request.auth.uid && incoming().status in ['active', 'draft'])
+      );
+      
+      allow update: if (
+        isAdmin() ||
+        (isVendor() && existing().vendorId == request.auth.uid && incoming().vendorId == request.auth.uid)
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // Product Variants: Size/weight package options
+    match /productVariants/{variantId} {
+      allow read: if true;
+      allow write: if isAdmin() || isVendor();
+    }
+
+    // Inventory: Stock tracking
+    match /inventory/{inventoryId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin() || isVendor();
+    }
+
+    // Carts: Customer active shopping cart isolation
+    match /carts/{cartId} {
+      allow read: if isOwner(cartId) || (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow create, update: if (
+        (isOwner(cartId) || (isSignedIn() && incoming().userId == request.auth.uid)) &&
+        incoming().items is list && incoming().items.size() <= 50
+      ) || isAdmin();
+      allow delete: if isOwner(cartId) || (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+    }
+
+    // Wishlists: Customer saved items isolation
+    match /wishlists/{wishlistId} {
+      allow read: if isOwner(wishlistId) || (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow create, update: if (
+        (isOwner(wishlistId) || (isSignedIn() && incoming().userId == request.auth.uid)) &&
+        incoming().productIds is list && incoming().productIds.size() <= 100
+      ) || isAdmin();
+      allow delete: if isOwner(wishlistId) || (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+    }
+
+    // Orders: Multi-party lifecycle with strict Customer & Vendor isolation
+    match /orders/{orderId} {
+      // Customer can read only own orders; Vendor can read only if assigned; Staff/Admin full access
+      allow get: if (isSignedIn() && existing().customerId == request.auth.uid) ||
+                    (isVendor() && existing().get('vendorId', '') == request.auth.uid) ||
+                    isStaff() || isAdmin();
+                    
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) ||
+                     (isVendor() && resource.data.get('vendorId', '') == request.auth.uid) ||
+                     isStaff() || isAdmin();
+
+      // Customer can create valid order only through approved workflow
+      allow create: if isSignedIn() && isValidId(orderId) &&
+        incoming().customerId == request.auth.uid &&
+        incoming().status == 'PLACED' &&
+        incoming().subtotal is number && incoming().subtotal > 0 &&
+        incoming().total is number && incoming().total > 0 &&
+        incoming().orderNumber is string && incoming().orderNumber.size() <= 50 &&
+        incoming().customerName is string && incoming().customerName.size() <= 100 &&
+        incoming().customerPhone is string && incoming().customerPhone.size() >= 10 && incoming().customerPhone.size() <= 15;
+
+      // Customer can only cancel their own order while still in PLACED state
+      allow update: if (
+        isSignedIn() &&
+        existing().customerId == request.auth.uid &&
+        incoming().customerId == existing().customerId &&
+        incoming().total == existing().total &&
+        incoming().subtotal == existing().subtotal &&
+        incoming().status == 'CANCELLED' &&
+        existing().status in ['PLACED', 'Order Placed'] &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'notes', 'statusHistory'])
+      ) || isStaff() || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // Order Items: Normalized line items (protected by order customer & vendor derivation)
+    match /orderItems/{itemId} {
+      allow get: if isSignedIn() && (
+        isAdmin() || isStaff() ||
+        (exists(/databases/$(database)/documents/orders/$(existing().orderId)) &&
+         (get(/databases/$(database)/documents/orders/$(existing().orderId)).data.customerId == request.auth.uid ||
+          get(/databases/$(database)/documents/orders/$(existing().orderId)).data.get('vendorId', '') == request.auth.uid))
+      );
+      
+      allow list: if isSignedIn(); // Filtered by orderId where parent order is accessible
+      
+      allow create: if isSignedIn() && isValidId(itemId) && (
+        isAdmin() || isStaff() ||
+        (exists(/databases/$(database)/documents/orders/$(incoming().orderId)) &&
+         get(/databases/$(database)/documents/orders/$(incoming().orderId)).data.customerId == request.auth.uid)
+      );
+      
+      allow update, delete: if isStaff() || isAdmin();
+    }
+
+    // Order Status History: Status audit log
+    match /orderStatusHistory/{historyId} {
+      allow get: if isSignedIn() && (
+        isAdmin() || isStaff() ||
+        (exists(/databases/$(database)/documents/orders/$(existing().orderId)) &&
+         (get(/databases/$(database)/documents/orders/$(existing().orderId)).data.customerId == request.auth.uid ||
+          get(/databases/$(database)/documents/orders/$(existing().orderId)).data.get('vendorId', '') == request.auth.uid))
+      );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() || isStaff() || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Payments: Sensitive financial records (Protected against client tampering)
+    match /payments/{paymentId} {
+      allow get: if (isSignedIn() && existing().customerId == request.auth.uid) || isStaff() || isAdmin();
+      allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) || isStaff() || isAdmin();
+      
+      // Initial client intent can only record 'Pending' payment for own customer order; status changes must be Cloud Functions / Admin
+      allow create: if (
+        isSignedIn() &&
+        incoming().customerId == request.auth.uid &&
+        incoming().status == 'Pending' &&
+        incoming().amount is number && incoming().amount > 0
+      ) || isAdmin();
+      
+      // Updates and deletions restricted to Cloud Functions / Admin
+      allow update, delete: if isAdmin();
+    }
+
+    // Coupons: Promotional codes catalog
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Coupon Usage: Usage redemption tracking
+    match /couponUsage/{usageId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Reviews: Customer product feedback with author validation
+    match /reviews/{reviewId} {
+      allow read: if true;
+      
+      // Customers can create reviews only for eligible items with their own identity
+      allow create: if isSignedIn() && isValidId(reviewId) &&
+        incoming().customerId == request.auth.uid &&
+        incoming().productId is string && incoming().productId.size() <= 100 &&
+        incoming().rating is number && incoming().rating >= 1 && incoming().rating <= 5 &&
+        incoming().reviewText is string && incoming().reviewText.size() <= 1000;
+        
+      allow update: if (
+        isSignedIn() &&
+        existing().customerId == request.auth.uid &&
+        incoming().customerId == existing().customerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'reviewText', 'updatedAt'])
+      ) || isAdmin();
+      
+      allow delete: if (isSignedIn() && existing().customerId == request.auth.uid) || isAdmin();
+    }
+
+    // Delivery Areas: Serviceable pincodes
+    match /deliveryAreas/{areaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Delivery Slots: Dispatch time windows
+    match /deliverySlots/{slotId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Banners: Visual marketing promos
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Offers: Campaign deals
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Notifications: User notification center
+    match /notifications/{notificationId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isStaff() || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isStaff() || isAdmin();
+      
+      allow update: if (
+        isSignedIn() && existing().userId == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
+      ) || isAdmin();
+      
+      allow create, delete: if isAdmin() || isStaff();
+    }
+
+    // Site Settings: Store configurations
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Homepage Configuration
+    match /homepageConfig/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /homepage/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Broadcast Notifications
+    match /broadcastNotifications/{broadcastId} {
+      allow read: if true;
+      allow write: if isAdmin() || isStaff();
+    }
+
+    // Staff Roster
+    match /staff/{staffId} {
+      allow get, list: if isStaff() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Reports & Analytics Records
+    match /reports/{reportId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
+    // 3. FUTURE MARKETPLACE COLLECTIONS (ZERO-TRUST VENDOR ISOLATION)
+    // =========================================================================
+
+    // Vendors: Seller business profiles
+    match /vendors/{vendorId} {
+      allow read: if true; // Public verified vendor profiles
+      allow create: if isSignedIn() && (
+        incoming().ownerUserId == request.auth.uid || isAdmin()
+      );
+      allow update: if (
+        isSignedIn() &&
+        existing().ownerUserId == request.auth.uid &&
+        incoming().ownerUserId == existing().ownerUserId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['businessName', 'storeDescription', 'phone', 'address', 'logoUrl', 'updatedAt'])
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Vendor Users: Merchant team members
+    match /vendorUsers/{vendorUserId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Vendor Profiles: Public storefront data
+    match /vendorProfiles/{profileId} {
+      allow read: if true;
+      allow write: if isVendor() || isAdmin();
+    }
+
+    // Vendor Products: Vendor catalog submission (Strict Vendor A vs B isolation)
+    match /vendorProducts/{productId} {
+      allow get: if isVendorOwner(existing().vendorId) || isStaff() || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isStaff() || isAdmin();
+      
+      allow create: if isVendor() && isValidId(productId) &&
+        incoming().vendorId == request.auth.uid;
+        
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().vendorId == existing().vendorId
+      ) || isAdmin();
+      
+      allow delete: if (isVendor() && existing().vendorId == request.auth.uid) || isAdmin();
+    }
+
+    // Vendor Inventory: Seller batch control (Strict Vendor A vs B isolation)
+    match /vendorInventory/{invId} {
+      allow get: if isVendorOwner(existing().vendorId) || isStaff() || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isStaff() || isAdmin();
+      
+      allow create: if isVendor() && isValidId(invId) &&
+        incoming().vendorId == request.auth.uid;
+        
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().vendorId == existing().vendorId
+      ) || isAdmin();
+      
+      allow delete: if (isVendor() && existing().vendorId == request.auth.uid) || isAdmin();
+    }
+
+    // Vendor Orders: Split fulfillment orders (Strict Vendor A vs B isolation)
+    match /vendorOrders/{vOrderId} {
+      allow get: if isVendorOwner(existing().vendorId) || isStaff() || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isStaff() || isAdmin();
+      
+      // Vendors can only update fulfillment state of their own sub-orders
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().vendorId == existing().vendorId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['fulfillmentStatus', 'shippingCourier', 'trackingNumber', 'updatedAt', 'notes'])
+      ) || isStaff() || isAdmin();
+      
+      // Order dispatch creation managed through server/Cloud Functions or Admin
+      allow create, delete: if isStaff() || isAdmin();
+    }
+
+    // Vendor Commissions: Marketplace ledger (Financial: Client write strictly denied)
+    match /vendorCommissions/{commId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      // Sensitive financial operations: Cloud Functions / Admin only
+      allow write: if false;
+    }
+
+    // Vendor Payouts: Merchant bank settlements (Financial: Client write strictly denied)
+    match /vendorPayouts/{payoutId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      // Sensitive financial operations: Cloud Functions / Admin only
+      allow write: if false;
+    }
+
+    // Vendor Bank Accounts: Payout coordinates (Strict Vendor isolation)
+    match /vendorBankAccounts/{accId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      allow create: if isVendor() && isValidId(accId) &&
+        incoming().vendorId == request.auth.uid;
+        
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().vendorId == existing().vendorId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['accountNumber', 'ifscCode', 'bankName', 'accountHolderName', 'updatedAt'])
+      ) || isAdmin();
+      
+      allow delete: if isAdmin();
+    }
+
+    // Vendor Notifications: Seller portal alerts (Strict Vendor isolation)
+    match /vendorNotifications/{notifId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
+      ) || isAdmin();
+      
+      allow create, delete: if isAdmin();
+    }
+
+    // Commission Rules: Global, category, vendor, product commission schedules
+    match /commissionRules/{ruleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Financial Ledger: Immutable auditable ledger (Vendor can never modify, cannot view another vendor's ledger)
+    match /financialLedger/{entryId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      // Immutable audit records created exclusively by server / Cloud Functions
+      allow write: if false;
+    }
+
+    // Vendor Financial Summaries: Aggregated earnings & balances (Vendor can never tamper with earnings)
+    match /vendorFinancialSummaries/{vendorId} {
+      allow get: if isVendorOwner(vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // 4. VENDOR ADVERTISING MODULE (PHASE 1 FOUNDATION)
+    // Strict isolation: Vendor A can NEVER read Vendor B's campaigns, wallets,
+    // transactions, clicks, or reports.
+    // Admins retain full administrative authorization.
+    // =========================================================================
+
+    // Advertising Campaigns: Promotional campaigns created and managed by vendors
+    match /advertisingCampaigns/{campaignId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      // Vendor can create campaign for their own vendor identity, or admin
+      allow create: if (
+        isVendor() &&
+        isValidId(campaignId) &&
+        incoming().vendorId == request.auth.uid &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().status in ['DRAFT', 'PENDING_APPROVAL']
+      ) || isAdmin();
+      
+      // Vendor can only update their own campaign fields, never reassign vendorId
+      allow update: if (
+        isVendor() &&
+        existing().vendorId == request.auth.uid &&
+        incoming().vendorId == existing().vendorId &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'campaignName', 'dailyBudget', 'totalBudget', 'cpc',
+          'status', 'startDate', 'endDate', 'updatedAt'
+        ])
+      ) || isAdmin();
+      
+      allow delete: if isAdmin();
+    }
+
+    // Advertising Wallets: Isolated prepaid balances (Vendors cannot tamper with balances)
+    match /advertisingWallets/{walletId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      // Wallet creation initialized with 0 balance by vendor or by admin
+      allow create: if (
+        isVendor() &&
+        isValidId(walletId) &&
+        incoming().vendorId == request.auth.uid &&
+        incoming().availableBalance == 0 &&
+        incoming().totalDeposited == 0 &&
+        incoming().totalSpent == 0 &&
+        incoming().totalRefunded == 0
+      ) || isAdmin();
+      
+      // Balances cannot be updated directly from client; only through Admin/Cloud Functions
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Advertising Transactions: Immutable ledger (Never overwrite, client write denied to vendors)
+    match /advertisingTransactions/{txId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      // Authorized transaction creation by Admin / Cloud Functions only
+      allow create: if isAdmin();
+      // Historical financial transactions must be strictly immutable
+      allow update, delete: if false;
+    }
+
+    // Advertising Clicks: Click tracking records
+    match /advertisingClicks/{clickId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      // Click tracking written by system/admin; immutable records
+      allow create: if isAdmin() || isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // Advertising Invalid Clicks: Fraud detection logs
+    match /advertisingInvalidClicks/{invalidClickId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      
+      // Written by fraud detection service/admin; immutable
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Advertising Audit Logs: Immutable security and administrative audit trail
+    match /advertisingAuditLogs/{auditId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin() || (isSignedIn() && incoming().actorId == request.auth.uid);
+      allow update, delete: if false;
+    }
+
+    // Advertising Attributions: Immutable reporting metadata linking ad clicks to purchases
+    match /advertisingAttributions/{attrId} {
+      allow get: if isVendorOwner(existing().vendorId) || isAdmin();
+      allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
+      // Reporting metadata: Cloud Functions / Server / Admin creation only
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}

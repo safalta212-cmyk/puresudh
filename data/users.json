@@ -1,0 +1,98 @@
+[
+  {
+    "id": "usr-admin-master",
+    "email": "aanews70@gmail.com",
+    "passwordHash": "69617a66446397620dab38d811cfd474298eb10a729d221571cb497d21fd4bbd",
+    "name": "Platform Administrator",
+    "phone": "+91 94310 12801",
+    "role": "admin",
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "usr-staff-master",
+    "email": "staff@email.com",
+    "passwordHash": "2ca5aa8d353851f230416a263d3ee84481dbfc29466e32f75f402ce3cbe02d67",
+    "name": "Fulfillment Supervisor",
+    "phone": "+91 94310 12802",
+    "role": "staff",
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "usr-vendor-master",
+    "email": "vendor@email.com",
+    "passwordHash": "b8799f5e08ca5fd48c3b4ce5e8186fc80193d7d8fb1c64c67389ff92664ca4e7",
+    "name": "Shri Krishna Organic Dairy",
+    "phone": "+91 94310 12803",
+    "role": "vendor",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "vendorDetails": {
+      "shopName": "Shri Krishna Dairy Farm",
+      "fssaiLicense": "10423000001892",
+      "gstNumber": "10AAACR5231P1Z9",
+      "status": "approved"
+    }
+  },
+  {
+    "id": "usr-customer-demo",
+    "email": "customer@email.com",
+    "passwordHash": "72992e84c96cfaa87400bf675cd3b13d15007e83df22a00ec479afd7429a3937",
+    "name": "Abhishek Kumar",
+    "phone": "+91 94310 12845",
+    "role": "customer",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "addresses": [
+      {
+        "id": "addr-cust-1",
+        "name": "Abhishek Kumar",
+        "phone": "+91 94310 12845",
+        "pincode": "800001",
+        "addressLine": "Flat 402, Anand Nilayam, Fraser Road",
+        "landmark": "Opposite Central Park",
+        "city": "Patna",
+        "state": "Bihar",
+        "isDefault": true,
+        "type": "home"
+      }
+    ]
+  },
+  {
+    "id": "usr-1791126211576-koiix",
+    "email": "testuser@gmail.com",
+    "passwordHash": "8a72668e09f589bd78c64e88c685a067e75e1962b2fcc6fb50cf0a79fbc128d1",
+    "name": "Test User",
+    "phone": "9431012855",
+    "role": "customer",
+    "createdAt": "2026-10-04T15:03:31.576Z",
+    "addresses": []
+  },
+  {
+    "id": "usr-1791126508799-k2v1j",
+    "email": "testuser2@gmail.com",
+    "passwordHash": "8a72668e09f589bd78c64e88c685a067e75e1962b2fcc6fb50cf0a79fbc128d1",
+    "name": "Test User Two",
+    "phone": "+91 94310 12866",
+    "role": "customer",
+    "createdAt": "2026-10-04T15:08:28.799Z",
+    "addresses": []
+  },
+  {
+    "id": "usr-1791126603261-eebex",
+    "email": "newuser@gmail.com",
+    "passwordHash": "e680c2956cb389ff03469d687c35a9f6c668cc2f90edcdafd2bfa4b2fddecabf",
+    "name": "New User",
+    "phone": "9431012855",
+    "role": "customer",
+    "createdAt": "2026-10-04T15:10:03.261Z",
+    "addresses": []
+  },
+  {
+    "id": "usr-1791214177022-vksqi",
+    "email": "sharma.aarav@gmail.com",
+    "passwordHash": "cfe94e826ada18750067e6b685f3dab1ff62bd359f383af9922d71b3c9f2fc73",
+    "name": "Aarav Sharma",
+    "phone": "+91 94310 12899",
+    "role": "customer",
+    "createdAt": "2026-10-05T15:29:37.022Z",
+    "addresses": []
+  }
+]

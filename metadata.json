@@ -1,0 +1,6 @@
+{
+  "name": "PURE SUDH",
+  "description": "Pure Food • Pure Quality • Pure Trust - Fresh Indian snacks, sweets, dairy products, and homemade specialties delivered fresh.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

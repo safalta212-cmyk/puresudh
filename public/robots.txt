@@ -1,0 +1,23 @@
+# Robots.txt for PURE SUDH - Pure Food • Pure Quality • Pure Trust
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /about
+Allow: /contact
+Allow: /faq
+Allow: /offers
+Allow: /track-order
+Allow: /policy-*
+
+# Disallow private user/admin/vendor/api panels
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /vendor
+Disallow: /vendor/*
+Disallow: /staff
+Disallow: /staff/*
+Disallow: /api/
+Disallow: /account/orders/
+
+# Sitemap location
+Sitemap: https://puresudh.com/sitemap.xml

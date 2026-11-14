@@ -1,0 +1,829 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based permissions and contact data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin", "staff", "vendor", "delivery"] },
+        "defaultAddressId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "blocked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Address": {
+      "title": "Address",
+      "description": "Customer delivery address reference",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "pincode": { "type": "string" },
+        "addressLine": { "type": "string" },
+        "landmark": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "type": { "type": "string", "enum": ["home", "work", "other"] },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "phone", "pincode", "addressLine", "city", "state"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category taxonomy",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "parentId": { "type": "string" },
+        "displayOrder": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "slug"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store product with required architecture fields",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "sku": { "type": "string" },
+        "weight": { "type": "string" },
+        "unit": { "type": "string" },
+        "ingredients": { "type": "string" },
+        "packagingInformation": { "type": "string" },
+        "stock": { "type": "integer" },
+        "availability": { "type": "boolean" },
+        "deliveryTime": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "imageUrls": { "type": "array" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "draft", "archived", "out_of_stock"] },
+        "vendorId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "slug", "price", "stock", "categoryId", "status"]
+    },
+    "ProductVariant": {
+      "title": "ProductVariant",
+      "description": "Product size and package variant item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "weight": { "type": "string" },
+        "unit": { "type": "string" },
+        "stock": { "type": "integer" },
+        "availability": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["productId", "name", "price", "stock"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Warehouse and catalog inventory stock tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "sku": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "reservedQuantity": { "type": "integer" },
+        "availableQuantity": { "type": "integer" },
+        "lowStockThreshold": { "type": "integer" },
+        "status": { "type": "string", "enum": ["in_stock", "low_stock", "out_of_stock"] },
+        "warehouseLocation": { "type": "string" },
+        "lastRestockedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["productId", "sku", "quantity", "status"]
+    },
+    "Cart": {
+      "title": "Cart",
+      "description": "Active shopping cart for user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "itemCount": { "type": "integer" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId"]
+    },
+    "Wishlist": {
+      "title": "Wishlist",
+      "description": "User saved favorite products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "productIds": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase order with standardized lifecycle statuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "deliveryAddressId": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "deliveryCharge": { "type": "number" },
+        "discount": { "type": "number" },
+        "couponCode": { "type": "string" },
+        "total": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["PLACED", "CONFIRMED", "PREPARING", "PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "REFUNDED"]
+        },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "PAID", "FAILED", "REFUNDED"] },
+        "paymentId": { "type": "string" },
+        "deliveryAreaPincode": { "type": "string" },
+        "deliverySlotId": { "type": "string" },
+        "estimatedDeliveryTime": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["orderNumber", "customerId", "total", "status"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "Normalized line item belonging to an order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "productName": { "type": "string" },
+        "productImage": { "type": "string" },
+        "sku": { "type": "string" },
+        "price": { "type": "number" },
+        "quantity": { "type": "integer" },
+        "weight": { "type": "string" },
+        "unit": { "type": "string" },
+        "total": { "type": "number" },
+        "vendorId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderId", "productId", "productName", "price", "quantity", "total"]
+    },
+    "OrderStatusHistory": {
+      "title": "OrderStatusHistory",
+      "description": "Audit trail log of order status transitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string" },
+        "previousStatus": { "type": "string" },
+        "note": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedByRole": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["orderId", "status", "updatedBy", "timestamp"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Transaction and payment log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "method": { "type": "string" },
+        "gateway": { "type": "string" },
+        "gatewayPaymentId": { "type": "string" },
+        "gatewayOrderId": { "type": "string" },
+        "status": { "type": "string", "enum": ["INITIATED", "PENDING", "SUCCESS", "FAILED", "REFUNDED"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["orderId", "customerId", "amount", "status"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Store discount coupons",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percentage", "flat"] },
+        "discountValue": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "maxDiscount": { "type": "number" },
+        "validFrom": { "type": "string" },
+        "validTill": { "type": "string" },
+        "usageLimit": { "type": "integer" },
+        "usageCount": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["code", "discountType", "discountValue", "active"]
+    },
+    "CouponUsage": {
+      "title": "CouponUsage",
+      "description": "Record of coupon redemption by a user for an order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "couponId": { "type": "string" },
+        "couponCode": { "type": "string" },
+        "userId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "discountAmount": { "type": "number" },
+        "usedAt": { "type": "string" }
+      },
+      "required": ["couponId", "userId", "orderId", "usedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Product rating and review written by customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "verifiedPurchase": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["approved", "pending", "rejected"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["productId", "customerId", "rating"]
+    },
+    "DeliveryArea": {
+      "title": "DeliveryArea",
+      "description": "Serviceable pincode zone configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pincode": { "type": "string" },
+        "areaName": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "isDeliverable": { "type": "boolean" },
+        "estimatedTimeMinutes": { "type": "integer" },
+        "minimumOrder": { "type": "number" },
+        "deliveryCharge": { "type": "number" },
+        "freeDeliveryAbove": { "type": "number" },
+        "fastDeliveryAvailable": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["pincode", "city", "state", "isDeliverable"]
+    },
+    "DeliverySlot": {
+      "title": "DeliverySlot",
+      "description": "Daily delivery dispatch time slots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "cutoffHours": { "type": "number" },
+        "maxOrders": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "daysOfWeek": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "startTime", "endTime", "active"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Promotional homepage visual banner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "link": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "buttonText": { "type": "string" },
+        "active": { "type": "boolean" },
+        "order": { "type": "integer" },
+        "tag": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "imageUrl", "active"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "Marketing campaign promotional offer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "code": { "type": "string" },
+        "badge": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "discountText": { "type": "string" },
+        "targetUrl": { "type": "string" },
+        "active": { "type": "boolean" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "discountText", "active"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User in-app notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["order", "promo", "account", "system"] },
+        "read": { "type": "boolean" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "message", "read"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global store configuration and parameters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "storeName": { "type": "string" },
+        "primaryTagline": { "type": "string" },
+        "hindiTagline": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "storeAddress": { "type": "string" },
+        "defaultDeliveryETA": { "type": "string" },
+        "freeDeliveryThreshold": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "standardDeliveryCharge": { "type": "number" },
+        "announcementText": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["storeName", "contactPhone", "contactEmail"]
+    },
+    "Vendor": {
+      "title": "Vendor",
+      "description": "Marketplace seller registered entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "tagline": { "type": "string" },
+        "description": { "type": "string" },
+        "logo": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "fssaiNumber": { "type": "string" },
+        "gstNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "pincode": { "type": "string" },
+        "specialties": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended"] },
+        "commissionPercentage": { "type": "number" },
+        "rating": { "type": "number" },
+        "totalProducts": { "type": "integer" },
+        "totalOrders": { "type": "integer" },
+        "joinedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "slug", "email", "phone", "status"]
+    },
+    "VendorUser": {
+      "title": "VendorUser",
+      "description": "Staff member or admin associated with a vendor shop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "manager", "staff"] },
+        "permissions": { "type": "array" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["vendorId", "userId", "role", "active"]
+    },
+    "VendorProfile": {
+      "title": "VendorProfile",
+      "description": "Extended public and verification profile for vendor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "bio": { "type": "string" },
+        "businessHours": { "type": "string" },
+        "establishedYear": { "type": "integer" },
+        "certifications": { "type": "array" },
+        "bankDetailsConfigured": { "type": "boolean" },
+        "storeBanner": { "type": "string" },
+        "returnPolicy": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "supportPhone": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["vendorId"]
+    },
+    "VendorProduct": {
+      "title": "VendorProduct",
+      "description": "Vendor item catalog listing and approval status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "sku": { "type": "string" },
+        "vendorPrice": { "type": "number" },
+        "markupPercentage": { "type": "number" },
+        "retailPrice": { "type": "number" },
+        "stock": { "type": "integer" },
+        "status": { "type": "string", "enum": ["pending_approval", "approved", "rejected"] },
+        "rejectionReason": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "productId", "sku", "retailPrice", "status"]
+    },
+    "VendorInventory": {
+      "title": "VendorInventory",
+      "description": "Vendor specific real-time batch and stock control",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "variantId": { "type": "string" },
+        "sku": { "type": "string" },
+        "stockQuantity": { "type": "integer" },
+        "reservedQuantity": { "type": "integer" },
+        "batchNumber": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "lowStockThreshold": { "type": "integer" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "productId", "sku", "stockQuantity"]
+    },
+    "VendorOrder": {
+      "title": "VendorOrder",
+      "description": "Vendor fulfillment slice of a customer order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "items": { "type": "array" },
+        "vendorSubtotal": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "payoutAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["orderId", "vendorId", "vendorSubtotal", "payoutAmount", "status"]
+    },
+    "VendorCommission": {
+      "title": "VendorCommission",
+      "description": "Marketplace platform commission ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "orderTotal": { "type": "number" },
+        "commissionRate": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "netVendorAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "settled", "disputed"] },
+        "calculatedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "orderId", "commissionAmount", "status"]
+    },
+    "VendorPayout": {
+      "title": "VendorPayout",
+      "description": "Periodic bank disbursement payout record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
+        "periodStart": { "type": "string" },
+        "periodEnd": { "type": "string" },
+        "ordersCount": { "type": "integer" },
+        "transactionRef": { "type": "string" },
+        "bankAccountId": { "type": "string" },
+        "processedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["vendorId", "amount", "status", "bankAccountId"]
+    },
+    "VendorBankAccount": {
+      "title": "VendorBankAccount",
+      "description": "Bank account coordinates for vendor settlements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "accountHolderName": { "type": "string" },
+        "accountNumberMasked": { "type": "string" },
+        "ifscCode": { "type": "string" },
+        "bankName": { "type": "string" },
+        "branch": { "type": "string" },
+        "isPrimary": { "type": "boolean" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "accountHolderName", "accountNumberMasked", "ifscCode", "bankName"]
+    },
+    "VendorNotification": {
+      "title": "VendorNotification",
+      "description": "Alerts and messages targeted to vendor seller portal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["order", "payout", "inventory", "system"] },
+        "read": { "type": "boolean" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["vendorId", "title", "message", "read"]
+    },
+    "CommissionRule": {
+      "title": "CommissionRule",
+      "description": "Hierarchical commission rules for product, category, vendor, or global levels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "level": { "type": "string", "enum": ["product", "category", "vendor", "global"] },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "rate": { "type": "number" },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["level", "targetId", "rate", "active"]
+    },
+    "FinancialLedgerEntry": {
+      "title": "FinancialLedgerEntry",
+      "description": "Immutable auditable financial ledger records for vendor sales, commissions, refunds, and payouts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "type": { "type": "string", "enum": ["SALE", "COMMISSION", "REFUND", "ADJUSTMENT", "PAYOUT"] },
+        "amount": { "type": "number" },
+        "balanceBefore": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "description": { "type": "string" },
+        "auditHash": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["transactionId", "vendorId", "type", "amount", "balanceBefore", "balanceAfter", "auditHash"]
+    },
+    "VendorFinancialSummary": {
+      "title": "VendorFinancialSummary",
+      "description": "Aggregated vendor gross sales, discounts, commissions, refunds, net earnings, and payout balance",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "grossSales": { "type": "number" },
+        "discounts": { "type": "number" },
+        "commission": { "type": "number" },
+        "refunds": { "type": "number" },
+        "adjustments": { "type": "number" },
+        "vendorEarnings": { "type": "number" },
+        "pendingPayout": { "type": "number" },
+        "paidPayout": { "type": "number" },
+        "payoutStatus": { "type": "string", "enum": ["READY", "ON_HOLD", "REQUIRES_BANK_VERIFICATION"] },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "grossSales", "commission", "vendorEarnings", "pendingPayout", "paidPayout"]
+    },
+    "AdvertisingCampaign": {
+      "title": "AdvertisingCampaign",
+      "description": "Vendor advertising promotional campaigns with CPC budget and metrics",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "campaignName": { "type": "string" },
+        "dailyBudget": { "type": "number" },
+        "totalBudget": { "type": "number" },
+        "spentAmount": { "type": "number" },
+        "remainingBalance": { "type": "number" },
+        "cpc": { "type": "number" },
+        "impressions": { "type": "integer" },
+        "validClicks": { "type": "integer" },
+        "invalidClicks": { "type": "integer" },
+        "orders": { "type": "integer" },
+        "attributedSales": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_APPROVAL", "ACTIVE", "PAUSED", "COMPLETED", "REJECTED"] },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["campaignId", "vendorId", "productId", "campaignName", "dailyBudget", "totalBudget", "status", "cpc"]
+    },
+    "AdvertisingWallet": {
+      "title": "AdvertisingWallet",
+      "description": "Prepaid vendor advertising wallet completely isolated from vendor earnings and payouts",
+      "type": "object",
+      "properties": {
+        "walletId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "availableBalance": { "type": "number" },
+        "totalDeposited": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "totalRefunded": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["walletId", "vendorId", "availableBalance", "totalDeposited", "totalSpent", "totalRefunded"]
+    },
+    "AdvertisingTransaction": {
+      "title": "AdvertisingTransaction",
+      "description": "Immutable ledger record of advertising wallet topups, ad spend, and balance adjustments",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "productId": { "type": "string" },
+        "type": { "type": "string", "enum": ["WALLET_TOPUP", "AD_SPEND", "REFUND", "CAMPAIGN_CREDIT", "MANUAL_ADJUSTMENT", "EXPIRED_BALANCE"] },
+        "amount": { "type": "number" },
+        "previousBalance": { "type": "number" },
+        "newBalance": { "type": "number" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["transactionId", "vendorId", "type", "amount", "previousBalance", "newBalance", "status"]
+    },
+    "AdvertisingClick": {
+      "title": "AdvertisingClick",
+      "description": "Validated click tracking record for advertising campaigns",
+      "type": "object",
+      "properties": {
+        "clickId": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "validationStatus": { "type": "string" },
+        "chargeable": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["clickId", "campaignId", "vendorId", "productId", "validationStatus", "chargeable"]
+    },
+    "AdvertisingInvalidClick": {
+      "title": "AdvertisingInvalidClick",
+      "description": "Invalid click fraud detection and audit record for advertising",
+      "type": "object",
+      "properties": {
+        "clickId": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "reason": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["clickId", "campaignId", "vendorId", "productId", "reason", "timestamp"]
+    },
+    "AdvertisingAuditLog": {
+      "title": "AdvertisingAuditLog",
+      "description": "Immutable audit trail log for vendor advertising changes and security actions",
+      "type": "object",
+      "properties": {
+        "auditId": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorType": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "previousValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "reason": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["auditId", "actorId", "actorType", "action", "entityType", "entityId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "User profiles and role metadata" },
+    "addresses": { "schema": "Address", "description": "Customer delivery addresses linked by userId" },
+    "categories": { "schema": "Category", "description": "Catalog taxonomy and categories" },
+    "products": { "schema": "Product", "description": "Catalog products with standardized fields" },
+    "productVariants": { "schema": "ProductVariant", "description": "Pack size and weight variants" },
+    "inventory": { "schema": "Inventory", "description": "Real-time stock quantities and thresholds" },
+    "carts": { "schema": "Cart", "description": "User shopping carts indexed by userId" },
+    "wishlists": { "schema": "Wishlist", "description": "User saved products indexed by userId" },
+    "orders": { "schema": "Order", "description": "Customer purchase orders" },
+    "orderItems": { "schema": "OrderItem", "description": "Line items linked by orderId" },
+    "orderStatusHistory": { "schema": "OrderStatusHistory", "description": "Audit trail log of status changes" },
+    "payments": { "schema": "Payment", "description": "Payment transactions linked by orderId" },
+    "coupons": { "schema": "Coupon", "description": "Discount vouchers and rules" },
+    "couponUsage": { "schema": "CouponUsage", "description": "Tracks customer coupon redemptions" },
+    "reviews": { "schema": "Review", "description": "Customer ratings and product reviews" },
+    "deliveryAreas": { "schema": "DeliveryArea", "description": "Serviceable pincodes and zones" },
+    "deliverySlots": { "schema": "DeliverySlot", "description": "Time windows for order dispatch" },
+    "banners": { "schema": "Banner", "description": "Hero and promotional banners" },
+    "offers": { "schema": "Offer", "description": "Seasonal campaigns and offers" },
+    "notifications": { "schema": "Notification", "description": "In-app user notifications" },
+    "siteSettings": { "schema": "SiteSettings", "description": "Global store operational settings" },
+    "vendors": { "schema": "Vendor", "description": "Marketplace registered merchants" },
+    "vendorUsers": { "schema": "VendorUser", "description": "Merchant accounts and roles" },
+    "vendorProfiles": { "schema": "VendorProfile", "description": "Merchant business profiles and certifications" },
+    "vendorProducts": { "schema": "VendorProduct", "description": "Vendor products approval queue" },
+    "vendorInventory": { "schema": "VendorInventory", "description": "Vendor specific batch stocks" },
+    "vendorOrders": { "schema": "VendorOrder", "description": "Vendor fulfillment orders" },
+    "vendorCommissions": { "schema": "VendorCommission", "description": "Commission calculations ledger" },
+    "vendorPayouts": { "schema": "VendorPayout", "description": "Vendor settlement disbursements" },
+    "vendorBankAccounts": { "schema": "VendorBankAccount", "description": "Vendor banking payout accounts" },
+    "vendorNotifications": { "schema": "VendorNotification", "description": "Merchant notifications" },
+    "commissionRules": { "schema": "CommissionRule", "description": "Platform global, category, vendor and product commission schedule" },
+    "financialLedger": { "schema": "FinancialLedgerEntry", "description": "Immutable auditable financial ledger records for vendor sales, commissions, refunds, and payouts" },
+    "vendorFinancialSummaries": { "schema": "VendorFinancialSummary", "description": "Aggregated vendor gross sales, discounts, commissions, refunds, net earnings, and payout balance" },
+    "advertisingCampaigns": { "schema": "AdvertisingCampaign", "description": "Vendor advertising promotional campaigns" },
+    "advertisingWallets": { "schema": "AdvertisingWallet", "description": "Vendor advertising prepaid wallets isolated from earnings" },
+    "advertisingTransactions": { "schema": "AdvertisingTransaction", "description": "Immutable ledger of advertising wallet transactions and balance changes" },
+    "advertisingClicks": { "schema": "AdvertisingClick", "description": "Click tracking and validation records for advertising campaigns" },
+    "advertisingInvalidClicks": { "schema": "AdvertisingInvalidClick", "description": "Invalid click fraud detection and rejection records" },
+    "advertisingAuditLogs": { "schema": "AdvertisingAuditLog", "description": "Security and administrative audit trail for vendor advertising" }
+  }
+}

@@ -1,0 +1,140 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =========================================================================
+    // 0. GLOBAL SAFETY NET (DEFAULT-DENY)
+    // =========================================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 1. REUSABLE IDENTITY & VALIDATION HELPERS
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'aanews70@gmail.com' && request.auth.token.email_verified == true) ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.isAdmin == true
+      );
+    }
+
+    function isVendor() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.role == 'vendor' ||
+        request.auth.token.isVendor == true
+      );
+    }
+
+    // Content Type & File Size Guards
+    function isValidImage() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif|svg\\+xml)') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 5 * 1024 * 1024; // 5MB maximum
+    }
+
+    function isValidAvatar() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp)') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 2 * 1024 * 1024; // 2MB maximum
+    }
+
+    function isValidReviewImage() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp)') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 3 * 1024 * 1024; // 3MB maximum
+    }
+
+    function isValidBanner() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp)') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 8 * 1024 * 1024; // 8MB maximum for high-res banners
+    }
+
+    // =========================================================================
+    // 2. PRODUCT & CATALOG MEDIA
+    // =========================================================================
+
+    // Product Images: Public read, Admin can manage all, Vendors can manage their own
+    match /products/{productId}/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isVendor()) && isValidImage();
+      allow delete: if isAdmin() || isVendor();
+    }
+
+    match /products/{productId}/thumbnails/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isVendor()) && isValidImage();
+      allow delete: if isAdmin() || isVendor();
+    }
+
+    // Category Icons & Badges: Public read, Admin only write
+    match /categories/{categoryId}/{filename} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidImage();
+      allow delete: if isAdmin();
+    }
+
+    // Homepage & Promotional Banners: Public read, Admin only write
+    match /banners/{bannerId}/{filename} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidBanner();
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 3. VENDOR MEDIA (Strict Vendor Isolation)
+    // =========================================================================
+
+    // Vendor Logos, Covers, and Verification Documents
+    match /vendors/{vendorId}/{mediaType}/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isOwner(vendorId)) && isValidImage();
+      allow delete: if isAdmin() || isOwner(vendorId);
+    }
+
+    // =========================================================================
+    // 4. USER PROFILES
+    // =========================================================================
+
+    // User Avatar Images: Public read, managed only by the account owner
+    match /users/{userId}/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isOwner(userId)) && isValidAvatar();
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+
+    match /users/{userId}/avatars/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isOwner(userId)) && isValidAvatar();
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+
+    // =========================================================================
+    // 5. CUSTOMER REVIEWS
+    // =========================================================================
+
+    // Review Photos: Public read, created only by the authenticated customer who authored it
+    match /reviews/{userId}/{productId}/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isOwner(userId)) && isValidReviewImage();
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+
+    match /reviews/{userId}/{filename} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isOwner(userId)) && isValidReviewImage();
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+  }
+}
