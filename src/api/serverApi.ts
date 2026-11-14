@@ -3004,17 +3004,25 @@ apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) =
     const storedUser = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
     const registeredMemUser = registeredServerUsers.get(cleanEmail);
     const knownRoleEntry = KNOWN_ROLES[cleanEmail];
+    const portal = targetPortal || 'customer';
 
     if (!storedUser && !registeredMemUser && !knownRoleEntry) {
-      return res.status(404).json({
-        success: false,
-        exists: false,
-        error: 'No registered account found with this email address. Please verify your email or sign up first.',
+      if (portal === 'admin' && cleanEmail !== VALID_ADMIN_EMAIL) {
+        return res.status(403).json({
+          success: false,
+          exists: false,
+          error: 'Access Denied: Only an authorized administrator email can reset the Admin Portal password.',
+        });
+      }
+      // Allow Firebase Authentication to handle password reset for accounts created directly in Firebase Auth
+      return res.json({
+        success: true,
+        exists: true,
+        role: portal === 'admin' ? 'admin' : 'customer',
       });
     }
 
     const resolvedRole = storedUser?.role || registeredMemUser?.role || knownRoleEntry?.role || 'customer';
-    const portal = targetPortal || 'customer';
 
     if (portal === 'admin' && resolvedRole !== 'admin') {
       return res.status(403).json({

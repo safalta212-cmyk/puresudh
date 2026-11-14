@@ -28,7 +28,7 @@ import {
   IdTokenResult,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase/config';
+import { auth, db, resolvedFirebaseConfig } from '../firebase/config';
 import { UserProfile, UserRole, Address } from '../types';
 import { COLLECTIONS } from '../constants';
 
@@ -46,10 +46,11 @@ try {
  */
 export function formatFirebaseAuthError(error: any): string {
   const code = String(error?.code || '');
+  const projectLabel = resolvedFirebaseConfig.projectId ? ` [Project: ${resolvedFirebaseConfig.projectId}]` : '';
   switch (code) {
     case 'auth/invalid-credential':
     case 'auth/invalid-login-credentials':
-      return 'Invalid email or password (auth/invalid-credential). Check for typos, verify this account exists under Firebase Console → Authentication → Users, or use Google Sign-In / "Forgot password?" if your account has no password set yet.';
+      return `Invalid email or password (auth/invalid-credential)${projectLabel}. Verify this email exists with a password under Firebase Console → Authentication → Users, or use Google Sign-In / "Forgot password?".`;
     case 'auth/wrong-password':
       return 'Incorrect password (auth/wrong-password). Please verify your password or click "Forgot password?".';
     case 'auth/user-not-found':
@@ -65,7 +66,7 @@ export function formatFirebaseAuthError(error: any): string {
     case 'auth/too-many-requests':
       return 'Too many failed login attempts (auth/too-many-requests). Please wait a few minutes or reset your password.';
     case 'auth/operation-not-allowed':
-      return 'Email/Password sign-in is disabled in Firebase Console (auth/operation-not-allowed). Enable Email/Password provider under Authentication → Sign-in method.';
+      return `Email/Password sign-in is disabled in Firebase Console (auth/operation-not-allowed)${projectLabel}. Enable Email/Password provider under Authentication → Sign-in method.`;
     case 'auth/unauthorized-domain':
       return 'This domain is not authorized in Firebase Authentication (auth/unauthorized-domain). Add your current domain under Firebase Console → Authentication → Settings → Authorized domains.';
     case 'auth/popup-blocked':
