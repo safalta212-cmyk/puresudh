@@ -5,29 +5,29 @@
     "availableBalance": 1057.5,
     "totalDeposited": 1000,
     "totalSpent": 13.5,
-    "totalRefunded": 1750,
+    "totalRefunded": 2200,
     "createdAt": "2026-10-05T16:54:23.635Z",
-    "updatedAt": "2026-11-14T12:32:19.730Z"
+    "updatedAt": "2026-11-15T15:27:07.765Z"
   },
   {
     "walletId": "adv-wal-vendor-2",
     "vendorId": "vendor-2",
     "availableBalance": 298,
     "totalDeposited": 500,
-    "totalSpent": 16,
+    "totalSpent": 20,
     "totalRefunded": 200,
     "createdAt": "2026-10-05T16:54:23.635Z",
-    "updatedAt": "2026-11-14T12:32:19.669Z"
+    "updatedAt": "2026-11-15T15:27:07.692Z"
   },
   {
     "walletId": "adv-wal-vendor-3",
     "vendorId": "vendor-3",
-    "availableBalance": 8500,
-    "totalDeposited": 12750,
+    "availableBalance": 9500,
+    "totalDeposited": 14250,
     "totalSpent": 0,
-    "totalRefunded": 4250,
+    "totalRefunded": 4750,
     "createdAt": "2026-10-05T16:54:23.635Z",
-    "updatedAt": "2026-11-14T12:32:17.972Z"
+    "updatedAt": "2026-11-15T15:27:05.998Z"
   },
   {
     "walletId": "adv-wal-vendor-4",
@@ -46,8 +46,8 @@
     "totalDeposited": 1000,
     "totalSpent": 0,
     "totalRefunded": 0,
-    "createdAt": "2026-11-14T12:32:11.307Z",
-    "updatedAt": "2026-11-14T12:32:11.307Z"
+    "createdAt": "2026-11-15T15:26:59.605Z",
+    "updatedAt": "2026-11-15T15:26:59.605Z"
   },
   {
     "walletId": "adv-wal-vendor-phase6-test",
@@ -58,7 +58,7 @@
     "totalRefunded": 0,
     "currency": "INR",
     "status": "ACTIVE",
-    "createdAt": "2026-11-14T12:32:13.753Z",
-    "updatedAt": "2026-11-14T12:32:13.753Z"
+    "createdAt": "2026-11-15T15:27:01.953Z",
+    "updatedAt": "2026-11-15T15:27:01.953Z"
   }
 ]

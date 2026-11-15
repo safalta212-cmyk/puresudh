@@ -75,6 +75,18 @@ export interface CreateOrderPayload {
   notes?: string;
 }
 
+async function safeJsonResponse<T = any>(res: Response): Promise<T | null> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 1. Initialize gateway order on server
  */
@@ -87,9 +99,9 @@ export async function initializePaymentOrder(
     body: JSON.stringify(params),
   });
 
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || 'Failed to initialize payment gateway order');
+  const data = await safeJsonResponse<PaymentOrderGatewayData>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Failed to initialize payment gateway order');
   }
 
   return data as PaymentOrderGatewayData;
@@ -107,8 +119,11 @@ export async function verifyPaymentOnServer(
     body: JSON.stringify(params),
   });
 
-  const data = await res.json();
-  return data as VerifyPaymentResult;
+  const data = await safeJsonResponse<VerifyPaymentResult>(res);
+  if (!data) {
+    throw new Error('Payment verification endpoint returned non-JSON response');
+  }
+  return data;
 }
 
 /**
@@ -141,12 +156,12 @@ export async function submitOrderWithIdempotency(
     body: JSON.stringify(payload),
   });
 
-  const data = await res.json();
-  if (!res.ok || !data.success) {
+  const data = await safeJsonResponse(res);
+  if (!res.ok || !data?.success) {
     return {
       success: false,
       order: null as any,
-      error: data.error || 'Order creation failed on backend',
+      error: data?.error || 'Order creation failed on backend',
     };
   }
 
@@ -171,11 +186,11 @@ export async function cancelOrderOnServer(
       body: JSON.stringify({ reason }),
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
+    const data = await safeJsonResponse(res);
+    if (!res.ok || !data?.success) {
       return {
         success: false,
-        error: data.error || 'Order cancellation failed',
+        error: data?.error || 'Order cancellation failed',
       };
     }
 
@@ -199,8 +214,8 @@ export async function fetchServerOrder(orderIdOrNumber: string): Promise<Order |
   try {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderIdOrNumber)}`);
     if (res.ok) {
-      const data = await res.json();
-      return data as Order;
+      const data = await safeJsonResponse<Order>(res);
+      if (data) return data;
     }
   } catch (err) {
     console.warn('Fetch server order error:', err);

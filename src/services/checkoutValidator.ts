@@ -76,6 +76,11 @@ export async function validateCartWithServer(
       body: JSON.stringify(payload),
     });
 
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('Checkout validation endpoint returned non-JSON response');
+    }
+
     const data = await res.json();
     if (!res.ok || !data.valid) {
       return {

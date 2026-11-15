@@ -37,7 +37,8 @@ export class WhatsAppProvider implements INotificationProvider {
         }),
       });
 
-      if (response.ok) {
+      const ct = response.headers.get('content-type') || '';
+      if (response.ok && ct.includes('application/json')) {
         const data = await response.json();
         return {
           channel: 'whatsapp',
