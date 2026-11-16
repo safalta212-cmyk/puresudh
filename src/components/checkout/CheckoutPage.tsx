@@ -19,6 +19,7 @@ import {
   verifyPaymentOnServer,
   submitOrderWithIdempotency,
 } from '../../services/paymentService';
+import { validateCartWithServer, ServerValidationResponse } from '../../services/checkoutValidator';
 import { notificationService } from '../../services/notifications/notificationService';
 import {
   isTemporaryEmail,
@@ -232,7 +233,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, [pincode, setPincode]);
 
   // Server Price, Inventory & Delivery Verification Function
-  const runAuthoritativeServerVerification = async (customPincode?: string, customCoupon?: string) => {
+  const runAuthoritativeServerVerification = async (
+    customPincode?: string,
+    customCoupon?: string
+  ): Promise<ServerValidationResponse | null> => {
     if (!items || items.length === 0) {
       setServerVerification(null);
       return null;
@@ -240,57 +244,56 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
     setIsValidating(true);
     try {
-      const payload = {
-        items: items.map((i) => ({
-          productId: i.product.id,
-          quantity: i.quantity,
-          weight: i.selectedWeight || i.product.weight,
-        })),
-        pincode: customPincode !== undefined ? customPincode : pincode,
-        couponCode: customCoupon !== undefined ? customCoupon : couponCode,
-      };
-
-      const res = await fetch('/api/orders/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return null;
-      }
-
-      const data = await res.json();
-      if (res.ok && data.valid) {
-        setServerVerification(data);
-        return data;
-      } else {
-        showToast(data.error || 'Validation failed on server', 'error');
-        return null;
-      }
+      const targetPincode = customPincode !== undefined ? customPincode : pincode;
+      const targetCoupon = customCoupon !== undefined ? customCoupon : couponCode;
+      const result = await validateCartWithServer(items, targetPincode, targetCoupon);
+      setServerVerification(result);
+      return result;
     } catch (err: any) {
       console.warn('Server verification error:', err);
-      return null;
+      const fallbackErr: ServerValidationResponse = {
+        valid: false,
+        error: err?.message || 'Unable to verify cart and delivery details.',
+        verifiedItems: [],
+        calculatedSubtotal: 0,
+        deliveryCharge: 0,
+        discount: 0,
+        grandTotal: 0,
+        estimatedDeliveryTime: '',
+      };
+      setServerVerification(fallbackErr);
+      return fallbackErr;
     } finally {
       setIsValidating(false);
     }
   };
 
-  // Re-verify on items or coupon changes
+  // Re-verify on items, coupon, or valid 6-digit pincode changes
   useEffect(() => {
+    if (pincode && pincode.length > 0 && pincode.length < 6) {
+      return;
+    }
     runAuthoritativeServerVerification();
-  }, [items, couponCode]);
+  }, [items, couponCode, pincode]);
 
-  // Derived totals strictly preferring authoritative server calculations
-  const authoritativeSubtotal = serverVerification?.calculatedSubtotal ?? clientSubtotal;
-  const authoritativeDeliveryCharge = serverVerification?.deliveryCharge ?? baseDeliveryCharge;
-  const authoritativeDiscount = serverVerification?.discount ?? clientDiscount;
-  const authoritativeGrandTotal =
-    serverVerification?.grandTotal ??
-    Math.max(0, authoritativeSubtotal + authoritativeDeliveryCharge - authoritativeDiscount);
+  // Derived totals strictly preferring authoritative server calculations when valid
+  const isVerifiedValid = Boolean(serverVerification?.valid);
+  const authoritativeSubtotal = isVerifiedValid
+    ? serverVerification!.calculatedSubtotal
+    : clientSubtotal;
+  const authoritativeDeliveryCharge = isVerifiedValid
+    ? serverVerification!.deliveryCharge
+    : baseDeliveryCharge;
+  const authoritativeDiscount = isVerifiedValid
+    ? serverVerification!.discount
+    : clientDiscount;
+  const authoritativeGrandTotal = isVerifiedValid
+    ? serverVerification!.grandTotal
+    : Math.max(0, authoritativeSubtotal + authoritativeDeliveryCharge - authoritativeDiscount);
   const authoritativeETA =
-    serverVerification?.estimatedDeliveryTime || estimatedDeliveryTime || '25-35 mins';
+    (isVerifiedValid ? serverVerification?.estimatedDeliveryTime : '') ||
+    estimatedDeliveryTime ||
+    '25-35 mins';
 
   // Step progression helper
   const goToStep = (step: CheckoutStepType) => {
@@ -346,7 +349,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       // 1. Mandatory Re-verification on server before any transaction is executed
       const verified = await runAuthoritativeServerVerification();
       if (!verified || !verified.valid) {
-        showToast('Cart or pricing verification failed. Please review your order.', 'error');
+        showToast(
+          verified?.error || 'Cart or pricing verification failed. Please review your order.',
+          'error'
+        );
         setIsPlacingOrder(false);
         return;
       }
@@ -433,6 +439,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         gatewayOrderId,
         couponCode: couponCode || undefined,
         notes: [deliveryInstruction, specialNotes].filter(Boolean).join(' • '),
+        verifiedSummary: verified,
       };
 
       const result = await submitOrderWithIdempotency(orderPayload);

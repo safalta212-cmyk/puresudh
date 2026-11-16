@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
 import { initialProducts, initialCoupons, initialDeliveryAreas, initialDeliverySlots } from '../data/seedData';
 import {
   Order,
@@ -569,6 +570,140 @@ apiRouter.post('/coupons/validate', couponLimiter, (req: Request, res: Response)
   });
 });
 
+function decodeFirestoreValue(val: any): any {
+  if (!val || typeof val !== 'object') return val;
+  if ('stringValue' in val) return val.stringValue;
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('booleanValue' in val) return Boolean(val.booleanValue);
+  if ('nullValue' in val) return null;
+  if ('timestampValue' in val) return val.timestampValue;
+  if ('arrayValue' in val) {
+    return Array.isArray(val.arrayValue?.values)
+      ? val.arrayValue.values.map(decodeFirestoreValue)
+      : [];
+  }
+  if ('mapValue' in val) {
+    const out: Record<string, any> = {};
+    const fields = val.mapValue?.fields || {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = decodeFirestoreValue(v);
+    }
+    return out;
+  }
+  return undefined;
+}
+
+function decodeFirestoreDoc(docJson: any): Record<string, any> | null {
+  if (!docJson || !docJson.fields) return null;
+  const docId = typeof docJson.name === 'string' ? docJson.name.split('/').pop() : undefined;
+  const parsed: Record<string, any> = {};
+  for (const [k, v] of Object.entries(docJson.fields)) {
+    parsed[k] = decodeFirestoreValue(v);
+  }
+  if (!parsed.id && docId) parsed.id = docId;
+  return parsed;
+}
+
+async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any[]> {
+  const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
+  const envDbId = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
+  const targets: Array<{ projectId: string; dbId: string }> = [];
+
+  if (envProjectId) {
+    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)' });
+  }
+  if (!targets.some((t) => t.projectId === 'puresudh-561f1')) {
+    targets.push({ projectId: 'puresudh-561f1', dbId: '(default)' });
+  }
+  if (firebaseAppletConfig?.projectId && !targets.some((t) => t.projectId === firebaseAppletConfig.projectId)) {
+    targets.push({
+      projectId: firebaseAppletConfig.projectId,
+      dbId: firebaseAppletConfig.firestoreDatabaseId || '(default)',
+    });
+  }
+
+  for (const target of targets) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3500);
+      const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(target.projectId)}/databases/${encodeURIComponent(target.dbId)}/documents/${encodeURIComponent(collectionName)}?pageSize=200`;
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json();
+      if (Array.isArray(json?.documents) && json.documents.length > 0) {
+        return json.documents
+          .map(decodeFirestoreDoc)
+          .filter((d: any): d is Record<string, any> => Boolean(d && d.id));
+      }
+    } catch {
+      // Try next configured Firestore target or keep seed catalog
+    }
+  }
+  return [];
+}
+
+async function hydrateCatalogIfNeeded(
+  items: any[],
+  pincode?: string,
+  couponCode?: string
+): Promise<void> {
+  const safeItems = Array.isArray(items) ? items : [];
+  const missingProduct = safeItems.some((i) => {
+    const pid = String(i?.productId || i?.id || '');
+    return pid && !serverProducts.some((p) => p.id === pid);
+  });
+
+  const cleanPin = pincode ? String(pincode).replace(/\D/g, '').trim() : '';
+  const missingPincode = Boolean(cleanPin && !matchDeliveryArea(cleanPin, serverAreas));
+
+  const cleanCoupon = couponCode ? String(couponCode).trim().toUpperCase() : '';
+  const missingCoupon = Boolean(cleanCoupon && !serverCoupons.some((c) => c.code.toUpperCase() === cleanCoupon));
+
+  const tasks: Promise<void>[] = [];
+
+  if (missingProduct) {
+    tasks.push(
+      fetchFirestoreCollectionDocs('products').then((docs) => {
+        for (const d of docs) {
+          const idx = serverProducts.findIndex((p) => p.id === d.id);
+          if (idx >= 0) serverProducts[idx] = { ...serverProducts[idx], ...d };
+          else serverProducts.push(d);
+        }
+      })
+    );
+  }
+
+  if (missingPincode) {
+    tasks.push(
+      fetchFirestoreCollectionDocs('deliveryAreas').then((docs) => {
+        for (const d of docs) {
+          const idx = serverAreas.findIndex((a) => a.id === d.id);
+          if (idx >= 0) serverAreas[idx] = { ...serverAreas[idx], ...d };
+          else serverAreas.push(d);
+        }
+      })
+    );
+  }
+
+  if (missingCoupon) {
+    tasks.push(
+      fetchFirestoreCollectionDocs('coupons').then((docs) => {
+        for (const d of docs) {
+          const idx = serverCoupons.findIndex((c) => c.id === d.id || c.code.toUpperCase() === String(d.code || '').toUpperCase());
+          if (idx >= 0) serverCoupons[idx] = { ...serverCoupons[idx], ...d };
+          else serverCoupons.push(d);
+        }
+      })
+    );
+  }
+
+  if (tasks.length > 0) {
+    await Promise.allSettled(tasks);
+  }
+}
+
 // Helper to run authoritative server-side cart & pricing verification
 export function verifyCartItemsServer(
   items: any[],
@@ -653,8 +788,13 @@ export function verifyCartItemsServer(
       };
     }
 
-    // 4. Prevent out-of-stock purchase
-    const availableStock = product.stockQuantity ?? 0;
+    // 4. Prevent out-of-stock purchase (treat missing stockQuantity on Firestore records as default available stock unless marked out of stock)
+    const availableStock =
+      typeof product.stockQuantity === 'number'
+        ? product.stockQuantity
+        : typeof product.stock === 'number'
+        ? product.stock
+        : 10;
     if (availableStock <= 0) {
       return {
         valid: false,
@@ -832,8 +972,9 @@ export function verifyCartItemsServer(
 }
 
 // Server-Side Order Price & Total Recalculation (endpoint)
-apiRouter.post(['/orders/validate', '/checkout/validate'], (req: Request, res: Response) => {
+apiRouter.post(['/orders/validate', '/checkout/validate'], async (req: Request, res: Response) => {
   const { items, pincode, couponCode } = req.body;
+  await hydrateCatalogIfNeeded(items, pincode, couponCode);
   const result = verifyCartItemsServer(items, pincode, couponCode);
 
   if (!result.valid) {
@@ -991,6 +1132,7 @@ apiRouter.post(['/orders/create', '/checkout'], orderLimiter, async (req: Reques
     }
 
     // 2. Authoritative server-side price, inventory stock, coupon & delivery re-verification
+    await hydrateCatalogIfNeeded(items, deliveryAddress.pincode, couponCode);
     const verification = verifyCartItemsServer(items, deliveryAddress.pincode, couponCode);
     if (!verification.valid) {
       return res.status(400).json({ error: verification.error });

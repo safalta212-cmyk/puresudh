@@ -1,5 +1,27 @@
 [
   {
+    "clickId": "click-1794800497232-5ab018",
+    "campaignId": "camp-vendor-1-mwipviv3-e201",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-fraud-test",
+    "timestamp": "2026-11-16T03:41:37.226Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-16T03:41:37.226Z"
+  },
+  {
+    "clickId": "click-1794800497192-9a2d94",
+    "campaignId": "camp-vendor-2-iso-1794800497165",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "customerId": "cust-cpc-sec-1794800497186",
+    "timestamp": "2026-11-16T03:41:37.186Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-16T03:41:37.186Z"
+  },
+  {
     "clickId": "click-1794799577386-978bee",
     "campaignId": "camp-vendor-1-mwipbt3t-41d3",
     "vendorId": "vendor-1",

@@ -1,5 +1,19 @@
 [
   {
+    "attributionId": "attr-1794800442695-237ac4",
+    "campaignId": "camp-vendor-1-mwipbt3t-41d3",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "orderId": "ord-ps100003",
+    "orderNumber": "PS100003",
+    "attributedSales": 199,
+    "clickId": "click-1794799577386-978bee",
+    "clickTimestamp": "2026-11-16T03:26:17.380Z",
+    "orderTimestamp": "2026-11-16T03:40:42.691Z",
+    "attributionWindowDays": 7,
+    "createdAt": "2026-11-16T03:40:42.691Z"
+  },
+  {
     "attributionId": "attr-1794799565969-e3952a",
     "campaignId": "camp-attr-test-1794799565954",
     "vendorId": "vendor-1",

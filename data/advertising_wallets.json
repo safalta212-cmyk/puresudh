@@ -2,22 +2,22 @@
   {
     "walletId": "adv-wal-vendor-1",
     "vendorId": "vendor-1",
-    "availableBalance": 1057.5,
+    "availableBalance": 1120,
     "totalDeposited": 1000,
-    "totalSpent": 13.5,
-    "totalRefunded": 3175,
+    "totalSpent": 16,
+    "totalRefunded": 3250,
     "createdAt": "2026-10-05T16:54:23.635Z",
-    "updatedAt": "2026-11-16T03:26:17.415Z"
+    "updatedAt": "2026-11-16T03:41:37.265Z"
   },
   {
     "walletId": "adv-wal-vendor-2",
     "vendorId": "vendor-2",
-    "availableBalance": 298,
+    "availableBalance": 296,
     "totalDeposited": 500,
-    "totalSpent": 30,
+    "totalSpent": 32,
     "totalRefunded": 200,
     "createdAt": "2026-10-05T16:54:23.635Z",
-    "updatedAt": "2026-11-16T03:26:17.339Z"
+    "updatedAt": "2026-11-16T03:41:37.186Z"
   },
   {
     "walletId": "adv-wal-vendor-3",

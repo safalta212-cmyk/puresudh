@@ -1,5 +1,14 @@
 [
   {
+    "clickId": "inv-click-1794800497235-a7769b",
+    "campaignId": "camp-vendor-1-mwipviv3-e201",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-16T03:41:37.232Z",
+    "createdAt": "2026-11-16T03:41:37.232Z"
+  },
+  {
     "clickId": "inv-click-1794799577389-10d19b",
     "campaignId": "camp-vendor-1-mwipbt3t-41d3",
     "vendorId": "vendor-1",
