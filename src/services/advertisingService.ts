@@ -26,7 +26,7 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db, auth } from '../firebase/config';
 import { COLLECTIONS } from '../constants';
 import {
   AdvertisingCampaign,
@@ -72,7 +72,7 @@ function setLocal<T>(key: string, data: T): void {
 
 export async function getVendorAdvertisingCampaigns(vendorId: string): Promise<AdvertisingCampaign[]> {
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const q = query(
         collection(db, COLLECTIONS.ADVERTISING_CAMPAIGNS),
         where('vendorId', '==', vendorId)
@@ -92,7 +92,7 @@ export async function getVendorAdvertisingCampaigns(vendorId: string): Promise<A
 
 export async function getAdvertisingCampaignById(campaignId: string): Promise<AdvertisingCampaign | null> {
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_CAMPAIGNS, campaignId);
       const snap = await getDoc(ref);
       if (snap.exists()) {
@@ -118,7 +118,7 @@ export async function createAdvertisingCampaign(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_CAMPAIGNS, campaign.campaignId);
       await setDoc(ref, campaign);
     }
@@ -149,7 +149,7 @@ export async function updateAdvertisingCampaign(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_CAMPAIGNS, campaignId);
       await updateDoc(ref, payload);
     }
@@ -171,7 +171,7 @@ export async function updateAdvertisingCampaign(
 
 export async function getVendorAdvertisingWallet(vendorId: string): Promise<AdvertisingWallet | null> {
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const q = query(
         collection(db, COLLECTIONS.ADVERTISING_WALLETS),
         where('vendorId', '==', vendorId)
@@ -204,7 +204,7 @@ export async function createAdvertisingWallet(vendorId: string): Promise<Adverti
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_WALLETS, walletId);
       await setDoc(ref, wallet);
     }
@@ -230,7 +230,7 @@ export async function createAdvertisingWallet(vendorId: string): Promise<Adverti
 
 export async function getVendorAdvertisingTransactions(vendorId: string): Promise<AdvertisingTransaction[]> {
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const q = query(
         collection(db, COLLECTIONS.ADVERTISING_TRANSACTIONS),
         where('vendorId', '==', vendorId),
@@ -260,7 +260,7 @@ export async function recordAdvertisingTransaction(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_TRANSACTIONS, transaction.transactionId);
       await setDoc(ref, transaction);
     }
@@ -288,7 +288,7 @@ export async function recordAdvertisingClick(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_CLICKS, click.clickId);
       await setDoc(ref, click);
     }
@@ -316,7 +316,7 @@ export async function recordAdvertisingInvalidClick(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_INVALID_CLICKS, invalidClick.clickId);
       await setDoc(ref, invalidClick);
     }
@@ -344,7 +344,7 @@ export async function logAdvertisingAudit(
   };
 
   try {
-    if (db) {
+    if (db && auth.currentUser) {
       const ref = doc(db, COLLECTIONS.ADVERTISING_AUDIT_LOGS, auditLog.auditId);
       await setDoc(ref, auditLog);
     }

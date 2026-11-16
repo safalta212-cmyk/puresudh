@@ -143,8 +143,8 @@ function updateJsonLdSchemas({
     '@id': `${origin}/#store`,
     name: 'PURE SUDH',
     url: origin,
-    logo: `${origin}/logo.png`,
-    image: `${origin}/images/pure_sudh_hero.jpg`,
+    logo: `${origin}${DEFAULT_IMAGE}`,
+    image: `${origin}${DEFAULT_IMAGE}`,
     description:
       'Pure Food • Pure Quality • Pure Trust - Fresh Indian snacks, sweets, dairy products, and homemade specialties delivered fresh.',
     currenciesAccepted: 'INR',

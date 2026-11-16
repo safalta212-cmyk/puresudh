@@ -601,14 +601,14 @@ export async function fetchVendorOrders(vendorId: string): Promise<VendorOrder[]
   // If empty, generate simulated initial fulfillment orders from local orders containing this vendor's items
   if (scoped.length === 0) {
     const allStoreOrders = getLocal<Order[]>('pure_sudh_orders', []);
-    const matching = allStoreOrders.filter((o) => o.vendorId === vendorId || o.items.some((i) => i.productId.includes(vendorId) || vendorId === 'vendor-1'));
+    const matching = allStoreOrders.filter((o) => o.vendorId === vendorId || (o.items || []).some((i) => i.productId.includes(vendorId) || vendorId === 'vendor-1'));
     if (matching.length > 0) {
       const generated: VendorOrder[] = matching.map((o) => ({
         id: `vord-${o.id}-${vendorId}`,
         orderId: o.id,
         orderNumber: o.orderNumber,
         vendorId,
-        items: o.items.map((it: any) => ({
+        items: (o.items || []).map((it: any) => ({
           id: it.id || it.productId,
           orderId: o.id,
           productId: it.productId,

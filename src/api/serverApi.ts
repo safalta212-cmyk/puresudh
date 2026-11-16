@@ -36,6 +36,7 @@ import {
 import {
   PaymentGatewayManager,
   GatewayProviderType,
+  RefundResult,
 } from './paymentGateways';
 import { validateCouponWithRules } from '../utils/couponValidation';
 import { createRateLimiter, requireRole } from './securityMiddleware';
@@ -653,7 +654,8 @@ export function verifyCartItemsServer(
     }
 
     // 4. Prevent out-of-stock purchase
-    if (product.stockQuantity <= 0) {
+    const availableStock = product.stockQuantity ?? 0;
+    if (availableStock <= 0) {
       return {
         valid: false,
         error: `Product '${product.name}' is completely out of stock.`,
@@ -668,10 +670,10 @@ export function verifyCartItemsServer(
     }
 
     // 5. Prevent overstock purchase
-    if (quantity > product.stockQuantity) {
+    if (quantity > availableStock) {
       return {
         valid: false,
-        error: `Overstock limit: You requested ${quantity} units of '${product.name}', but only ${product.stockQuantity} units are available in inventory.`,
+        error: `Overstock limit: You requested ${quantity} units of '${product.name}', but only ${availableStock} units are available in inventory.`,
         verifiedItems: [],
         calculatedSubtotal: 0,
         deliveryCharge: 0,
@@ -1183,7 +1185,7 @@ apiRouter.post(['/orders/create', '/checkout'], orderLimiter, async (req: Reques
         orderNumber: order.orderNumber,
         customerId: order.customerId,
         orderTimestamp: order.createdAt,
-        items: order.items.map((i) => ({
+        items: (order.items || []).map((i) => ({
           productId: i.productId,
           productName: i.productName,
           price: i.price,
@@ -1249,7 +1251,7 @@ apiRouter.post('/orders/:id/cancel', async (req: Request, res: Response) => {
     }
 
     // 2. Refund processing for paid orders
-    let refundResult = null;
+    let refundResult: RefundResult | null = null;
     const isPaid = order.paymentStatus === 'Paid';
 
     if (isPaid && order.paymentId) {
@@ -1378,9 +1380,9 @@ apiRouter.post('/orders/:id/vendor-orders/:vendorId/cancel', async (req: Request
     }
 
     // 2. Process partial refund if parent was paid
-    let refundResult = null;
+    let refundResult: RefundResult | null = null;
     const isPaid = parentOrder && parentOrder.paymentStatus === 'Paid';
-    const refundAmount = vendorOrder.vendorTotal;
+    const refundAmount = vendorOrder.vendorTotal ?? vendorOrder.vendorSubtotal ?? vendorOrder.payoutAmount ?? 0;
 
     if (isPaid && parentOrder.paymentId && refundAmount > 0) {
       try {

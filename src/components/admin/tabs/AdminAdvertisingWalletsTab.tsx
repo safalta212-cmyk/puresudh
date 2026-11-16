@@ -74,8 +74,13 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
         },
       });
 
-      if (!res.ok) {
-        throw new Error(`Failed to load advertising wallets (${res.status})`);
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        throw new Error(
+          !ct.includes('application/json')
+            ? 'Advertising backend API is unavailable in static preview/hosting mode.'
+            : `Failed to load advertising wallets (${res.status})`
+        );
       }
 
       const data = await res.json();
@@ -176,6 +181,11 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
         });
       }
 
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+      }
+
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Advertising action failed');
@@ -207,9 +217,12 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
           'x-user-email': adminEmail,
         },
       });
-      const data = await res.json();
-      if (data.success) {
-        setVendorTransactions(data.transactions || []);
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          setVendorTransactions(data.transactions || []);
+        }
       }
     } catch (err: any) {
       console.error('[AdminAdWallets] Tx error:', err);

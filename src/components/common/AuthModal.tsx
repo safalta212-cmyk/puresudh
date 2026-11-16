@@ -158,7 +158,7 @@ export const AuthModal: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setFormError(null);
-    const result = await loginWithGoogle();
+    const result = await loginWithGoogle(targetPortal || 'customer');
     if (result.success) {
       showToast('Signed in successfully with Google account.', 'success');
       closeAuthModal();

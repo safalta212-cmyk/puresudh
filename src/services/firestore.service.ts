@@ -210,6 +210,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, no
   if (target) {
     target.status = status;
     target.updatedAt = new Date().toISOString();
+    target.statusHistory = target.statusHistory || [];
     target.statusHistory.push({
       status,
       timestamp: new Date().toISOString(),

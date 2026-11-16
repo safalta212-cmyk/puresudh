@@ -44,7 +44,7 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
   onOpenProductDetails,
   onNavigate,
   initialTab = 'orders',
-  selectedOrderId: propSelectedOrderId = null,
+  selectedOrderId: propSelectedOrderId,
   onOrderUpdated,
 }) => {
   const { user, role, switchRole, logout, updateUserProfileData } = useAuth();
@@ -95,11 +95,12 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
             // Ignore
           }
         }
-      } else if (propSelectedOrderId) {
+      } else if (typeof propSelectedOrderId === 'string' && propSelectedOrderId.trim().length > 0) {
+        const targetOrderKey = propSelectedOrderId.toLowerCase();
         const found = localOrders.find(
           (o) =>
-            o.id.toLowerCase() === propSelectedOrderId.toLowerCase() ||
-            o.orderNumber.toLowerCase() === propSelectedOrderId.toLowerCase()
+            o.id.toLowerCase() === targetOrderKey ||
+            o.orderNumber.toLowerCase() === targetOrderKey
         );
         if (found) setSelectedOrder(found);
       } else if (path.includes('/account/addresses')) {

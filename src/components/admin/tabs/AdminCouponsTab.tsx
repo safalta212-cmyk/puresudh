@@ -32,8 +32,8 @@ interface AdminCouponsTabProps {
 
 export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
   coupons,
-  categories = [],
-  products = [],
+  categories = [] as Category[],
+  products = [] as Product[],
   onSaveCoupon,
   onDeleteCoupon,
   onToggleCouponStatus,
@@ -637,7 +637,7 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                     Category Restriction (Optional)
                   </label>
                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-stone-50 rounded-xl border border-stone-200">
-                    {categories.map((cat) => {
+                    {categories.map((cat: Category) => {
                       const isSelected = formData.restrictedCategoryIds.includes(cat.id);
                       return (
                         <button

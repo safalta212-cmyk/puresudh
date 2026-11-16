@@ -20,6 +20,7 @@ import { Order, OrderStatus, Product } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useCart } from '../../context/CartContext';
 import { notificationService } from '../../services/notifications/notificationService';
+import { updateOrderStatus } from '../../firebase/services';
 
 interface OrderDetailViewProps {
   order: Order;
@@ -142,16 +143,50 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
     setCancelError(null);
 
     try {
-      const res = await fetch(`/api/orders/${order.id}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: cancelReason }),
-      });
+      let updatedOrder: Order | null = null;
+      let usedServer = false;
 
-      const data = await res.json();
+      try {
+        const res = await fetch(`/api/orders/${order.id}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: cancelReason }),
+        });
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Server rejected cancellation.');
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          usedServer = true;
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Server rejected cancellation.');
+          }
+          updatedOrder = data.order || null;
+        }
+      } catch (apiErr: any) {
+        if (usedServer) {
+          throw apiErr;
+        }
+      }
+
+      if (!usedServer) {
+        const normalized = (order.status || '').toUpperCase();
+        if (!['PLACED', 'ORDER PLACED', 'CONFIRMED'].includes(normalized)) {
+          throw new Error('Only recently placed orders can be cancelled.');
+        }
+        await updateOrderStatus(order.id, 'CANCELLED', cancelReason || 'Cancelled by customer');
+        updatedOrder = {
+          ...order,
+          status: 'CANCELLED',
+          updatedAt: new Date().toISOString(),
+          statusHistory: [
+            ...(order.statusHistory || []),
+            {
+              status: 'CANCELLED',
+              timestamp: new Date().toISOString(),
+              note: cancelReason || 'Cancelled by customer',
+            },
+          ],
+        };
       }
 
       // Dispatch order cancellation notification
@@ -174,8 +209,8 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
       setIsCancelModalOpen(false);
 
-      if (onOrderUpdated && data.order) {
-        onOrderUpdated(data.order);
+      if (onOrderUpdated && updatedOrder) {
+        onOrderUpdated(updatedOrder);
       }
     } catch (err: any) {
       setCancelError(err.message || 'Unable to cancel order.');

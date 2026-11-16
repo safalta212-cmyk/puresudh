@@ -163,7 +163,7 @@ export const PincodeModal: React.FC = () => {
               </span>
             </div>
 
-            {deliveryArea.minimumOrder > 0 && (
+            {(deliveryArea.minimumOrder ?? 0) > 0 && (
               <p className="text-[11px] text-stone-500 mt-2">
                 Min. order: ₹{deliveryArea.minimumOrder} • Free delivery above ₹
                 {deliveryArea.freeDeliveryAbove || deliveryArea.freeDeliveryThreshold || 299}
@@ -197,9 +197,9 @@ export const PincodeModal: React.FC = () => {
                 return (
                   <button
                     key={area.id}
-                    id={`area-pill-${area.pincode}`}
+                    id={`area-pill-${area.pincode || area.id}`}
                     type="button"
-                    onClick={() => handleSelectArea(area.pincode)}
+                    onClick={() => area.pincode && handleSelectArea(area.pincode)}
                     className={`p-2.5 text-left rounded-xl border text-xs transition touch-manipulation min-h-[44px] ${
                       pincode === area.pincode
                         ? 'border-amber-600 bg-amber-50 text-amber-900 font-semibold ring-1 ring-amber-500'
@@ -215,7 +215,7 @@ export const PincodeModal: React.FC = () => {
                       )}
                     </div>
                     <div className="truncate text-stone-500 text-[11px] mt-0.5">
-                      {area.areaName.split('/')[0]}
+                      {(area.areaName || 'Serviceable Zone').split('/')[0]}
                     </div>
                     <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
                       {is30 ? '30-minute delivery' : (area.estimatedDeliveryTime || `${area.estimatedTimeMinutes} mins ETA`)}

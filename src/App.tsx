@@ -861,7 +861,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account'); } catch {}
     } else if (view === 'orders' || view === '/account/orders') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to view your orders.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -872,7 +872,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/orders'); } catch {}
     } else if (view.startsWith('/account/orders/')) {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to view your order details.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -884,7 +884,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(ordId);
       try { window.history.pushState(null, '', view); } catch {}
     } else if (view === 'addresses' || view === '/account/addresses') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to manage your saved addresses.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -895,7 +895,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/addresses'); } catch {}
     } else if (view === 'wishlist' || view === '/account/wishlist') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to view your saved wishlist.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -906,7 +906,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/wishlist'); } catch {}
     } else if (view === 'profile' || view === '/account/profile') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to view your profile.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -917,7 +917,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/profile'); } catch {}
     } else if (view === 'reviews' || view === '/account/reviews') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Please sign in to view your reviews.', 'info');
         setCurrentView('customer-login');
         try { window.history.pushState(null, '', '/customer/login'); } catch {}
@@ -928,7 +928,7 @@ const AppContent: React.FC = () => {
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/reviews'); } catch {}
     } else if (view === 'checkout' || view === '/checkout') {
-      if (!user) {
+      if (!activeUser) {
         showToast('Order karne ke liye please account create karein ya sign in karein. (Please sign in or create an account to place an order.)', 'info');
         openAuthModal('login');
         return;
