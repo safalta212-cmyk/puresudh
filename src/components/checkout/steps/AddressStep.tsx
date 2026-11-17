@@ -14,7 +14,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { Address } from '../../../types';
-import { isTemporaryOrFakePhone, normalizeIndianPhone10, sanitizePhoneInput10 } from '../../../validation';
+import { isTemporaryOrFakePhone } from '../../../validation';
 
 interface AddressStepProps {
   name: string;
@@ -148,25 +148,19 @@ export const AddressStep: React.FC<AddressStepProps> = ({
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">
-              10-Digit Mobile Phone (+91) *
+              10-Digit Mobile Phone *
             </label>
-            <div className="flex items-stretch">
-              <span className="inline-flex items-center px-3 bg-stone-100 border border-r-0 border-stone-300 rounded-l-xl text-xs sm:text-sm font-bold text-stone-700 select-none">
-                +91
-              </span>
-              <div className="relative flex-1">
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  id="address-phone-input"
-                  value={normalizeIndianPhone10(phone ?? '')}
-                  onChange={(e) => setPhone(sanitizePhoneInput10(e.target.value))}
-                  maxLength={10}
-                  placeholder="10-digit mobile number"
-                  className="w-full text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-r-xl border border-stone-300 focus:ring-2 focus:ring-amber-600 focus:outline-none"
-                />
-                <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
-              </div>
+            <div className="relative">
+              <input
+                type="tel"
+                id="address-phone-input"
+                value={phone ?? ''}
+                onChange={(e) => setPhone(e.target.value)}
+                maxLength={10}
+                placeholder="e.g. 9876543210"
+                className="w-full text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-amber-600 focus:outline-none"
+              />
+              <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
             </div>
           </div>
         </div>

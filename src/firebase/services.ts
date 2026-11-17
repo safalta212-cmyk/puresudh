@@ -160,7 +160,7 @@ export async function initializeDatabase(): Promise<void> {
           ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), cp, { merge: true })),
           ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), b, { merge: true })),
           ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), o, { merge: true })),
-          setDoc(doc(db, 'settings', initialSiteSettings.id || 'site-settings'), initialSiteSettings, { merge: true }),
+          setDoc(doc(db, 'settings', initialSiteSettings.id), initialSiteSettings, { merge: true }),
         ]).catch(() => {});
       }
     }
@@ -464,8 +464,7 @@ export async function validateDeliveryAvailability(
       }),
     });
 
-    const ct = res.headers.get('content-type') || '';
-    if (res.ok && ct.includes('application/json')) {
+    if (res.ok) {
       const data = await res.json();
       return data as DeliveryValidationResult;
     }
@@ -900,10 +899,10 @@ export async function createOrder(order: Order): Promise<Order> {
   // Deduct inventory stock for ordered items
   try {
     const products = getLocal<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-    for (const item of order.items || []) {
+    for (const item of order.items) {
       const prod = products.find((p) => p.id === item.productId);
       if (prod) {
-        prod.stockQuantity = Math.max(0, (prod.stockQuantity ?? 0) - item.quantity);
+        prod.stockQuantity = Math.max(0, prod.stockQuantity - item.quantity);
         if (prod.stockQuantity === 0) {
           prod.availability = false;
         }

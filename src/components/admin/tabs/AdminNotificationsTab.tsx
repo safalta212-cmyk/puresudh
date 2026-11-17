@@ -75,11 +75,7 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
     try {
       const [notifsRes, providersRes] = await Promise.allSettled([
         fetchBroadcastNotifications(),
-        fetch('/api/notifications/providers').then(async (r) => {
-          const ct = r.headers.get('content-type') || '';
-          if (!r.ok || !ct.includes('application/json')) return {};
-          return r.json();
-        }),
+        fetch('/api/notifications/providers').then((r) => r.json()),
       ]);
 
       if (notifsRes.status === 'fulfilled') {

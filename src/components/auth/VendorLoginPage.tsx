@@ -17,7 +17,7 @@ import { useToast } from '../../context/ToastContext';
 
 interface VendorLoginPageProps {
   onBackToStore: () => void;
-  onNavigateDashboard?: (profile?: { role: string }) => void;
+  onNavigateDashboard?: () => void;
   onNavigateRegister?: () => void;
 }
 
@@ -45,11 +45,27 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
       return;
     }
 
+    // Call server-side login validate first to enforce RBAC
+    try {
+      const serverRes = await fetch('/api/auth/login-validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), targetPortal: 'vendor' }),
+      });
+      const data = await serverRes.json();
+      if (!serverRes.ok || !data.authorized) {
+        setFormError(data.error || 'Access Denied: Vendor Partner credentials required.');
+        return;
+      }
+    } catch (apiErr: any) {
+      console.warn('Server login validation note:', apiErr.message);
+    }
+
     const result = await login(email, password, 'vendor');
     if (result.success) {
       showToast('Welcome to your Vendor Partner Hub!', 'success');
       if (onNavigateDashboard) {
-        onNavigateDashboard(result.profile);
+        onNavigateDashboard();
       } else {
         window.location.href = '/vendor';
       }
@@ -69,7 +85,7 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
     }
 
     try {
-      const res = await sendPasswordReset(email, 'vendor');
+      const res = await sendPasswordReset(email);
       setResetMessage(res.message);
       showToast('Password reset link sent to your vendor email!', 'success');
     } catch (err: any) {

@@ -44,7 +44,7 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
   onOpenProductDetails,
   onNavigate,
   initialTab = 'orders',
-  selectedOrderId: propSelectedOrderId,
+  selectedOrderId: propSelectedOrderId = null,
   onOrderUpdated,
 }) => {
   const { user, role, switchRole, logout, updateUserProfileData } = useAuth();
@@ -95,12 +95,11 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
             // Ignore
           }
         }
-      } else if (typeof propSelectedOrderId === 'string' && propSelectedOrderId.trim().length > 0) {
-        const targetOrderKey = propSelectedOrderId.toLowerCase();
+      } else if (propSelectedOrderId) {
         const found = localOrders.find(
           (o) =>
-            o.id.toLowerCase() === targetOrderKey ||
-            o.orderNumber.toLowerCase() === targetOrderKey
+            o.id.toLowerCase() === propSelectedOrderId.toLowerCase() ||
+            o.orderNumber.toLowerCase() === propSelectedOrderId.toLowerCase()
         );
         if (found) setSelectedOrder(found);
       } else if (path.includes('/account/addresses')) {
@@ -234,10 +233,6 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
     { id: 'reviews', label: 'Verified Reviews', icon: Star },
   ];
 
-  if (!user) {
-    return null;
-  }
-
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-6 sm:py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -339,9 +334,6 @@ export const MyAccountPage: React.FC<MyAccountPageProps> = ({
           <button
             type="button"
             onClick={async () => {
-              try {
-                window.history.replaceState(null, '', '/');
-              } catch {}
               await logout();
               showToast('Logged out of account.', 'info');
               onNavigate('home');

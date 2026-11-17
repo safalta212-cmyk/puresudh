@@ -18,7 +18,6 @@ import {
 import { CartItem, PaymentMethod } from '../../../types';
 import { groupCartByVendor } from '../../../utils/vendorCartHelpers';
 import { useDelivery } from '../../../context/DeliveryContext';
-import { formatIndianPhone } from '../../../validation';
 
 interface ReviewStepProps {
   items: CartItem[];
@@ -104,7 +103,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 {deliveryAddress.city}, {deliveryAddress.state} -{' '}
                 <span className="font-mono font-bold text-stone-900">{deliveryAddress.pincode}</span>
               </p>
-              <p className="text-stone-600 font-semibold pt-1">Phone: {formatIndianPhone(deliveryAddress.phone)}</p>
+              <p className="text-stone-600 font-semibold pt-1">Phone: +91 {deliveryAddress.phone}</p>
             </div>
 
             <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 flex items-center gap-2">

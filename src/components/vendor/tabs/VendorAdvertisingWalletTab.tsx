@@ -38,15 +38,9 @@ export const VendorAdvertisingWalletTab: React.FC<VendorAdvertisingWalletTabProp
         },
       });
 
-      const ct = res.headers.get('content-type') || '';
-      if (!res.ok || !ct.includes('application/json')) {
-        const errData = ct.includes('application/json') ? await res.json().catch(() => null) : null;
-        throw new Error(
-          errData?.error ||
-            (!ct.includes('application/json')
-              ? 'Advertising wallet API is unavailable in static hosting mode.'
-              : `Failed to fetch wallet (${res.status})`)
-        );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to fetch wallet (${res.status})`);
       }
 
       const data = await res.json();

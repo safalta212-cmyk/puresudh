@@ -60,8 +60,7 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
     try {
       // First try server API
       const res = await fetch('/api/reviews');
-      const ct = res.headers.get('content-type') || '';
-      if (res.ok && ct.includes('application/json')) {
+      if (res.ok) {
         const data = await res.json();
         setReviews(data);
       } else {
@@ -177,27 +176,22 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
     try {
       if (isEditing && editingReviewId) {
         // Edit existing review
-        let editedViaServer = false;
-        try {
-          const res = await fetch(`/api/reviews/${editingReviewId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              rating,
-              title: reviewTitle,
-              comment: reviewComment,
-            }),
-          });
-          const ct = res.headers.get('content-type') || '';
-          if (res.ok && ct.includes('application/json')) {
-            await res.json().catch(() => null);
-            editedViaServer = true;
-          }
-        } catch {
-          // Fall back to Firestore/local update when Express API is unavailable
-        }
+        const res = await fetch(`/api/reviews/${editingReviewId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating,
+            title: reviewTitle,
+            comment: reviewComment,
+          }),
+        });
 
-        if (!editedViaServer) {
+        if (res.ok) {
+          const data = await res.json();
+          setReviews((prev) =>
+            prev.map((r) => (r.id === editingReviewId ? { ...r, rating, title: reviewTitle, comment: reviewComment } : r))
+          );
+        } else {
           await updateProductReview({
             id: editingReviewId,
             productId: selectedProduct.productId,
@@ -210,51 +204,38 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
             status: 'approved',
             createdAt: new Date().toISOString(),
           });
+          setReviews((prev) =>
+            prev.map((r) => (r.id === editingReviewId ? { ...r, rating, title: reviewTitle, comment: reviewComment } : r))
+          );
         }
-
-        setReviews((prev) =>
-          prev.map((r) => (r.id === editingReviewId ? { ...r, rating, title: reviewTitle, comment: reviewComment } : r))
-        );
 
         showToast('Review updated successfully!', 'success');
       } else {
-        // Submit new review - enforce server-side verified purchase check when Express API is running
-        let serverReview: Review | null = null;
-        let usedServerApi = false;
-        try {
-          const res = await fetch('/api/reviews', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              productId: selectedProduct.productId,
-              productName: selectedProduct.productName,
-              productImage: selectedProduct.productImage,
-              orderId: selectedProduct.orderId,
-              customerId: user?.uid || 'cust-demo-user',
-              customerName: user?.displayName || 'Verified Buyer',
-              customerEmail: user?.email || 'customer@email.com',
-              rating,
-              title: reviewTitle,
-              comment: reviewComment,
-            }),
-          });
+        // Submit new review - enforce server-side verified purchase check
+        const res = await fetch('/api/reviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: selectedProduct.productId,
+            productName: selectedProduct.productName,
+            productImage: selectedProduct.productImage,
+            orderId: selectedProduct.orderId,
+            customerId: user?.uid || 'cust-demo-user',
+            customerName: user?.displayName || 'Verified Buyer',
+            customerEmail: user?.email || 'customer@email.com',
+            rating,
+            title: reviewTitle,
+            comment: reviewComment,
+          }),
+        });
 
-          const ct = res.headers.get('content-type') || '';
-          if (ct.includes('application/json')) {
-            usedServerApi = true;
-            const data = await res.json();
-            if (!res.ok) {
-              throw new Error(data.error || 'Review submission rejected.');
-            }
-            serverReview = data.review || null;
-          }
-        } catch (apiErr: any) {
-          if (usedServerApi) {
-            throw apiErr;
-          }
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Review submission rejected.');
         }
 
-        const newRev: Review = serverReview || {
+        const newRev: Review = data.review || {
           id: `rev-${Date.now()}`,
           productId: selectedProduct.productId,
           productName: selectedProduct.productName,

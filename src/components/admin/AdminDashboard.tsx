@@ -144,7 +144,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToStore,
 }) => {
   const { showToast } = useToast();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -500,20 +500,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Store</span>
-            </button>
-
-            <button
-              id="admin-logout-btn"
-              type="button"
-              onClick={async () => {
-                await logout();
-                onBackToStore();
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-rose-200 bg-stone-800 hover:bg-rose-900/60 rounded-lg transition-colors border border-stone-700 cursor-pointer"
-              title="Sign Out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>

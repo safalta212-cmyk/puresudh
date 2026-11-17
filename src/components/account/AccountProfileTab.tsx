@@ -14,12 +14,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { MediaUploader } from '../common/MediaUploader';
-import {
-  isTemporaryOrFakePhone,
-  normalizeIndianPhone10,
-  sanitizePhoneInput10,
-  formatIndianPhone,
-} from '../../validation';
 
 interface AccountProfileTabProps {
   onProfileUpdated?: () => void;
@@ -31,7 +25,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
 
   // Profile Edit State
   const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [phoneNumber, setPhoneNumber] = useState(() => normalizeIndianPhone10(user?.phone || ''));
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.photoURL || '');
   const [showAvatarUploader, setShowAvatarUploader] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -41,7 +35,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
   useEffect(() => {
     if (user) {
       if (user.displayName) setDisplayName(user.displayName);
-      if (user.phone) setPhoneNumber(normalizeIndianPhone10(user.phone));
+      if (user.phone) setPhoneNumber(user.phone);
       if (user.photoURL) setAvatarUrl(user.photoURL);
     }
   }, [user]);
@@ -61,14 +55,6 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
       return;
     }
 
-    if (phoneNumber.trim()) {
-      const phoneCheck = isTemporaryOrFakePhone(phoneNumber);
-      if (phoneCheck.isFake) {
-        setProfileError(phoneCheck.reason || 'Please enter a valid 10-digit Indian mobile number (+91).');
-        return;
-      }
-    }
-
     setIsSavingProfile(true);
     setProfileError(null);
     setProfileSuccess(false);
@@ -76,7 +62,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
     try {
       const res = await updateUserProfileData({
         displayName: displayName.trim(),
-        phone: phoneNumber.trim() ? formatIndianPhone(phoneNumber) : '',
+        phone: phoneNumber.trim(),
         photoURL: avatarUrl,
       });
 
@@ -192,7 +178,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
 
           <p className="text-xs text-stone-500 flex items-center justify-center sm:justify-start gap-1.5">
             <Phone className="w-3.5 h-3.5 text-stone-400" />
-            <span>{phoneNumber ? formatIndianPhone(phoneNumber) : 'Not added'}</span>
+            <span>{phoneNumber || '+91 98765 43210'}</span>
           </p>
         </div>
 
@@ -274,21 +260,14 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
             </div>
 
             <div>
-              <label className="block font-semibold text-stone-700 mb-1">Phone Number (India +91) *</label>
-              <div className="flex items-stretch">
-                <span className="inline-flex items-center px-2.5 bg-stone-100 border border-r-0 border-stone-300 rounded-l-xl text-xs font-bold text-stone-700 select-none">
-                  +91
-                </span>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={phoneNumber ?? ''}
-                  onChange={(e) => setPhoneNumber(sanitizePhoneInput10(e.target.value))}
-                  placeholder="10-digit mobile number"
-                  className="w-full p-2.5 rounded-r-xl border border-stone-300 focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+              <label className="block font-semibold text-stone-700 mb-1">Phone Number *</label>
+              <input
+                type="tel"
+                value={phoneNumber ?? ''}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="w-full p-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-amber-500"
+              />
             </div>
 
             {profileError && (

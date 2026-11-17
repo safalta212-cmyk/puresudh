@@ -39,8 +39,7 @@ export class EmailProvider implements INotificationProvider {
         }),
       });
 
-      const ct = response.headers.get('content-type') || '';
-      if (response.ok && ct.includes('application/json')) {
+      if (response.ok) {
         const data = await response.json();
         return {
           channel: 'email',

@@ -135,12 +135,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
             </div>
 
             <button
-              type="button"
-              onClick={async () => {
-                await logout();
-                onBackToStore();
-              }}
-              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-rose-900/60 hover:text-rose-200 text-stone-300 transition cursor-pointer"
+              onClick={logout}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-rose-900/60 hover:text-rose-200 text-stone-300 transition"
             >
               Sign Out
             </button>

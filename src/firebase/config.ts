@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, setLogLevel, Firestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getFunctions, Functions } from 'firebase/functions';
-import firebaseAppletConfig from '../../firebase-applet-config.json';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 // Silence internal Firestore transport connection warnings so offline mode works cleanly
 try {
@@ -12,43 +12,23 @@ try {
   // Ignore if already initialized or unavailable
 }
 
-const env = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
-const cleanEnv = (val: unknown): string => (typeof val === 'string' ? val.trim() : '');
-
-const envProjectId = cleanEnv(env.VITE_FIREBASE_PROJECT_ID);
-const isCustomProjectOverride = Boolean(envProjectId && envProjectId !== firebaseAppletConfig.projectId);
-
-export const resolvedFirebaseConfig = {
-  apiKey: cleanEnv(env.VITE_FIREBASE_API_KEY) || (isCustomProjectOverride ? '' : firebaseAppletConfig.apiKey),
-  authDomain: cleanEnv(env.VITE_FIREBASE_AUTH_DOMAIN) || (isCustomProjectOverride ? `${envProjectId}.firebaseapp.com` : firebaseAppletConfig.authDomain),
-  projectId: envProjectId || firebaseAppletConfig.projectId,
-  storageBucket: cleanEnv(env.VITE_FIREBASE_STORAGE_BUCKET) || (isCustomProjectOverride ? `${envProjectId}.firebasestorage.app` : firebaseAppletConfig.storageBucket),
-  messagingSenderId: cleanEnv(env.VITE_FIREBASE_MESSAGING_SENDER_ID) || (isCustomProjectOverride ? '' : firebaseAppletConfig.messagingSenderId),
-  appId: cleanEnv(env.VITE_FIREBASE_APP_ID) || (isCustomProjectOverride ? '' : firebaseAppletConfig.appId),
-  measurementId: cleanEnv(env.VITE_FIREBASE_MEASUREMENT_ID) || (isCustomProjectOverride ? undefined : firebaseAppletConfig.measurementId || undefined),
-};
-
-export const resolvedFirestoreDatabaseId: string =
-  cleanEnv(env.VITE_FIREBASE_DATABASE_ID) || (isCustomProjectOverride ? '(default)' : firebaseAppletConfig.firestoreDatabaseId || '(default)');
-
-const app = getApps().length === 0 ? initializeApp(resolvedFirebaseConfig) : getApp();
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
-// Initialize Firestore using the provisioned database ID (supports default or named DB)
-const db: Firestore =
-  resolvedFirestoreDatabaseId && resolvedFirestoreDatabaseId !== '(default)'
-    ? getFirestore(app, resolvedFirestoreDatabaseId)
-    : getFirestore(app);
+// Initialize Firestore using the provisioned database ID as mandated by Firebase Integration Skill
+const db: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 
 // Validate connection to Firestore as required by Firebase Integration Skill (non-blocking, tolerant of offline mode)
 export async function testConnection(): Promise<boolean> {
   try {
+    // Only attempt if browser is online
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return false;
     }
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
-  } catch {
+  } catch (error) {
+    // Graceful offline degradation without uncaught exceptions
     return false;
   }
 }
@@ -62,7 +42,7 @@ if (typeof window !== 'undefined') {
 // Storage instance
 let storage: FirebaseStorage;
 try {
-  storage = getStorage(app, resolvedFirebaseConfig.storageBucket || undefined);
+  storage = getStorage(app, firebaseConfig.storageBucket || undefined);
 } catch (e) {
   console.warn('Storage initialization note:', e);
   storage = getStorage(app);

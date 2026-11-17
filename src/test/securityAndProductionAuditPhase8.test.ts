@@ -103,7 +103,7 @@ async function runPhase8SecurityAndProductionAudit() {
     });
 
     auditAssert(
-      attempt.success === false && Boolean(attempt.error?.includes("Access Denied: Product")),
+      attempt.success === false && attempt.error?.includes("Access Denied: Product"),
       'AUDIT-1.1',
       'Vendor A MUST NOT access or advertise Vendor B products',
       `Blocked with: "${attempt.error}"`
@@ -158,7 +158,7 @@ async function runPhase8SecurityAndProductionAudit() {
     });
 
     auditAssert(
-      pauseAttempt.success === false && Boolean(pauseAttempt.error?.includes('Access Denied')),
+      pauseAttempt.success === false && pauseAttempt.error?.includes('Access Denied'),
       'AUDIT-1.3',
       'Vendor A MUST NOT mutate Vendor B campaign state',
       `Rejected with: "${pauseAttempt.error}"`
@@ -379,7 +379,7 @@ async function runPhase8SecurityAndProductionAudit() {
     });
 
     auditAssert(
-      overAttempt.success === false && Boolean(overAttempt.error?.includes('exceeds your available advertising wallet balance')),
+      overAttempt.success === false && overAttempt.error?.includes('exceeds your available advertising wallet balance'),
       'AUDIT-4.1',
       'Campaign creation strictly blocks budget exceeding available wallet balance',
       `Blocked with: "${overAttempt.error}"`

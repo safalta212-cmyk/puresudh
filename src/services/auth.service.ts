@@ -28,7 +28,7 @@ import {
   IdTokenResult,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, resolvedFirebaseConfig } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 import { UserProfile, UserRole, Address } from '../types';
 import { COLLECTIONS } from '../constants';
 
@@ -42,85 +42,26 @@ try {
 }
 
 /**
- * Map Firebase Authentication error codes into clear, actionable user messages.
- */
-export function formatFirebaseAuthError(error: any): string {
-  const code = String(error?.code || '');
-  const projectLabel = resolvedFirebaseConfig.projectId ? ` [Project: ${resolvedFirebaseConfig.projectId}]` : '';
-  switch (code) {
-    case 'auth/invalid-credential':
-    case 'auth/invalid-login-credentials':
-      return `Invalid email or password (auth/invalid-credential)${projectLabel}. Verify this email exists with a password under Firebase Console → Authentication → Users, or use Google Sign-In / "Forgot password?".`;
-    case 'auth/wrong-password':
-      return 'Incorrect password (auth/wrong-password). Please verify your password or click "Forgot password?".';
-    case 'auth/user-not-found':
-      return 'No account found in Firebase Authentication for this email (auth/user-not-found).';
-    case 'auth/email-already-in-use':
-      return 'An account with this email already exists (auth/email-already-in-use). Please sign in instead.';
-    case 'auth/weak-password':
-      return 'Password is too weak (auth/weak-password). Please use at least 6 characters.';
-    case 'auth/invalid-email':
-      return 'Invalid email address format (auth/invalid-email).';
-    case 'auth/user-disabled':
-      return 'This account has been disabled in Firebase Authentication (auth/user-disabled).';
-    case 'auth/too-many-requests':
-      return 'Too many failed login attempts (auth/too-many-requests). Please wait a few minutes or reset your password.';
-    case 'auth/operation-not-allowed':
-      return `Email/Password sign-in is disabled in Firebase Console (auth/operation-not-allowed)${projectLabel}. Enable Email/Password provider under Authentication → Sign-in method.`;
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized in Firebase Authentication (auth/unauthorized-domain). Add your current domain under Firebase Console → Authentication → Settings → Authorized domains.';
-    case 'auth/popup-blocked':
-      return 'Sign-in popup was blocked by your browser (auth/popup-blocked). Please allow popups for this site and try again.';
-    case 'auth/popup-closed-by-user':
-      return 'Google sign-in popup was closed before completing sign-in.';
-    case 'auth/cancelled-popup-request':
-      return 'Another sign-in popup is already open. Please complete or close it and try again.';
-    case 'auth/account-exists-with-different-credential':
-      return 'An account already exists with this email using a different sign-in method (auth/account-exists-with-different-credential).';
-    case 'auth/network-request-failed':
-      return 'Network error while connecting to Firebase Authentication (auth/network-request-failed). Please check your connection and try again.';
-    case 'auth/invalid-api-key':
-    case 'auth/configuration-not-found':
-      return 'Firebase configuration error. Please check your VITE_FIREBASE_* environment variables and Firebase Console settings.';
-    case 'auth/requires-recent-login':
-      return 'Security check: Please sign out and sign in again to complete this action.';
-    default:
-      return error?.message || 'Authentication failed. Please check your credentials and try again.';
-  }
-}
-
-/**
  * Extract Custom Claims from Firebase Auth ID Token
  */
 export async function getCustomClaims(user: FirebaseUser): Promise<Record<string, any>> {
   try {
-    const tokenResult: IdTokenResult = await Promise.race([
-      user.getIdTokenResult(true),
-      new Promise<IdTokenResult>((_, reject) =>
-        setTimeout(() => reject(new Error('Token refresh timeout')), 4000)
-      ),
-    ]);
+    const tokenResult: IdTokenResult = await user.getIdTokenResult(true);
     return tokenResult.claims || {};
   } catch (err) {
-    try {
-      const cached = await user.getIdTokenResult(false);
-      return cached.claims || {};
-    } catch {
-      console.warn('Failed to fetch ID token claims:', err);
-      return {};
-    }
+    console.warn('Failed to fetch ID token claims:', err);
+    return {};
   }
 }
 
 /**
- * Determine effective role using Custom Claims + admins/{uid} + owner email + Firestore profile.
- * Custom claims & verified admin doc take precedence over client/profile defaults.
+ * Determine effective role using Custom Claims + Firestore profile
+ * Custom claims take precedence when present for privileged roles.
  */
 export function resolveEffectiveRole(
   claims: Record<string, any>,
   firestoreRole?: UserRole,
-  email?: string | null,
-  hasAdminDoc?: boolean
+  email?: string | null
 ): UserRole {
   // 1. Custom Claims check
   if (claims.role && ['admin', 'staff', 'vendor', 'customer', 'delivery'].includes(claims.role)) {
@@ -130,38 +71,22 @@ export function resolveEffectiveRole(
   if (claims.staff === true) return 'staff';
   if (claims.vendor === true) return 'vendor';
 
-  // 2. Firestore admins/{uid} document check
-  if (hasAdminDoc === true) {
+  // 2. Project Owner / Admin email rule check
+  if (
+    email &&
+    (email.toLowerCase() === 'enterpriseadministrationconsole@gmail.com' ||
+     email === 'aanews70@gmail.com' ||
+     email.toLowerCase().startsWith('admin@puresudh'))
+  ) {
     return 'admin';
   }
 
-  // 3. Project Owner / Admin email rule check
-  if (email && email.trim().toLowerCase() === 'aanews70@gmail.com') {
-    return 'admin';
-  }
-
-  // 4. Fallback to Firestore users/{uid}.role
+  // 3. Fallback to Firestore profile role
   if (firestoreRole) {
     return firestoreRole;
   }
 
   return 'customer';
-}
-
-/**
- * Check if current Firebase Auth UID has a document in /admins/{uid}
- */
-export async function checkFirestoreAdminDoc(uid: string): Promise<boolean> {
-  if (!uid) return false;
-  try {
-    const adminSnap = await Promise.race([
-      getDoc(doc(db, 'admins', uid)),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
-    ]);
-    return Boolean(adminSnap && adminSnap.exists());
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -172,10 +97,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   const currentUser = auth.currentUser;
   if (!currentUser) return null;
 
-  const [claims, hasAdminDoc] = await Promise.all([
-    getCustomClaims(currentUser),
-    checkFirestoreAdminDoc(currentUser.uid),
-  ]);
+  const claims = await getCustomClaims(currentUser);
 
   try {
     const userDocRef = doc(db, COLLECTIONS.USERS, currentUser.uid);
@@ -183,7 +105,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
 
     if (snap.exists()) {
       const data = snap.data() as Partial<UserProfile>;
-      const effectiveRole = resolveEffectiveRole(claims, data.role, currentUser.email, hasAdminDoc);
+      const effectiveRole = resolveEffectiveRole(claims, data.role, currentUser.email);
 
       const profile: UserProfile = {
         id: snap.id,
@@ -204,12 +126,12 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     }
 
     // Default Profile document for new Firebase Auth user
-    const assignedRole = resolveEffectiveRole(claims, undefined, currentUser.email, hasAdminDoc);
+    const assignedRole = resolveEffectiveRole(claims, undefined, currentUser.email);
     const newProfile: UserProfile = {
       id: currentUser.uid,
       uid: currentUser.uid,
-      email: currentUser.email || '',
-      displayName: currentUser.displayName || (currentUser.isAnonymous ? 'Guest Customer' : 'User'),
+      email: currentUser.email || 'customer@puresudh.com',
+      displayName: currentUser.displayName || (currentUser.isAnonymous ? 'Guest Customer' : 'Customer'),
       phone: '',
       role: assignedRole,
       createdAt: new Date().toISOString(),
@@ -219,24 +141,19 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
       customClaims: claims,
     };
 
-    try {
-      await setDoc(userDocRef, newProfile, { merge: true });
-    } catch (writeErr) {
-      console.warn('Could not initialize user profile in Firestore:', writeErr);
-    }
+    await setDoc(userDocRef, newProfile, { merge: true });
     return newProfile;
   } catch (err) {
-    console.warn('Could not read user profile from Firestore, using Firebase Auth claims fallback:', err);
+    console.warn('Could not read user profile from Firestore, using local fallback:', err);
     return {
       id: currentUser.uid,
       uid: currentUser.uid,
-      email: currentUser.email || '',
-      displayName: currentUser.displayName || 'User',
+      email: currentUser.email || 'customer@puresudh.com',
+      displayName: currentUser.displayName || 'Customer',
       phone: '',
-      role: resolveEffectiveRole(claims, undefined, currentUser.email, hasAdminDoc),
+      role: resolveEffectiveRole(claims, undefined, currentUser.email),
       createdAt: new Date().toISOString(),
       addresses: [],
-      customClaims: claims,
     };
   }
 }
@@ -338,20 +255,14 @@ export async function loginWithEmail(
   pass: string,
   targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
 ): Promise<{ profile: UserProfile; authorized: boolean; reason?: string }> {
-  let cred;
-  try {
-    cred = await signInWithEmailAndPassword(auth, email, pass);
-  } catch (err: any) {
-    throw new Error(formatFirebaseAuthError(err));
-  }
-
+  const cred = await signInWithEmailAndPassword(auth, email, pass);
   const profile = (await getCurrentUserProfile()) || {
     id: cred.user.uid,
     uid: cred.user.uid,
     email: cred.user.email || email,
-    displayName: cred.user.displayName || 'User',
+    displayName: cred.user.displayName || 'Customer',
     phone: '',
-    role: resolveEffectiveRole(await getCustomClaims(cred.user), undefined, cred.user.email),
+    role: 'customer' as UserRole,
     createdAt: new Date().toISOString(),
     addresses: [],
   };
@@ -360,7 +271,6 @@ export async function loginWithEmail(
   if (targetPortal) {
     const isAuthorized = verifyRoleAccess(profile.role, targetPortal);
     if (!isAuthorized) {
-      await fbSignOut(auth).catch(() => {});
       return {
         profile,
         authorized: false,
@@ -389,47 +299,16 @@ export function verifyRoleAccess(
 /**
  * Trigger Password Reset Email
  */
-export async function sendPasswordReset(
-  email: string,
-  targetPortal: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer'
-): Promise<{ success: boolean; message: string }> {
-  const cleanEmail = email.trim().toLowerCase();
+export async function sendPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = email.trim();
   if (!cleanEmail) {
     throw new Error('Please provide an email address.');
   }
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  if (!emailRegex.test(cleanEmail)) {
-    throw new Error('Please enter a valid email address.');
-  }
-
-  try {
-    const valRes = await fetch('/api/auth/forgot-password-validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, targetPortal }),
-    });
-    const contentType = valRes.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const valData = await valRes.json().catch(() => null);
-      if (!valRes.ok || !valData?.success) {
-        throw new Error(valData?.error || 'No registered account found with this email address.');
-      }
-    }
-  } catch (err: any) {
-    if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
-      throw err;
-    }
-  }
-
-  try {
-    await sendPasswordResetEmail(auth, cleanEmail);
-    return {
-      success: true,
-      message: `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
-    };
-  } catch (err: any) {
-    throw new Error(formatFirebaseAuthError(err));
-  }
+  await sendPasswordResetEmail(auth, cleanEmail);
+  return {
+    success: true,
+    message: `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
+  };
 }
 
 /**

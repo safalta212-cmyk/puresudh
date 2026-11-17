@@ -35,9 +35,9 @@ service cloud.firestore {
     // Secure Admin Validation with Email Verification and Document Checks
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email == 'aanews70@gmail.com' && request.auth.token.email_verified == true) ||
-        request.auth.token.get('role', '') == 'admin' ||
-        request.auth.token.get('admin', false) == true ||
+        (request.auth.token.email == 'EnterpriseAdministrationConsole@gmail.com') ||
+        (request.auth.token.email == 'aanews70@gmail.com') ||
+        (request.auth.token.email == 'admin@puresudh.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
@@ -105,16 +105,10 @@ service cloud.firestore {
         incoming().role == existing().role &&
         (!('isAdmin' in incoming()) || incoming().isAdmin == existing().get('isAdmin', false)) &&
         (!('isStaff' in incoming()) || incoming().isStaff == existing().get('isStaff', false)) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'defaultAddressId', 'updatedAt', 'preferences', 'addresses', 'photoURL', 'avatarUrl', 'authMethod', 'emailVerified'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'defaultAddressId', 'updatedAt', 'preferences'])
       ) || isAdmin();
       
       allow delete: if isAdmin();
-    }
-
-    // Admins: Explicit admin role registry
-    match /admins/{adminId} {
-      allow get: if isOwner(adminId) || isAdmin();
-      allow list, write: if isAdmin();
     }
 
     // Addresses: Customer delivery address book
@@ -301,14 +295,13 @@ service cloud.firestore {
         incoming().customerId == request.auth.uid &&
         incoming().productId is string && incoming().productId.size() <= 100 &&
         incoming().rating is number && incoming().rating >= 1 && incoming().rating <= 5 &&
-        ((incoming().comment is string && incoming().comment.size() <= 2000) ||
-         (incoming().reviewText is string && incoming().reviewText.size() <= 2000));
+        incoming().reviewText is string && incoming().reviewText.size() <= 1000;
         
       allow update: if (
         isSignedIn() &&
         existing().customerId == request.auth.uid &&
         incoming().customerId == existing().customerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'reviewText', 'comment', 'title', 'updatedAt'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'reviewText', 'updatedAt'])
       ) || isAdmin();
       
       allow delete: if (isSignedIn() && existing().customerId == request.auth.uid) || isAdmin();

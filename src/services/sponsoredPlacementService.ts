@@ -32,8 +32,7 @@ export async function fetchSponsoredProducts(
     if (params.limit) query.set('limit', String(params.limit));
 
     const res = await fetch(`/api/advertising/sponsored-products?${query.toString()}`);
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
+    if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.sponsoredProducts)) {
         return data.sponsoredProducts;

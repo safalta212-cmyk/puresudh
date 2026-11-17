@@ -5,8 +5,6 @@
  */
 
 import { Order, OrderStatus, PaymentMethod } from '../types';
-import { createOrder } from '../firebase/services';
-import { ServerValidationResponse } from './checkoutValidator';
 
 export interface CreatePaymentOrderParams {
   amount: number;
@@ -75,59 +73,26 @@ export interface CreateOrderPayload {
   gatewayOrderId?: string;
   couponCode?: string;
   notes?: string;
-  verifiedSummary?: ServerValidationResponse;
-}
-
-async function safeJsonResponse<T = any>(res: Response): Promise<T | null> {
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    return null;
-  }
-  try {
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
 }
 
 /**
- * 1. Initialize gateway order on server (falls back cleanly on static SPA deployments)
+ * 1. Initialize gateway order on server
  */
 export async function initializePaymentOrder(
   params: CreatePaymentOrderParams
 ): Promise<PaymentOrderGatewayData> {
-  try {
-    const res = await fetch('/api/payment/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+  const res = await fetch('/api/payment/create-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
 
-    const data = await safeJsonResponse<PaymentOrderGatewayData>(res);
-    if (data) {
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to initialize payment gateway order');
-      }
-      return data;
-    }
-  } catch (err: any) {
-    if (err instanceof Error && err.message !== 'Failed to fetch') {
-      throw err;
-    }
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to initialize payment gateway order');
   }
 
-  // Static deployment fallback (e.g. Vercel SPA rewrite where /api/* serves index.html)
-  const ts = Date.now();
-  return {
-    success: true,
-    gatewayOrderId: `gw_ord_${ts}_${Math.random().toString(36).slice(2, 8)}`,
-    provider: params.provider,
-    amount: params.amount,
-    currency: params.currency || 'INR',
-    transactionRef: `txn_${ts}_${Math.random().toString(36).slice(2, 8)}`,
-    expiresAt: new Date(ts + 15 * 60 * 1000).toISOString(),
-    serverSignature: `static_sig_${ts}`,
-  };
+  return data as PaymentOrderGatewayData;
 }
 
 /**
@@ -136,36 +101,18 @@ export async function initializePaymentOrder(
 export async function verifyPaymentOnServer(
   params: VerifyPaymentParams
 ): Promise<VerifyPaymentResult> {
-  try {
-    const res = await fetch('/api/payment/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+  const res = await fetch('/api/payment/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
 
-    const data = await safeJsonResponse<VerifyPaymentResult>(res);
-    if (data) {
-      return data;
-    }
-  } catch (err: any) {
-    if (err instanceof Error && err.message !== 'Failed to fetch') {
-      throw err;
-    }
-  }
-
-  // Static deployment fallback
-  return {
-    verified: true,
-    paymentId: `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    gatewayOrderId: params.gatewayOrderId,
-    status: 'PAID',
-    transactionTime: new Date().toISOString(),
-    refundReady: true,
-  };
+  const data = await res.json();
+  return data as VerifyPaymentResult;
 }
 
 /**
- * 3. Place Authoritative Order on Server with Idempotency Guard & Firestore persistence
+ * 3. Place Authoritative Order on Server with Idempotency Guard
  */
 export async function submitOrderWithIdempotency(
   payload: CreateOrderPayload
@@ -185,100 +132,28 @@ export async function submitOrderWithIdempotency(
     };
   }
 
-  try {
-    const res = await fetch('/api/orders/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': payload.idempotencyKey,
-      },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch('/api/orders/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': payload.idempotencyKey,
+    },
+    body: JSON.stringify(payload),
+  });
 
-    const data = await safeJsonResponse(res);
-    if (data) {
-      if (!res.ok || !data.success) {
-        return {
-          success: false,
-          order: null as any,
-          error: data.error || 'Order creation failed on backend',
-        };
-      }
-
-      // Also persist to Firestore / local cache so order history survives server restarts
-      if (data.order) {
-        createOrder(data.order as Order).catch(() => {});
-      }
-
-      return {
-        success: true,
-        order: data.order as Order,
-        isIdempotentReplay: data.isIdempotentReplay,
-      };
-    }
-  } catch {
-    // Fall through to Firestore direct order persistence below when static hosting is used
-  }
-
-  // Fallback for static hosting (e.g. Vercel): build verified Order & save via Firestore/local store
-  if (!payload.verifiedSummary || !payload.verifiedSummary.valid) {
+  const data = await res.json();
+  if (!res.ok || !data.success) {
     return {
       success: false,
       order: null as any,
-      error: 'Order verification details unavailable. Please review your order and try again.',
+      error: data.error || 'Order creation failed on backend',
     };
   }
 
-  const now = new Date().toISOString();
-  const orderNumber = `PS${Math.floor(100000 + (Date.now() % 900000))}`;
-  const isCod = payload.paymentMethod === 'Cash on Delivery' || payload.paymentMethod === 'COD';
-
-  const fallbackOrder: Order = {
-    id: `ord-${orderNumber.toLowerCase()}`,
-    orderNumber,
-    customerId: payload.customerId,
-    customerName: payload.customerName,
-    customerEmail: payload.customerEmail,
-    customerPhone: payload.customerPhone,
-    items: payload.verifiedSummary.verifiedItems.map((vi) => ({
-      productId: vi.productId,
-      productName: vi.productName,
-      productImage: vi.productImage,
-      price: vi.price,
-      quantity: vi.quantity,
-      weight: vi.weight,
-      total: vi.total,
-      vendorId: vi.vendorId,
-    })),
-    deliveryAddress: payload.deliveryAddress,
-    deliveryAreaPincode: String(payload.deliveryAddress?.pincode || '800001'),
-    deliverySlotId: payload.deliverySlotId,
-    subtotal: payload.verifiedSummary.calculatedSubtotal,
-    deliveryCharge: payload.verifiedSummary.deliveryCharge,
-    discount: payload.verifiedSummary.discount,
-    couponCode: payload.couponCode,
-    total: payload.verifiedSummary.grandTotal,
-    paymentMethod: payload.paymentMethod,
-    paymentStatus: isCod ? 'Pending' : 'Paid',
-    paymentId: payload.paymentId || (isCod ? `cod_${Date.now()}` : `pay_${Date.now()}`),
-    status: 'PLACED',
-    estimatedDeliveryTime: payload.verifiedSummary.estimatedDeliveryTime,
-    notes: payload.notes,
-    statusHistory: [
-      {
-        status: 'PLACED',
-        timestamp: now,
-        note: 'Order placed and verified.',
-      },
-    ],
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await createOrder(fallbackOrder);
   return {
     success: true,
-    order: fallbackOrder,
+    order: data.order as Order,
+    isIdempotentReplay: data.isIdempotentReplay,
   };
 }
 
@@ -296,11 +171,11 @@ export async function cancelOrderOnServer(
       body: JSON.stringify({ reason }),
     });
 
-    const data = await safeJsonResponse(res);
-    if (!res.ok || !data?.success) {
+    const data = await res.json();
+    if (!res.ok || !data.success) {
       return {
         success: false,
-        error: data?.error || 'Order cancellation failed',
+        error: data.error || 'Order cancellation failed',
       };
     }
 
@@ -324,8 +199,8 @@ export async function fetchServerOrder(orderIdOrNumber: string): Promise<Order |
   try {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderIdOrNumber)}`);
     if (res.ok) {
-      const data = await safeJsonResponse<Order>(res);
-      if (data) return data;
+      const data = await res.json();
+      return data as Order;
     }
   } catch (err) {
     console.warn('Fetch server order error:', err);

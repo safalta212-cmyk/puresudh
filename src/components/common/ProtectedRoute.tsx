@@ -43,10 +43,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           }),
         });
 
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await response.json();
-          if (isMounted && !data.authorized) {
+        const data = await response.json();
+        if (isMounted) {
+          if (!data.authorized) {
             const redirectUrl = data.redirectUrl || (role === 'vendor' ? '/vendor' : role === 'staff' ? '/staff' : '/account');
             setAuthoritativeRedirectUrl(redirectUrl);
             setRedirectCountdown(3); // 3 second countdown before automatic redirect

@@ -58,11 +58,9 @@ export const VendorAdvertisingCampaignsTab: React.FC<VendorAdvertisingCampaignsT
           'x-vendor-id': vendorId,
         },
       });
-      if (resCamp.ok && (resCamp.headers.get('content-type') || '').includes('application/json')) {
-        const dataCamp = await resCamp.json();
-        if (dataCamp.success) {
-          setCampaigns(dataCamp.campaigns || []);
-        }
+      const dataCamp = await resCamp.json();
+      if (dataCamp.success) {
+        setCampaigns(dataCamp.campaigns || []);
       }
 
       // Fetch Vendor Wallet to check available balance
@@ -72,11 +70,9 @@ export const VendorAdvertisingCampaignsTab: React.FC<VendorAdvertisingCampaignsT
           'x-vendor-id': vendorId,
         },
       });
-      if (resWallet.ok && (resWallet.headers.get('content-type') || '').includes('application/json')) {
-        const dataWallet = await resWallet.json();
-        if (dataWallet.success) {
-          setWallet(dataWallet.wallet);
-        }
+      const dataWallet = await resWallet.json();
+      if (dataWallet.success) {
+        setWallet(dataWallet.wallet);
       }
 
       // Fetch Vendor's Own Products
@@ -86,13 +82,11 @@ export const VendorAdvertisingCampaignsTab: React.FC<VendorAdvertisingCampaignsT
           'x-vendor-id': vendorId,
         },
       });
-      if (resProd.ok && (resProd.headers.get('content-type') || '').includes('application/json')) {
-        const dataProd = await resProd.json();
-        if (dataProd.success) {
-          setVendorProducts(dataProd.products || []);
-          if (dataProd.products.length > 0 && !formProductId) {
-            setFormProductId(dataProd.products[0].id);
-          }
+      const dataProd = await resProd.json();
+      if (dataProd.success) {
+        setVendorProducts(dataProd.products || []);
+        if (dataProd.products.length > 0 && !formProductId) {
+          setFormProductId(dataProd.products[0].id);
         }
       }
     } catch (err: any) {
@@ -179,11 +173,6 @@ export const VendorAdvertisingCampaignsTab: React.FC<VendorAdvertisingCampaignsT
           endDate: formEndDate,
         }),
       });
-
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) {
-        throw new Error('Advertising backend API is unavailable in static hosting mode.');
-      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {

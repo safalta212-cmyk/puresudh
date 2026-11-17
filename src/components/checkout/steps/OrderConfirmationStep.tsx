@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus } from '../../../types';
 import { CancelOrderModal } from '../CancelOrderModal';
-import { formatIndianPhone } from '../../../validation';
 
 interface OrderConfirmationStepProps {
   order: Order;
@@ -248,7 +247,7 @@ export const OrderConfirmationStep: React.FC<OrderConfirmationStepProps> = ({
               </p>
               <p className="text-stone-500 pt-1 flex items-center gap-1">
                 <Phone className="w-3 h-3" />
-                {formatIndianPhone(order.customerPhone)}
+                {order.customerPhone}
               </p>
             </div>
           </div>

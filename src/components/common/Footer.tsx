@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { SiteSettings } from '../../types';
 import { initialSiteSettings } from '../../data/seedData';
-import { useAuth } from '../../context/AuthContext';
 
 interface FooterProps {
   settings?: SiteSettings;
@@ -27,7 +26,6 @@ export const Footer: React.FC<FooterProps> = ({
   setCurrentView,
   setSelectedCategorySlug,
 }) => {
-  const { user } = useAuth();
   const s: SiteSettings = { ...initialSiteSettings, ...(settings || {}) };
   const handleCatClick = (slug: string) => {
     if (setSelectedCategorySlug) setSelectedCategorySlug(slug);
@@ -249,37 +247,33 @@ export const Footer: React.FC<FooterProps> = ({
                 Track Live Order
               </button>
             </li>
-            {user && (
-              <>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => handlePageClick('account')}
-                    className="hover:text-amber-400 transition"
-                  >
-                    My Account
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => handlePageClick('orders')}
-                    className="hover:text-amber-400 transition"
-                  >
-                    Order History
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => handlePageClick('wishlist')}
-                    className="hover:text-amber-400 transition"
-                  >
-                    Saved Wishlist
-                  </button>
-                </li>
-              </>
-            )}
+            <li>
+              <button
+                type="button"
+                onClick={() => handlePageClick('account')}
+                className="hover:text-amber-400 transition"
+              >
+                My Account
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => handlePageClick('orders')}
+                className="hover:text-amber-400 transition"
+              >
+                Order History
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => handlePageClick('wishlist')}
+                className="hover:text-amber-400 transition"
+              >
+                Saved Wishlist
+              </button>
+            </li>
             <li>
               <button
                 type="button"

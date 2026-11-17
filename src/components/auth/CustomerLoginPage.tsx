@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Lock,
   Mail,
@@ -15,12 +15,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { isTemporaryEmail, isTemporaryOrFakePhone, sanitizePhoneInput10, formatIndianPhone } from '../../validation';
+import { isTemporaryEmail, isTemporaryOrFakePhone } from '../../validation';
 
 interface CustomerLoginPageProps {
   onBackToStore: () => void;
-  onNavigate?: (dest: string, profile?: { role: string }) => void;
-  onNavigateDashboard?: (profile?: { role: string }) => void;
+  onNavigate?: (dest: string) => void;
+  onNavigateDashboard?: () => void;
   initialMode?: 'login' | 'register' | 'forgot-password';
 }
 
@@ -42,12 +42,6 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setMode(initialMode);
-    setFormError(null);
-    setResetMessage(null);
-  }, [initialMode]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,9 +79,9 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
       const dest = redirectMap[userRole] || '/account';
       showToast('Welcome back to PURE SUDH! Signed in successfully.', 'success');
       if (onNavigate) {
-        onNavigate(dest, result.profile);
+        onNavigate(dest);
       } else if (onNavigateDashboard && userRole === 'customer') {
-        onNavigateDashboard(result.profile);
+        onNavigateDashboard();
       } else {
         window.location.href = dest;
       }
@@ -127,14 +121,14 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
       return;
     }
 
-    // Register customer account via AuthContext with server persistence (+91 formatted)
-    const result = await register(email, password, name, formatIndianPhone(phone));
+    // Register customer account via AuthContext with server persistence
+    const result = await register(email, password, name, phone);
     if (result.success) {
       showToast('Customer account created successfully! Welcome to PURE SUDH.', 'success');
       if (onNavigate) {
-        onNavigate('account', result.profile);
+        onNavigate('account');
       } else if (onNavigateDashboard) {
-        onNavigateDashboard(result.profile);
+        onNavigateDashboard();
       } else {
         window.location.href = '/account';
       }
@@ -154,7 +148,7 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
     }
 
     try {
-      const res = await sendPasswordReset(email, 'customer');
+      const res = await sendPasswordReset(email);
       setResetMessage(res.message);
       showToast('Password reset link sent to your email!', 'success');
     } catch (err: any) {
@@ -166,21 +160,11 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
     setFormError(null);
     const result = await loginWithGoogle();
     if (result.success) {
-      const userRole = result.profile?.role || 'customer';
-      const redirectMap: Record<string, string> = {
-        admin: '/admin',
-        staff: '/staff',
-        vendor: '/vendor',
-        customer: '/account',
-      };
-      const dest = redirectMap[userRole] || '/account';
       showToast('Welcome to PURE SUDH! Signed in with Google.', 'success');
-      if (onNavigate) {
-        onNavigate(dest, result.profile);
-      } else if (onNavigateDashboard && userRole === 'customer') {
-        onNavigateDashboard(result.profile);
+      if (onNavigateDashboard) {
+        onNavigateDashboard();
       } else {
-        window.location.href = dest;
+        window.location.href = '/account';
       }
     } else {
       setFormError(result.error || 'Google sign-in could not be completed.');
@@ -416,26 +400,19 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Mobile Number (India +91)
+                Mobile Number
               </label>
-              <div className="flex items-stretch">
-                <span className="inline-flex items-center px-3 bg-stone-100 border border-r-0 border-stone-200 rounded-l-xl text-xs sm:text-sm font-bold text-stone-700 select-none">
-                  +91
-                </span>
-                <div className="relative flex-1">
-                  <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-3 pointer-events-none" />
-                  <input
-                    id="customer-reg-phone"
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={phone ?? ''}
-                    onChange={(e) => setPhone(sanitizePhoneInput10(e.target.value))}
-                    placeholder="10-digit mobile number"
-                    required
-                    className="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-r-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="customer-reg-phone"
+                  type="tel"
+                  value={phone ?? ''}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="10-digit mobile number"
+                  required
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
               </div>
             </div>
 

@@ -135,14 +135,12 @@ const AppContent: React.FC = () => {
       if (stt) setSettings(stt);
 
       // Orders are fetched based on permissions
-      if (role === 'admin' && user?.uid) {
+      if (role === 'admin') {
         const allOrds = await fetchAllOrders();
         if (Array.isArray(allOrds)) setOrders(allOrds);
       } else if (user?.uid) {
         const userOrds = await fetchUserOrders(user.uid);
         if (Array.isArray(userOrds)) setOrders(userOrds);
-      } else {
-        setOrders([]);
       }
     } catch (err) {
       console.warn('Data load error:', err);
@@ -162,64 +160,6 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [role, user?.uid]);
-
-  // Immediately redirect to Home Page and purge protected state when user signs out
-  useEffect(() => {
-    const protectedViews = new Set([
-      'account',
-      'orders',
-      'wishlist',
-      'addresses',
-      'profile',
-      'reviews',
-      'admin',
-      'staff',
-      'vendor',
-    ]);
-
-    if (!user && protectedViews.has(currentView)) {
-      setOrders([]);
-      setCurrentView('home');
-      try {
-        window.history.replaceState(null, '', '/');
-      } catch {}
-    }
-  }, [user, currentView]);
-
-  useEffect(() => {
-    const handleAuthSignOutEvent = () => {
-      setOrders([]);
-      const protectedViews = new Set([
-        'account',
-        'orders',
-        'wishlist',
-        'addresses',
-        'profile',
-        'reviews',
-        'admin',
-        'staff',
-        'vendor',
-      ]);
-      const path = window.location.pathname;
-      const isProtectedPath =
-        path.startsWith('/account') ||
-        path.startsWith('/orders') ||
-        path.startsWith('/wishlist') ||
-        path.startsWith('/admin') ||
-        path.startsWith('/staff') ||
-        (path.startsWith('/vendor') && !path.startsWith('/vendor-register'));
-
-      if (protectedViews.has(currentView) || isProtectedPath) {
-        setCurrentView('home');
-        try {
-          window.history.replaceState(null, '', '/');
-        } catch {}
-      }
-    };
-
-    window.addEventListener('pure_sudh_auth_change', handleAuthSignOutEvent);
-    return () => window.removeEventListener('pure_sudh_auth_change', handleAuthSignOutEvent);
-  }, [currentView]);
 
   // URL Route Synchronization and Authoritative Role-Based Gatekeeping
   useEffect(() => {
@@ -245,22 +185,6 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      if (path === '/customer/register' || path === '/customer-register' || path === '/register' || path === '/signup') {
-        if (user) {
-          const redirectMap: Record<string, string> = {
-            admin: '/admin',
-            staff: '/staff',
-            vendor: '/vendor',
-            customer: '/account',
-          };
-          const dest = redirectMap[user.role] || '/account';
-          handleNavigateView(dest);
-          return;
-        }
-        setCurrentView('customer-register');
-        return;
-      }
-
       if (path === '/admin/login' || path === '/admin-login') {
         if (user && user.role === 'admin') {
           handleNavigateView('/admin');
@@ -272,17 +196,10 @@ const AppContent: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'admin' }),
             });
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              if (!data.authorized) {
-                showToast(data.message || 'Access Denied: You are not authorized for Administrator login. Redirected to your dashboard.', 'error');
-                handleNavigateView(data.redirectUrl || '/account');
-                return;
-              }
-            } else {
-              showToast('Access Denied: You are not authorized for Administrator login. Redirected to your dashboard.', 'error');
-              handleNavigateView('/account');
+            const data = await res.json();
+            if (!data.authorized) {
+              showToast(data.message || 'Access Denied: You are not authorized for Administrator login. Redirected to your dashboard.', 'error');
+              handleNavigateView(data.redirectUrl || '/account');
               return;
             }
           } catch {
@@ -305,17 +222,10 @@ const AppContent: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'staff' }),
             });
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              if (!data.authorized) {
-                showToast(data.message || 'Access Denied: Not authorized for Staff operations. Redirected to your dashboard.', 'error');
-                handleNavigateView(data.redirectUrl || '/account');
-                return;
-              }
-            } else {
-              showToast('Access Denied: Not authorized for Staff operations. Redirected to your dashboard.', 'error');
-              handleNavigateView('/account');
+            const data = await res.json();
+            if (!data.authorized) {
+              showToast(data.message || 'Access Denied: Not authorized for Staff operations. Redirected to your dashboard.', 'error');
+              handleNavigateView(data.redirectUrl || '/account');
               return;
             }
           } catch {
@@ -338,17 +248,10 @@ const AppContent: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'vendor' }),
             });
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              if (!data.authorized) {
-                showToast(data.message || 'Access Denied: Not authorized for Vendor Partner Hub. Redirected to your dashboard.', 'error');
-                handleNavigateView(data.redirectUrl || '/account');
-                return;
-              }
-            } else {
-              showToast('Access Denied: Not authorized for Vendor Partner Hub. Redirected to your dashboard.', 'error');
-              handleNavigateView('/account');
+            const data = await res.json();
+            if (!data.authorized) {
+              showToast(data.message || 'Access Denied: Not authorized for Vendor Partner Hub. Redirected to your dashboard.', 'error');
+              handleNavigateView(data.redirectUrl || '/account');
               return;
             }
           } catch {
@@ -363,8 +266,7 @@ const AppContent: React.FC = () => {
       // 2. Role-Protected Portals: Verify role server-side
       if (path.startsWith('/admin')) {
         if (!user) {
-          setCurrentView('home');
-          try { window.history.replaceState(null, '', '/'); } catch {}
+          handleNavigateView('/admin/login');
           return;
         }
         try {
@@ -373,17 +275,10 @@ const AppContent: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'admin' }),
           });
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (!data.authorized) {
-              showToast(data.message || 'Access Denied: Administrator role required. Redirected to your dashboard.', 'error');
-              handleNavigateView(data.redirectUrl || '/account');
-              return;
-            }
-          } else if (user.role !== 'admin') {
-            showToast('Access Denied: Administrator role required. Redirected to your dashboard.', 'error');
-            handleNavigateView('/account');
+          const data = await res.json();
+          if (!data.authorized) {
+            showToast(data.message || 'Access Denied: Administrator role required. Redirected to your dashboard.', 'error');
+            handleNavigateView(data.redirectUrl || '/account');
             return;
           }
         } catch {
@@ -434,8 +329,7 @@ const AppContent: React.FC = () => {
         }
       } else if (path.startsWith('/staff')) {
         if (!user) {
-          setCurrentView('home');
-          try { window.history.replaceState(null, '', '/'); } catch {}
+          handleNavigateView('/staff/login');
           return;
         }
         try {
@@ -444,17 +338,10 @@ const AppContent: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'staff' }),
           });
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (!data.authorized) {
-              showToast(data.message || 'Access Denied: Staff fulfillment access required. Redirected to your dashboard.', 'error');
-              handleNavigateView(data.redirectUrl || '/account');
-              return;
-            }
-          } else if (user.role !== 'staff' && user.role !== 'admin') {
-            showToast('Access Denied: Staff fulfillment access required. Redirected to your dashboard.', 'error');
-            handleNavigateView('/account');
+          const data = await res.json();
+          if (!data.authorized) {
+            showToast(data.message || 'Access Denied: Staff fulfillment access required. Redirected to your dashboard.', 'error');
+            handleNavigateView(data.redirectUrl || '/account');
             return;
           }
         } catch {
@@ -469,8 +356,7 @@ const AppContent: React.FC = () => {
         setCurrentView('staff');
       } else if (path.startsWith('/vendor') && !path.startsWith('/vendor-register')) {
         if (!user) {
-          setCurrentView('home');
-          try { window.history.replaceState(null, '', '/'); } catch {}
+          handleNavigateView('/vendor/login');
           return;
         }
         try {
@@ -479,17 +365,10 @@ const AppContent: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: user.email, role: user.role, requestedPortal: 'vendor' }),
           });
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (!data.authorized) {
-              showToast(data.message || 'Access Denied: Vendor Partner authorization required. Redirected to your dashboard.', 'error');
-              handleNavigateView(data.redirectUrl || '/account');
-              return;
-            }
-          } else if (user.role !== 'vendor' && user.role !== 'admin') {
-            showToast('Access Denied: Vendor Partner authorization required. Redirected to your dashboard.', 'error');
-            handleNavigateView('/account');
+          const data = await res.json();
+          if (!data.authorized) {
+            showToast(data.message || 'Access Denied: Vendor Partner authorization required. Redirected to your dashboard.', 'error');
+            handleNavigateView(data.redirectUrl || '/account');
             return;
           }
         } catch {
@@ -502,23 +381,18 @@ const AppContent: React.FC = () => {
 
         if (isCancelled) return;
         setCurrentView('vendor');
-      } else if (path.startsWith('/account') || path === '/orders' || path === '/wishlist') {
-        if (!user) {
-          setCurrentView('home');
-          try { window.history.replaceState(null, '', '/'); } catch {}
-          return;
-        }
+      } else if (path.startsWith('/account')) {
         setCurrentView('account');
         if (path.startsWith('/account/orders/')) {
           setAccountInitialTab('orders');
           setAccountSelectedOrderId(path.replace('/account/orders/', ''));
-        } else if (path.includes('/account/orders') || path === '/orders') {
+        } else if (path.includes('/account/orders')) {
           setAccountInitialTab('orders');
           setAccountSelectedOrderId(null);
         } else if (path.includes('/account/addresses')) {
           setAccountInitialTab('addresses');
           setAccountSelectedOrderId(null);
-        } else if (path.includes('/account/wishlist') || path === '/wishlist') {
+        } else if (path.includes('/account/wishlist')) {
           setAccountInitialTab('wishlist');
           setAccountSelectedOrderId(null);
         } else if (path.includes('/account/reviews')) {
@@ -707,79 +581,63 @@ const AppContent: React.FC = () => {
     }
   }, [currentView, selectedCategorySlug, selectedProduct, categories]);
 
-  const handleNavigateView = (view: string, authenticatedProfile?: { role: string } | null) => {
-    const activeUser = authenticatedProfile || user;
-
+  const handleNavigateView = (view: string) => {
     // 1. Separate Authentication Routes
     if (view === 'customer-login' || view === '/customer/login' || view === 'login') {
-      if (activeUser) {
+      if (user) {
         const redirectMap: Record<string, string> = {
           admin: '/admin',
           staff: '/staff',
           vendor: '/vendor',
           customer: '/account',
         };
-        const dest = redirectMap[activeUser.role] || '/account';
-        handleNavigateView(dest, activeUser);
+        const dest = redirectMap[user.role] || '/account';
+        handleNavigateView(dest);
         return;
       }
       setCurrentView('customer-login');
       try { window.history.pushState(null, '', '/customer/login'); } catch {}
-    } else if (view === 'customer-register' || view === '/customer/register' || view === 'register' || view === 'signup') {
-      if (activeUser) {
-        const redirectMap: Record<string, string> = {
-          admin: '/admin',
-          staff: '/staff',
-          vendor: '/vendor',
-          customer: '/account',
-        };
-        const dest = redirectMap[activeUser.role] || '/account';
-        handleNavigateView(dest, activeUser);
-        return;
-      }
-      setCurrentView('customer-register');
-      try { window.history.pushState(null, '', '/customer/register'); } catch {}
     } else if (view === 'admin-login' || view === '/admin/login') {
-      if (activeUser && activeUser.role === 'admin') {
-        handleNavigateView('/admin', activeUser);
+      if (user && user.role === 'admin') {
+        handleNavigateView('/admin');
         return;
-      } else if (activeUser) {
+      } else if (user) {
         showToast('Access Denied: You are not authorized for Administrator login. Redirected to your dashboard.', 'error');
-        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
+        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
         return;
       }
       setCurrentView('admin-login');
       try { window.history.pushState(null, '', '/admin/login'); } catch {}
     } else if (view === 'staff-login' || view === '/staff/login') {
-      if (activeUser && (activeUser.role === 'staff' || activeUser.role === 'admin')) {
-        handleNavigateView('/staff', activeUser);
+      if (user && (user.role === 'staff' || user.role === 'admin')) {
+        handleNavigateView('/staff');
         return;
-      } else if (activeUser) {
+      } else if (user) {
         showToast('Access Denied: Not authorized for Staff operations. Redirected to your dashboard.', 'error');
-        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
+        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
         return;
       }
       setCurrentView('staff-login');
       try { window.history.pushState(null, '', '/staff/login'); } catch {}
     } else if (view === 'vendor-login' || view === '/vendor/login') {
-      if (activeUser && (activeUser.role === 'vendor' || activeUser.role === 'admin')) {
-        handleNavigateView('/vendor', activeUser);
+      if (user && (user.role === 'vendor' || user.role === 'admin')) {
+        handleNavigateView('/vendor');
         return;
-      } else if (activeUser) {
+      } else if (user) {
         showToast('Access Denied: Not authorized for Vendor Partner Hub. Redirected to your dashboard.', 'error');
-        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
+        handleNavigateView(user.role === 'customer' ? '/account' : `/${user.role}`);
         return;
       }
       setCurrentView('vendor-login');
       try { window.history.pushState(null, '', '/vendor/login'); } catch {}
     } else if (view === 'admin' || view.startsWith('/admin')) {
-      if (!activeUser) {
+      if (!user) {
         handleNavigateView('/admin/login');
         return;
       }
-      if (activeUser.role !== 'admin') {
+      if (user.role !== 'admin') {
         showToast('Access Denied: Administrator role required. Redirected to your dashboard.', 'error');
-        handleNavigateView('/account', activeUser);
+        handleNavigateView('/account');
         return;
       }
       setCurrentView('admin');
@@ -821,13 +679,13 @@ const AppContent: React.FC = () => {
       }
       try { window.history.pushState(null, '', view.startsWith('/') ? view : `/${view}`); } catch {}
     } else if (view === 'staff' || view.startsWith('/staff')) {
-      if (!activeUser) {
+      if (!user) {
         handleNavigateView('/staff/login');
         return;
       }
-      if (activeUser.role !== 'staff' && activeUser.role !== 'admin') {
+      if (user.role !== 'staff' && user.role !== 'admin') {
         showToast('Access Denied: Staff fulfillment access required. Redirected to your dashboard.', 'error');
-        handleNavigateView('/account', activeUser);
+        handleNavigateView('/account');
         return;
       }
       setCurrentView('staff');
@@ -837,98 +695,56 @@ const AppContent: React.FC = () => {
         setCurrentView('vendor-register');
         try { window.history.pushState(null, '', '/vendor-register'); } catch {}
       } else {
-        if (!activeUser) {
+        if (!user) {
           handleNavigateView('/vendor/login');
           return;
         }
-        if (activeUser.role !== 'vendor' && activeUser.role !== 'admin') {
+        if (user.role !== 'vendor' && user.role !== 'admin') {
           showToast('Access Denied: Vendor Partner authorization required. Redirected to your dashboard.', 'error');
-          handleNavigateView('/account', activeUser);
+          handleNavigateView('/account');
           return;
         }
         setCurrentView('vendor');
         try { window.history.pushState(null, '', '/vendor'); } catch {}
       }
     } else if (view === 'account' || view === '/account') {
-      if (!activeUser) {
-        showToast('Please sign in to access your account.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('profile');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account'); } catch {}
     } else if (view === 'orders' || view === '/account/orders') {
-      if (!activeUser) {
-        showToast('Please sign in to view your orders.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('orders');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/orders'); } catch {}
     } else if (view.startsWith('/account/orders/')) {
-      if (!activeUser) {
-        showToast('Please sign in to view your order details.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       const ordId = view.replace('/account/orders/', '');
       setCurrentView('account');
       setAccountInitialTab('orders');
       setAccountSelectedOrderId(ordId);
       try { window.history.pushState(null, '', view); } catch {}
     } else if (view === 'addresses' || view === '/account/addresses') {
-      if (!activeUser) {
-        showToast('Please sign in to manage your saved addresses.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('addresses');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/addresses'); } catch {}
     } else if (view === 'wishlist' || view === '/account/wishlist') {
-      if (!activeUser) {
-        showToast('Please sign in to view your saved wishlist.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('wishlist');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/wishlist'); } catch {}
     } else if (view === 'profile' || view === '/account/profile') {
-      if (!activeUser) {
-        showToast('Please sign in to view your profile.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('profile');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/profile'); } catch {}
     } else if (view === 'reviews' || view === '/account/reviews') {
-      if (!activeUser) {
-        showToast('Please sign in to view your reviews.', 'info');
-        setCurrentView('customer-login');
-        try { window.history.pushState(null, '', '/customer/login'); } catch {}
-        return;
-      }
       setCurrentView('account');
       setAccountInitialTab('reviews');
       setAccountSelectedOrderId(null);
       try { window.history.pushState(null, '', '/account/reviews'); } catch {}
     } else if (view === 'checkout' || view === '/checkout') {
-      if (!activeUser) {
+      if (!user) {
         showToast('Order karne ke liye please account create karein ya sign in karein. (Please sign in or create an account to place an order.)', 'info');
         openAuthModal('login');
         return;
@@ -963,13 +779,12 @@ const AppContent: React.FC = () => {
   };
 
   // Dedicated Separate Authentication Pages
-  if (currentView === 'customer-login' || currentView === 'customer-register') {
+  if (currentView === 'customer-login') {
     return (
       <CustomerLoginPage
-        initialMode={currentView === 'customer-register' ? 'register' : 'login'}
         onBackToStore={() => handleNavigateView('home')}
-        onNavigate={(dest, profile) => handleNavigateView(dest, profile)}
-        onNavigateDashboard={(profile) => handleNavigateView('account', profile)}
+        onNavigate={(dest) => handleNavigateView(dest)}
+        onNavigateDashboard={() => handleNavigateView('account')}
       />
     );
   }
@@ -978,7 +793,7 @@ const AppContent: React.FC = () => {
     return (
       <AdminLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={(profile) => handleNavigateView('admin', profile)}
+        onNavigateDashboard={() => handleNavigateView('admin')}
       />
     );
   }
@@ -987,7 +802,7 @@ const AppContent: React.FC = () => {
     return (
       <StaffLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={(profile) => handleNavigateView('staff', profile)}
+        onNavigateDashboard={() => handleNavigateView('staff')}
       />
     );
   }
@@ -996,14 +811,14 @@ const AppContent: React.FC = () => {
     return (
       <VendorLoginPage
         onBackToStore={() => handleNavigateView('home')}
-        onNavigateDashboard={(profile) => handleNavigateView('vendor', profile)}
+        onNavigateDashboard={() => handleNavigateView('vendor')}
         onNavigateRegister={() => handleNavigateView('vendor-register')}
       />
     );
   }
 
-  // If Admin View is selected, show Admin Panel (strictly gated on authenticated admin)
-  if (currentView === 'admin' && user && role === 'admin') {
+  // If Admin View is selected, show Admin Panel
+  if (currentView === 'admin') {
     return (
       <AdminDashboard
         products={products}
@@ -1020,8 +835,8 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // If Vendor Marketplace View is selected, show Vendor Hub (strictly gated on authenticated vendor/admin)
-  if (currentView === 'vendor' && user && (role === 'vendor' || role === 'admin')) {
+  // If Vendor Marketplace View is selected, show Vendor Hub
+  if (currentView === 'vendor') {
     return (
       <VendorDashboard
         products={products}
@@ -1045,8 +860,8 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // If Staff Operations Desk View is selected, show Staff Portal (strictly gated on authenticated staff/admin)
-  if (currentView === 'staff' && user && (role === 'staff' || role === 'admin')) {
+  // If Staff Operations Desk View is selected, show Staff Portal
+  if (currentView === 'staff') {
     return (
       <StaffDashboard
         orders={orders}
@@ -1134,7 +949,7 @@ const AppContent: React.FC = () => {
           />
         )}
 
-        {(currentView === 'account' || currentView === 'orders' || currentView === 'wishlist') && user && (
+        {(currentView === 'account' || currentView === 'orders' || currentView === 'wishlist') && (
           <MyAccountPage
             orders={orders}
             onTrackOrder={handleTrackSpecificOrder}
