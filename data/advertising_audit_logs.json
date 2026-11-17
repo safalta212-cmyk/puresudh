@@ -1,5 +1,2291 @@
 [
   {
+    "auditId": "audit-ref-1794886033218-88307b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-17T03:27:13.218Z"
+  },
+  {
+    "auditId": "audit-ref-1794886033212-cd64cc",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-17T03:27:13.212Z"
+  },
+  {
+    "auditId": "audit-ref-1794886033205-b16a34",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-17T03:27:13.205Z"
+  },
+  {
+    "auditId": "audit-ref-1794886033199-c7288b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-17T03:27:13.199Z"
+  },
+  {
+    "auditId": "audit-ref-1794886033127-ef557e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-17T03:27:13.127Z"
+  },
+  {
+    "auditId": "audit-1794886031339-b3791e",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 12250
+    },
+    "newValue": {
+      "availableBalance": 12000,
+      "transactionId": "adv-tx-1794886031339-100ac6"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-17T03:27:11.338Z"
+  },
+  {
+    "auditId": "audit-1794886031327-450c34",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 11500
+    },
+    "newValue": {
+      "availableBalance": 12250,
+      "transactionId": "adv-tx-1794886031327-00d1c4"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-17T03:27:11.327Z"
+  },
+  {
+    "auditId": "audit-ref-1794886021641-194a0b",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1170
+    },
+    "newValue": {
+      "availableBalance": 1220,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-17T03:27:01.641Z"
+  },
+  {
+    "auditId": "audit-ref-1794886021633-1d496d",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1160
+    },
+    "newValue": {
+      "availableBalance": 1170,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-17T03:27:01.631Z"
+  },
+  {
+    "auditId": "audit-ref-1794886021624-757c2c",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1145
+    },
+    "newValue": {
+      "availableBalance": 1160,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-17T03:27:01.624Z"
+  },
+  {
+    "auditId": "audit-ref-1794886021618-552fb0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1170
+    },
+    "newValue": {
+      "availableBalance": 1145,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-17T03:27:01.618Z"
+  },
+  {
+    "auditId": "audit-ref-1794886021612-1145a4",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1120
+    },
+    "newValue": {
+      "availableBalance": 1170,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-17T03:27:01.609Z"
+  },
+  {
+    "auditId": "audit-ref-1794800497265-2d3bc5",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1100
+    },
+    "newValue": {
+      "availableBalance": 1120,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T03:41:37.265Z"
+  },
+  {
+    "auditId": "audit-ref-1794800497258-7b3d4e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1085
+    },
+    "newValue": {
+      "availableBalance": 1100,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T03:41:37.258Z"
+  },
+  {
+    "auditId": "audit-ref-1794800497251-fad3ff",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1090
+    },
+    "newValue": {
+      "availableBalance": 1085,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T03:41:37.251Z"
+  },
+  {
+    "auditId": "audit-ref-1794800497244-fa8881",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1080
+    },
+    "newValue": {
+      "availableBalance": 1090,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T03:41:37.244Z"
+  },
+  {
+    "auditId": "audit-ref-1794800497180-a7f168",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T03:41:37.179Z"
+  },
+  {
+    "auditId": "audit-ref-1794799577415-b2da17",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T03:26:17.415Z"
+  },
+  {
+    "auditId": "audit-ref-1794799577409-6c79f2",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T03:26:17.409Z"
+  },
+  {
+    "auditId": "audit-ref-1794799577403-28d960",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T03:26:17.403Z"
+  },
+  {
+    "auditId": "audit-ref-1794799577397-ac9404",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T03:26:17.397Z"
+  },
+  {
+    "auditId": "audit-ref-1794799577334-4f5e55",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T03:26:17.334Z"
+  },
+  {
+    "auditId": "audit-1794799575515-73d79d",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 11750
+    },
+    "newValue": {
+      "availableBalance": 11500,
+      "transactionId": "adv-tx-1794799575515-58a5b6"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-16T03:26:15.515Z"
+  },
+  {
+    "auditId": "audit-1794799575504-1dc7bf",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 11000
+    },
+    "newValue": {
+      "availableBalance": 11750,
+      "transactionId": "adv-tx-1794799575504-1739ab"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-16T03:26:15.504Z"
+  },
+  {
+    "auditId": "audit-ref-1794799566007-1ba0f1",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1170
+    },
+    "newValue": {
+      "availableBalance": 1220,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-16T03:26:06.007Z"
+  },
+  {
+    "auditId": "audit-ref-1794799565999-be3d52",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1160
+    },
+    "newValue": {
+      "availableBalance": 1170,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-16T03:26:05.997Z"
+  },
+  {
+    "auditId": "audit-ref-1794799565991-d2ba25",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1145
+    },
+    "newValue": {
+      "availableBalance": 1160,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-16T03:26:05.991Z"
+  },
+  {
+    "auditId": "audit-ref-1794799565986-369442",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1170
+    },
+    "newValue": {
+      "availableBalance": 1145,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-16T03:26:05.985Z"
+  },
+  {
+    "auditId": "audit-ref-1794799565980-2565d0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1120
+    },
+    "newValue": {
+      "availableBalance": 1170,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-16T03:26:05.978Z"
+  },
+  {
+    "auditId": "audit-ref-1794799297655-aff04f",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1100
+    },
+    "newValue": {
+      "availableBalance": 1120,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T03:21:37.655Z"
+  },
+  {
+    "auditId": "audit-ref-1794799297650-1f4548",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1085
+    },
+    "newValue": {
+      "availableBalance": 1100,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T03:21:37.650Z"
+  },
+  {
+    "auditId": "audit-ref-1794799297645-eda45b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1090
+    },
+    "newValue": {
+      "availableBalance": 1085,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T03:21:37.645Z"
+  },
+  {
+    "auditId": "audit-ref-1794799297639-a4cfa0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1080
+    },
+    "newValue": {
+      "availableBalance": 1090,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T03:21:37.639Z"
+  },
+  {
+    "auditId": "audit-ref-1794799297570-d969f6",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T03:21:37.569Z"
+  },
+  {
+    "auditId": "audit-ref-1794799271015-5883dc",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T03:21:11.015Z"
+  },
+  {
+    "auditId": "audit-ref-1794799271010-4cfafd",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T03:21:11.010Z"
+  },
+  {
+    "auditId": "audit-ref-1794799271005-ddb563",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T03:21:11.005Z"
+  },
+  {
+    "auditId": "audit-ref-1794799270999-711210",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T03:21:10.999Z"
+  },
+  {
+    "auditId": "audit-ref-1794799270931-a384d8",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T03:21:10.930Z"
+  },
+  {
+    "auditId": "audit-1794799268909-b1686b",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 11250
+    },
+    "newValue": {
+      "availableBalance": 11000,
+      "transactionId": "adv-tx-1794799268909-64a590"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-16T03:21:08.909Z"
+  },
+  {
+    "auditId": "audit-1794799268898-dcf1f6",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 10500
+    },
+    "newValue": {
+      "availableBalance": 11250,
+      "transactionId": "adv-tx-1794799268898-5f230a"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-16T03:21:08.898Z"
+  },
+  {
+    "auditId": "audit-ref-1794799256093-367cf7",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-16T03:20:56.093Z"
+  },
+  {
+    "auditId": "audit-ref-1794799256085-8348f0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-16T03:20:56.083Z"
+  },
+  {
+    "auditId": "audit-ref-1794799256077-3e311a",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-16T03:20:56.077Z"
+  },
+  {
+    "auditId": "audit-ref-1794799256072-480465",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-16T03:20:56.072Z"
+  },
+  {
+    "auditId": "audit-ref-1794799256066-1af4d0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-16T03:20:56.063Z"
+  },
+  {
+    "auditId": "audit-ref-1794796028511-a0bd72",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T02:27:08.511Z"
+  },
+  {
+    "auditId": "audit-ref-1794796028507-89d973",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T02:27:08.507Z"
+  },
+  {
+    "auditId": "audit-ref-1794796028502-2288eb",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T02:27:08.502Z"
+  },
+  {
+    "auditId": "audit-ref-1794796028497-f3dd85",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T02:27:08.497Z"
+  },
+  {
+    "auditId": "audit-ref-1794796028401-cb7a61",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T02:27:08.400Z"
+  },
+  {
+    "auditId": "audit-1794796025066-c4a812",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 10750
+    },
+    "newValue": {
+      "availableBalance": 10500,
+      "transactionId": "adv-tx-1794796025066-3d45a9"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-16T02:27:05.066Z"
+  },
+  {
+    "auditId": "audit-1794796025015-51f66f",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 10000
+    },
+    "newValue": {
+      "availableBalance": 10750,
+      "transactionId": "adv-tx-1794796025014-4b9cfb"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-16T02:27:05.014Z"
+  },
+  {
+    "auditId": "audit-ref-1794795993866-53448d",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-16T02:26:33.866Z"
+  },
+  {
+    "auditId": "audit-ref-1794795993858-8e46ed",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-16T02:26:33.855Z"
+  },
+  {
+    "auditId": "audit-ref-1794795993785-aaa7af",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-16T02:26:33.785Z"
+  },
+  {
+    "auditId": "audit-ref-1794795993780-91d26e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-16T02:26:33.780Z"
+  },
+  {
+    "auditId": "audit-ref-1794795993771-834d7e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-16T02:26:33.768Z"
+  },
+  {
+    "auditId": "audit-ref-1794795724616-18717e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-16T02:22:04.616Z"
+  },
+  {
+    "auditId": "audit-ref-1794795724610-713876",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-16T02:22:04.610Z"
+  },
+  {
+    "auditId": "audit-ref-1794795724606-2a57f2",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-16T02:22:04.606Z"
+  },
+  {
+    "auditId": "audit-ref-1794795724601-26224b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-16T02:22:04.601Z"
+  },
+  {
+    "auditId": "audit-ref-1794795724535-20ff6a",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-16T02:22:04.535Z"
+  },
+  {
+    "auditId": "audit-1794795722588-f748fc",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 10250
+    },
+    "newValue": {
+      "availableBalance": 10000,
+      "transactionId": "adv-tx-1794795722588-7d4ce7"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-16T02:22:02.588Z"
+  },
+  {
+    "auditId": "audit-1794795722580-ca89a5",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 9500
+    },
+    "newValue": {
+      "availableBalance": 10250,
+      "transactionId": "adv-tx-1794795722579-7423a4"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-16T02:22:02.579Z"
+  },
+  {
+    "auditId": "audit-ref-1794795710250-1f1c23",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-16T02:21:50.250Z"
+  },
+  {
+    "auditId": "audit-ref-1794795710243-1b8c6f",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-16T02:21:50.240Z"
+  },
+  {
+    "auditId": "audit-ref-1794795710234-74feb6",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-16T02:21:50.234Z"
+  },
+  {
+    "auditId": "audit-ref-1794795710226-9ad9a2",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-16T02:21:50.226Z"
+  },
+  {
+    "auditId": "audit-ref-1794795710222-a75276",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-16T02:21:50.219Z"
+  },
+  {
+    "auditId": "audit-ref-1794756427765-645bae",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-15T15:27:07.765Z"
+  },
+  {
+    "auditId": "audit-ref-1794756427757-e501b3",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-15T15:27:07.757Z"
+  },
+  {
+    "auditId": "audit-ref-1794756427753-2691f0",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-15T15:27:07.752Z"
+  },
+  {
+    "auditId": "audit-ref-1794756427749-af1622",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-15T15:27:07.748Z"
+  },
+  {
+    "auditId": "audit-ref-1794756427688-688a8a",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-15T15:27:07.688Z"
+  },
+  {
+    "auditId": "audit-1794756425998-b5a034",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 9750
+    },
+    "newValue": {
+      "availableBalance": 9500,
+      "transactionId": "adv-tx-1794756425998-469fec"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-15T15:27:05.998Z"
+  },
+  {
+    "auditId": "audit-1794756425990-3b31ab",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 9000
+    },
+    "newValue": {
+      "availableBalance": 9750,
+      "transactionId": "adv-tx-1794756425990-dfe74a"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-15T15:27:05.990Z"
+  },
+  {
+    "auditId": "audit-ref-1794756414594-1298b5",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-15T15:26:54.594Z"
+  },
+  {
+    "auditId": "audit-ref-1794756414589-de20b8",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-15T15:26:54.587Z"
+  },
+  {
+    "auditId": "audit-ref-1794756414584-95f43d",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-15T15:26:54.583Z"
+  },
+  {
+    "auditId": "audit-ref-1794756414579-125c57",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-15T15:26:54.579Z"
+  },
+  {
+    "auditId": "audit-ref-1794756414572-7a5351",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-15T15:26:54.568Z"
+  },
+  {
+    "auditId": "audit-ref-1794756274073-4e099d",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-15T15:24:34.073Z"
+  },
+  {
+    "auditId": "audit-ref-1794756274068-972e27",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-15T15:24:34.068Z"
+  },
+  {
+    "auditId": "audit-ref-1794756274065-00b10d",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-15T15:24:34.065Z"
+  },
+  {
+    "auditId": "audit-ref-1794756274061-ab2b3e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-15T15:24:34.061Z"
+  },
+  {
+    "auditId": "audit-ref-1794756273989-ebeb07",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-15T15:24:33.989Z"
+  },
+  {
+    "auditId": "audit-1794756272069-b22fea",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 9250
+    },
+    "newValue": {
+      "availableBalance": 9000,
+      "transactionId": "adv-tx-1794756272069-2815bc"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-15T15:24:32.069Z"
+  },
+  {
+    "auditId": "audit-1794756272062-9382e2",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 8500
+    },
+    "newValue": {
+      "availableBalance": 9250,
+      "transactionId": "adv-tx-1794756272062-a20389"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-15T15:24:32.062Z"
+  },
+  {
+    "auditId": "audit-ref-1794756260424-6e6bd3",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-15T15:24:20.424Z"
+  },
+  {
+    "auditId": "audit-ref-1794756260419-468019",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-15T15:24:20.417Z"
+  },
+  {
+    "auditId": "audit-ref-1794756260412-641f8b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-15T15:24:20.411Z"
+  },
+  {
+    "auditId": "audit-ref-1794756260408-98c745",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-15T15:24:20.408Z"
+  },
+  {
+    "auditId": "audit-ref-1794756260405-22db31",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-15T15:24:20.403Z"
+  },
+  {
+    "auditId": "audit-ref-1794659539730-b54faf",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-14T12:32:19.730Z"
+  },
+  {
+    "auditId": "audit-ref-1794659539727-d820e3",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-14T12:32:19.727Z"
+  },
+  {
+    "auditId": "audit-ref-1794659539724-ce0cdc",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-14T12:32:19.724Z"
+  },
+  {
+    "auditId": "audit-ref-1794659539722-d69db3",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-14T12:32:19.721Z"
+  },
+  {
+    "auditId": "audit-ref-1794659539666-eb5d8e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-14T12:32:19.666Z"
+  },
+  {
+    "auditId": "audit-1794659537972-af4e62",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 8750
+    },
+    "newValue": {
+      "availableBalance": 8500,
+      "transactionId": "adv-tx-1794659537972-37dd9d"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-14T12:32:17.972Z"
+  },
+  {
+    "auditId": "audit-1794659537966-cde2c7",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 8000
+    },
+    "newValue": {
+      "availableBalance": 8750,
+      "transactionId": "adv-tx-1794659537966-0924fb"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-14T12:32:17.966Z"
+  },
+  {
+    "auditId": "audit-ref-1794659525599-f2d3d1",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1207.5
+    },
+    "newValue": {
+      "availableBalance": 1257.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-14T12:32:05.599Z"
+  },
+  {
+    "auditId": "audit-ref-1794659525595-dd383b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1197.5
+    },
+    "newValue": {
+      "availableBalance": 1207.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-14T12:32:05.593Z"
+  },
+  {
+    "auditId": "audit-ref-1794659525590-b9b59d",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1182.5
+    },
+    "newValue": {
+      "availableBalance": 1197.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-14T12:32:05.590Z"
+  },
+  {
+    "auditId": "audit-ref-1794659525587-2203ac",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1207.5
+    },
+    "newValue": {
+      "availableBalance": 1182.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-14T12:32:05.586Z"
+  },
+  {
+    "auditId": "audit-ref-1794659525583-93ca8a",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1157.5
+    },
+    "newValue": {
+      "availableBalance": 1207.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-14T12:32:05.581Z"
+  },
+  {
+    "auditId": "audit-ref-1794651344182-604486",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1157.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-14T10:15:44.182Z"
+  },
+  {
+    "auditId": "audit-ref-1794651344155-5d0ed6",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1097.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-14T10:15:44.153Z"
+  },
+  {
+    "auditId": "audit-ref-1794651344150-0dc9b3",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1082.5
+    },
+    "newValue": {
+      "availableBalance": 1097.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-14T10:15:44.150Z"
+  },
+  {
+    "auditId": "audit-ref-1794651344146-691686",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1107.5
+    },
+    "newValue": {
+      "availableBalance": 1082.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-14T10:15:44.146Z"
+  },
+  {
+    "auditId": "audit-ref-1794651344142-efec69",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1057.5
+    },
+    "newValue": {
+      "availableBalance": 1107.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-14T10:15:44.139Z"
+  },
+  {
+    "auditId": "audit-ref-1794651311229-2044eb",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1037.5
+    },
+    "newValue": {
+      "availableBalance": 1057.5,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-14T10:15:11.229Z"
+  },
+  {
+    "auditId": "audit-ref-1794651311227-557d56",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1022.5
+    },
+    "newValue": {
+      "availableBalance": 1037.5,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-14T10:15:11.227Z"
+  },
+  {
+    "auditId": "audit-ref-1794651311224-0249f2",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1027.5
+    },
+    "newValue": {
+      "availableBalance": 1022.5,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-14T10:15:11.224Z"
+  },
+  {
+    "auditId": "audit-ref-1794651311222-c19fbf",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1017.5
+    },
+    "newValue": {
+      "availableBalance": 1027.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-14T10:15:11.222Z"
+  },
+  {
+    "auditId": "audit-ref-1794651311165-338afe",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 995
+    },
+    "newValue": {
+      "availableBalance": 1020,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-14T10:15:11.165Z"
+  },
+  {
+    "auditId": "audit-1794651308329-8ca895",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 8250
+    },
+    "newValue": {
+      "availableBalance": 8000,
+      "transactionId": "adv-tx-1794651308329-f0872f"
+    },
+    "reason": "Valid partial refund",
+    "timestamp": "2026-11-14T10:15:08.329Z"
+  },
+  {
+    "auditId": "audit-1794651308322-93aaf1",
+    "actorId": "test_admin_suite",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_ADD_CREDIT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-3",
+    "previousValue": {
+      "availableBalance": 7500
+    },
+    "newValue": {
+      "availableBalance": 8250,
+      "transactionId": "adv-tx-1794651308322-4d0717"
+    },
+    "reason": "Automated test promotional grant",
+    "timestamp": "2026-11-14T10:15:08.322Z"
+  },
+  {
+    "auditId": "audit-ref-1794651276883-49bd90",
+    "actorId": "admin_super",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1270
+    },
+    "newValue": {
+      "availableBalance": 1320,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Admin Adjustment Refund): Independent ad refund test check",
+    "timestamp": "2026-11-14T10:14:36.883Z"
+  },
+  {
+    "auditId": "audit-ref-1794651276819-90d35b",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1260
+    },
+    "newValue": {
+      "availableBalance": 1270,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Expired Campaign Balance Refund): Scheduled campaign completion remaining unspent float return",
+    "timestamp": "2026-11-14T10:14:36.817Z"
+  },
+  {
+    "auditId": "audit-ref-1794651276814-9b7ed5",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1245
+    },
+    "newValue": {
+      "availableBalance": 1260,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Courtesy refund for disputed ad clicks",
+    "timestamp": "2026-11-14T10:14:36.814Z"
+  },
+  {
+    "auditId": "audit-ref-1794651276809-c4f9e4",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1270
+    },
+    "newValue": {
+      "availableBalance": 1245,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Unused Wallet Balance Refund): Vendor requested withdrawal of unused advertising float",
+    "timestamp": "2026-11-14T10:14:36.809Z"
+  },
+  {
+    "auditId": "audit-ref-1794651276806-19db8e",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1220
+    },
+    "newValue": {
+      "availableBalance": 1270,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 50
+    },
+    "reason": "Refund of ₹50 issued (Campaign Refund): Partial campaign credit return for paused ad",
+    "timestamp": "2026-11-14T10:14:36.805Z"
+  },
+  {
+    "auditId": "audit-ref-1794651256540-b9fce5",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_EXPIRED_CAMPAIGN_BALANCE",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1200
+    },
+    "newValue": {
+      "availableBalance": 1220,
+      "refundType": "EXPIRED_CAMPAIGN_BALANCE",
+      "amount": 20
+    },
+    "reason": "Refund of ₹20 issued (Expired Campaign Balance Refund): Audit expired campaign balance refund test",
+    "timestamp": "2026-11-14T10:14:16.540Z"
+  },
+  {
+    "auditId": "audit-ref-1794651256537-3ac6bd",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_ADMIN_ADJUSTMENT",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1185
+    },
+    "newValue": {
+      "availableBalance": 1200,
+      "refundType": "ADMIN_ADJUSTMENT",
+      "amount": 15
+    },
+    "reason": "Refund of ₹15 issued (Admin Adjustment Refund): Audit admin adjustment refund test",
+    "timestamp": "2026-11-14T10:14:16.537Z"
+  },
+  {
+    "auditId": "audit-ref-1794651256534-78df67",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_UNUSED_WALLET_BALANCE_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1190
+    },
+    "newValue": {
+      "availableBalance": 1185,
+      "refundType": "UNUSED_WALLET_BALANCE_REFUND",
+      "amount": 5
+    },
+    "reason": "Refund of ₹5 issued (Unused Wallet Balance Refund): Audit unused balance refund test",
+    "timestamp": "2026-11-14T10:14:16.534Z"
+  },
+  {
+    "auditId": "audit-ref-1794651256532-3e5fd5",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1180
+    },
+    "newValue": {
+      "availableBalance": 1190,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 10
+    },
+    "reason": "Refund of ₹10 issued (Campaign Refund): Audit campaign refund test",
+    "timestamp": "2026-11-14T10:14:16.532Z"
+  },
+  {
+    "auditId": "audit-ref-1794651256432-4ece77",
+    "actorId": "admin_audit",
+    "actorType": "ADMIN",
+    "action": "ADVERTISING_WALLET_REFUND_CAMPAIGN_REFUND",
+    "entityType": "advertisingWallets",
+    "entityId": "adv-wal-vendor-1",
+    "previousValue": {
+      "availableBalance": 1157.5
+    },
+    "newValue": {
+      "availableBalance": 1182.5,
+      "refundType": "CAMPAIGN_REFUND",
+      "amount": 25
+    },
+    "reason": "Refund of ₹25 issued (Campaign Refund): Audit verified refund credit",
+    "timestamp": "2026-11-14T10:14:16.432Z"
+  },
+  {
     "auditId": "audit-ref-1791555927906-a51327",
     "actorId": "admin_audit",
     "actorType": "ADMIN",

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { isTemporaryEmail, isTemporaryOrFakePhone } from '../../validation';
+import { isTemporaryEmail, isTemporaryOrFakePhone, sanitizePhoneInput10, formatIndianPhone } from '../../validation';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -26,6 +26,7 @@ export const AuthModal: React.FC = () => {
     register,
     loginWithGoogle,
     sendPasswordReset,
+    targetPortal,
     isLoading,
   } = useAuth();
   const { showToast } = useToast();
@@ -123,8 +124,8 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    // Register customer account via AuthContext with server persistence
-    const result = await register(email, password, name, phone);
+    // Register customer account via AuthContext with server persistence (+91 formatted)
+    const result = await register(email, password, name, formatIndianPhone(phone));
     if (result.success) {
       showToast('Customer account created successfully! Welcome to PURE SUDH.', 'success');
       closeAuthModal();
@@ -147,7 +148,7 @@ export const AuthModal: React.FC = () => {
     }
 
     try {
-      const res = await sendPasswordReset(email);
+      const res = await sendPasswordReset(email, targetPortal || 'customer');
       setResetSuccessMessage(res.message);
       showToast('Password reset instructions sent!', 'success');
     } catch (err: any) {
@@ -157,7 +158,7 @@ export const AuthModal: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setFormError(null);
-    const result = await loginWithGoogle();
+    const result = await loginWithGoogle(targetPortal || 'customer');
     if (result.success) {
       showToast('Signed in successfully with Google account.', 'success');
       closeAuthModal();
@@ -392,19 +393,26 @@ export const AuthModal: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Mobile Number
+                Mobile Number (India +91)
               </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
-                <input
-                  id="auth-reg-phone"
-                  type="tel"
-                  value={phone ?? ''}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="10-digit mobile number"
-                  required
-                  className="w-full pl-10 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+              <div className="flex items-stretch">
+                <span className="inline-flex items-center px-3 bg-stone-100 border border-r-0 border-stone-200 rounded-l-xl text-xs sm:text-sm font-bold text-stone-700 select-none">
+                  +91
+                </span>
+                <div className="relative flex-1">
+                  <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    id="auth-reg-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={phone ?? ''}
+                    onChange={(e) => setPhone(sanitizePhoneInput10(e.target.value))}
+                    placeholder="10-digit mobile number"
+                    required
+                    className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-r-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
             </div>
 

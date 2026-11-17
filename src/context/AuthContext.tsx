@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -21,8 +21,10 @@ import {
   resolveEffectiveRole,
   getCustomClaims,
   verifyRoleAccess,
+  checkFirestoreAdminDoc,
+  formatFirebaseAuthError,
 } from '../services/auth.service';
-import { isTemporaryEmail, isTemporaryOrFakePhone } from '../validation';
+import { isTemporaryEmail, isTemporaryOrFakePhone, formatIndianPhone } from '../validation';
 import { auditAndPurgeTemporaryAccounts } from '../services/accountAuditService';
 
 export type AuthModalMode =
@@ -53,7 +55,7 @@ interface AuthContextType {
     pass: string,
     name: string,
     phone: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   registerVendor: (
     email: string,
     pass: string,
@@ -62,11 +64,16 @@ interface AuthContextType {
     shopName: string,
     fssai?: string,
     gst?: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   logout: () => Promise<void>;
-  sendPasswordReset: (email: string) => Promise<{ success: boolean; message: string }>;
+  sendPasswordReset: (
+    email: string,
+    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor'
+  ) => Promise<{ success: boolean; message: string }>;
   updateUserPassword: (newPass: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (
+    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
+  ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   updateUserProfileData: (updates: {
     displayName?: string;
     phone?: string;
@@ -90,8 +97,8 @@ interface AuthContextType {
 const defaultAdminUser: UserProfile = {
   id: 'usr-admin-master',
   uid: 'usr-admin-master',
-  email: 'EnterpriseAdministrationConsole@gmail.com',
-  displayName: 'Enterprise Administration Console',
+  email: 'aanews70@gmail.com',
+  displayName: 'Platform Administrator',
   phone: '+91 94310 12801',
   role: 'admin',
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -173,7 +180,7 @@ const defaultCustomerUser: UserProfile = {
 };
 
 export const TEST_ROLE_ACCOUNTS = {
-  admin: { email: 'EnterpriseAdministrationConsole@gmail.com', role: 'admin' as UserRole, name: 'Enterprise Administration Console' },
+  admin: { email: 'aanews70@gmail.com', role: 'admin' as UserRole, name: 'Platform Administrator' },
   staff: { email: 'staff@email.com', role: 'staff' as UserRole, name: 'Operations Staff' },
   vendor: { email: 'vendor@email.com', role: 'vendor' as UserRole, name: 'Verified Dairy Vendor' },
   customer: { email: 'customer@email.com', role: 'customer' as UserRole, name: 'Abhishek Kumar' },
@@ -188,6 +195,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!saved || saved === 'null' || saved === 'undefined') return null;
       const parsed = JSON.parse(saved);
       if (parsed && (parsed.email || parsed.id)) {
+        const parsedEmail = String(parsed.email || '').trim().toLowerCase();
+        if (
+          parsedEmail === 'enterpriseadministrationconsole@gmail.com' ||
+          parsedEmail === 'admin@puresudh.com'
+        ) {
+          localStorage.removeItem('pure_sudh_active_user');
+          return null;
+        }
         // Auto-migrate legacy dummy demo phone number if present
         if (parsed.email === 'customer@puresudh.com' && parsed.phone === '9876543210') {
           parsed.phone = '+91 94310 12845';
@@ -205,14 +220,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
   const [targetPortal, setTargetPortal] = useState<'customer' | 'admin' | 'staff' | 'vendor'>('customer');
+  const isLoggingOutRef = useRef(false);
+  const hadFirebaseUserRef = useRef(false);
+  const isVerifyingLoginRef = useRef(false);
 
   // Sync to session storage and keep state aligned with strict anti-temporary account enforcement
   useEffect(() => {
     if (user) {
       const emailCheck = isTemporaryEmail(user.email);
       const isKnownDemo = user.email.endsWith('@email.com') ||
-        user.email === 'EnterpriseAdministrationConsole@gmail.com' ||
-        user.email === 'aanews70@gmail.com';
+        user.email.toLowerCase() === 'aanews70@gmail.com';
       const phoneCheck = (!isKnownDemo && user.phone) ? isTemporaryOrFakePhone(user.phone) : { isFake: false };
 
       if (emailCheck.isTemporary || phoneCheck.isFake) {
@@ -244,12 +261,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.role]);
 
   // Load user profile from Firestore when Firebase Auth state changes
-  const syncFirebaseUser = useCallback(async (fbUser: FirebaseUser | null) => {
-    if (!fbUser) return;
+  const syncFirebaseUser = useCallback(async (fbUser: FirebaseUser | null): Promise<UserProfile | null> => {
+    if (!fbUser) return null;
     try {
-      const claims = await getCustomClaims(fbUser);
-      const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
-      const snap = await getDoc(userRef);
+      const [claims, hasAdminDoc] = await Promise.all([
+        getCustomClaims(fbUser),
+        checkFirestoreAdminDoc(fbUser.uid),
+      ]);
+
+      let snapExists = false;
+      let firestoreData: Partial<UserProfile> = {};
+      try {
+        const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
+        const snap = await Promise.race([
+          getDoc(userRef),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+        if (snap && snap.exists()) {
+          snapExists = true;
+          firestoreData = snap.data() as Partial<UserProfile>;
+        }
+      } catch (readErr) {
+        console.warn('Firestore user profile read notice:', readErr);
+      }
 
       // Safe fallback to locally cached active user details to never wipe out registered name or phone
       let localCached: Partial<UserProfile> = {};
@@ -258,11 +292,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (raw) localCached = JSON.parse(raw);
       } catch {}
 
-      if (snap.exists()) {
-        const firestoreData = snap.data() as Partial<UserProfile>;
-        const effRole = resolveEffectiveRole(claims, firestoreData.role, fbUser.email);
+      if (snapExists) {
+        const effRole = resolveEffectiveRole(claims, firestoreData.role, fbUser.email, hasAdminDoc);
         const fullProfile: UserProfile = {
-          id: snap.id,
+          id: fbUser.uid,
           uid: fbUser.uid,
           email: fbUser.email || firestoreData.email || localCached.email || '',
           displayName: firestoreData.displayName || fbUser.displayName || localCached.displayName || 'Customer',
@@ -281,14 +314,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(fullProfile);
         setRole(fullProfile.role);
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(fullProfile));
+        return fullProfile;
       } else {
         // First-time profile creation in Firestore
-        const effRole = resolveEffectiveRole(claims, undefined, fbUser.email);
+        const effRole = resolveEffectiveRole(claims, undefined, fbUser.email, hasAdminDoc);
         const newProfile: UserProfile = {
           id: fbUser.uid,
           uid: fbUser.uid,
           email: fbUser.email || localCached.email || '',
-          displayName: fbUser.displayName || localCached.displayName || 'Customer',
+          displayName: fbUser.displayName || localCached.displayName || (effRole === 'admin' ? 'Platform Administrator' : 'Customer'),
           phone: localCached.phone || '',
           role: effRole,
           createdAt: localCached.createdAt || new Date().toISOString(),
@@ -298,6 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           emailVerified: fbUser.emailVerified,
         };
         try {
+          const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
           await setDoc(userRef, newProfile, { merge: true });
         } catch (err) {
           console.warn('Firestore initial user write fallback:', err);
@@ -305,20 +340,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(newProfile);
         setRole(effRole);
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(newProfile));
+        return newProfile;
       }
     } catch (err) {
       console.warn('Sync Firebase Auth user fallback:', err);
+      return null;
     }
   }, []);
 
-  // Listen to Firebase Auth state changes
+  // Listen to Firebase Auth state changes & cross-tab storage sign-out
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
+        if (isLoggingOutRef.current || isVerifyingLoginRef.current) return;
+        hadFirebaseUserRef.current = true;
         await syncFirebaseUser(fbUser);
+      } else if (hadFirebaseUserRef.current) {
+        // Firebase Auth explicitly transitioned from signed-in to signed-out
+        hadFirebaseUserRef.current = false;
+        setUser(null);
+        setRole('customer');
+        try {
+          localStorage.removeItem('pure_sudh_active_user');
+          sessionStorage.removeItem('pure_sudh_active_user');
+        } catch {}
       }
     });
-    return () => unsubscribe();
+
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === 'pure_sudh_active_user' && !e.newValue) {
+        setUser(null);
+        setRole('customer');
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', handleStorageSync);
+    };
   }, [syncFirebaseUser]);
 
   const openAuthModal = (
@@ -385,57 +445,154 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 1. Check quick test accounts for instant responsive testing (supports both email and phone)
-      const isEnterpriseAdminMatch = cleanEmail === 'enterpriseadministrationconsole@gmail.com';
-      if (isEnterpriseAdminMatch && (pass === 'EnterpriseAdministrationConsole@786#@786#' || pass === 'admin123' || pass.length >= 1)) {
-        const adminUser: UserProfile = {
-          ...defaultAdminUser,
-          id: 'usr-admin-master',
-          uid: 'usr-admin-master',
-          email: 'EnterpriseAdministrationConsole@gmail.com',
-          displayName: 'Enterprise Administration Console',
+      // 0. ADMIN PORTAL: Authenticate directly via Firebase Authentication first,
+      // then verify Administrator role via Custom Claims / Firestore admins/{uid} / users/{uid} / owner email.
+      if (target === 'admin') {
+        if (isPhoneNumber) {
+          return {
+            success: false,
+            error: 'Administrator Sign In requires a valid admin email address and password.',
+          };
+        }
+
+        isVerifyingLoginRef.current = true;
+        let firebaseErrorMsg: string | null = null;
+        let firebaseErrorCode = '';
+
+        try {
+          const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+          const [claims, hasAdminDoc] = await Promise.all([
+            getCustomClaims(cred.user),
+            checkFirestoreAdminDoc(cred.user.uid),
+          ]);
+
+          let firestoreData: Partial<UserProfile> = {};
+          try {
+            const snap = await Promise.race([
+              getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+            ]);
+            if (snap && snap.exists()) {
+              firestoreData = snap.data() as Partial<UserProfile>;
+            }
+          } catch (fsReadErr) {
+            console.warn('Admin Firestore profile lookup notice:', fsReadErr);
+          }
+
+          const effectiveRole = resolveEffectiveRole(
+            claims,
+            firestoreData.role,
+            cred.user.email || cleanEmail,
+            hasAdminDoc
+          );
+
+          if (effectiveRole !== 'admin') {
+            await signOut(auth).catch(() => {});
+            return {
+              success: false,
+              error: `Access Denied: Firebase account (${cred.user.email || cleanEmail}) does not have Administrator privileges.`,
+            };
+          }
+
+          const adminProfile: UserProfile = {
+            id: cred.user.uid,
+            uid: cred.user.uid,
+            email: cred.user.email || cleanEmail,
+            displayName: firestoreData.displayName || cred.user.displayName || 'Platform Administrator',
+            phone: firestoreData.phone || '',
+            role: 'admin',
+            createdAt: firestoreData.createdAt || new Date().toISOString(),
+            addresses: Array.isArray(firestoreData.addresses) ? firestoreData.addresses : [],
+            customClaims: claims,
+            authMethod: 'password',
+            emailVerified: cred.user.emailVerified,
+          };
+
+          // Ensure Firestore user document exists with role 'admin' (non-blocking)
+          try {
+            await setDoc(
+              doc(db, COLLECTIONS.USERS, cred.user.uid),
+              {
+                id: adminProfile.id,
+                uid: adminProfile.uid,
+                email: adminProfile.email,
+                displayName: adminProfile.displayName,
+                role: 'admin',
+                createdAt: adminProfile.createdAt,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          } catch {}
+
+          hadFirebaseUserRef.current = true;
+          setUser(adminProfile);
+          setRole('admin');
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(adminProfile));
+          closeAuthModal();
+          return { success: true, profile: adminProfile };
+        } catch (fbErr: any) {
+          firebaseErrorCode = String(fbErr?.code || '');
+          firebaseErrorMsg = formatFirebaseAuthError(fbErr);
+        } finally {
+          isVerifyingLoginRef.current = false;
+        }
+
+        // Optional local Express server fallback ONLY when running against local/Express API (not static Vercel SPA)
+        const allowServerAdminFallback =
+          !firebaseErrorCode ||
+          firebaseErrorCode === 'auth/user-not-found' ||
+          firebaseErrorCode === 'auth/invalid-credential' ||
+          firebaseErrorCode === 'auth/wrong-password' ||
+          firebaseErrorCode === 'auth/operation-not-allowed' ||
+          firebaseErrorCode === 'auth/configuration-not-found';
+
+        if (allowServerAdminFallback) {
+          try {
+            const serverRes = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: rawInput.trim(),
+                password: pass,
+                targetPortal: 'admin',
+              }),
+            });
+            const contentType = serverRes.headers.get('content-type') || '';
+            if (serverRes.ok && contentType.includes('application/json')) {
+              const data = await serverRes.json();
+              if (data?.success && data?.profile?.role === 'admin') {
+                const loadedProfile: UserProfile = {
+                  id: data.profile.id,
+                  uid: data.profile.uid || data.profile.id,
+                  email: data.profile.email,
+                  displayName: data.profile.displayName || 'Platform Administrator',
+                  phone: data.profile.phone || '',
+                  role: 'admin',
+                  createdAt: data.profile.createdAt || new Date().toISOString(),
+                  addresses: Array.isArray(data.profile.addresses) ? data.profile.addresses : [],
+                };
+                setUser(loadedProfile);
+                setRole('admin');
+                localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
+                closeAuthModal();
+                return { success: true, profile: loadedProfile };
+              }
+            }
+          } catch {
+            // Static Vercel deployment has no /api/auth/login Express route; fall through to Firebase Auth error
+          }
+        }
+
+        return {
+          success: false,
+          error: firebaseErrorMsg || 'Firebase authentication failed. Please check your email and password.',
         };
-        setUser(adminUser);
-        setRole('admin');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(adminUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: adminUser };
       }
 
-      const isOwnerMatch = cleanEmail === 'aanews70@gmail.com';
-      if (isOwnerMatch && (pass.length >= 1 || pass === 'admin123' || pass === 'aanews70' || pass === 'aanews70@gmail.com' || pass === 'password')) {
-        const ownerUser: UserProfile = {
-          ...defaultAdminUser,
-          id: 'usr-owner-aanews70',
-          uid: 'usr-owner-aanews70',
-          email: 'aanews70@gmail.com',
-          displayName: 'Platform Owner (aanews70)',
-        };
-        setUser(ownerUser);
-        setRole('admin');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(ownerUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: ownerUser };
-      }
-
-      const isAdminMatch = cleanEmail === 'admin@puresudh.com' || (normalizedPhone && normalizedPhone === '9431012801');
-      if (isAdminMatch && pass === 'admin123') {
-        setUser(defaultAdminUser);
-        setRole('admin');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultAdminUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: defaultAdminUser };
-      }
-
+      // 1. Check quick non-admin test accounts ONLY with exact valid password verification
       const isStaffMatch = cleanEmail === 'staff@email.com' || (normalizedPhone && normalizedPhone === '9431012802');
       if (isStaffMatch && pass === 'staff123') {
-        if (target === 'admin') {
-          setIsLoading(false);
-          return { success: false, error: 'Unauthorized: Staff credentials cannot access the Admin Portal.' };
-        }
         setUser(defaultStaffUser);
         setRole('staff');
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultStaffUser));
@@ -446,7 +603,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const isVendorMatch = cleanEmail === 'vendor@email.com' || (normalizedPhone && normalizedPhone === '9431012803');
       if (isVendorMatch && pass === 'vendor123') {
-        if (target === 'admin' || target === 'staff') {
+        if (target === 'staff') {
           setIsLoading(false);
           return { success: false, error: `Unauthorized: Vendor credentials cannot access ${target.toUpperCase()} portal.` };
         }
@@ -475,8 +632,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, profile: defaultCustomerUser };
       }
 
-      // 2. Authoritative Server Login API verification
+      // 2. Authoritative Server Login API verification (when Express backend is available)
       let serverErrorMessage: string | null = null;
+      let serverStatus = 0;
       try {
         const serverRes = await fetch('/api/auth/login', {
           method: 'POST',
@@ -487,8 +645,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             targetPortal: target,
           }),
         });
+        const contentType = serverRes.headers.get('content-type') || '';
 
-        if (serverRes.ok) {
+        if (serverRes.ok && contentType.includes('application/json')) {
           const data = await serverRes.json();
           if (data && data.success && data.profile) {
             const loadedProfile: UserProfile = {
@@ -503,7 +662,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               vendorDetails: data.profile.vendorDetails,
             };
 
-            // Cache in client-side active user storage and registered list
             setUser(loadedProfile);
             setRole(loadedProfile.role);
             localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
@@ -521,18 +679,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             return { success: true, profile: loadedProfile };
           }
-        } else {
-          // If server provided an explicit error (401, 403, 400, or 404)
+        } else if (contentType.includes('application/json')) {
+          serverStatus = serverRes.status;
           const errData = await serverRes.json().catch(() => null);
           if (errData?.error) {
             serverErrorMessage = errData.error;
-          }
-          if (serverRes.status === 401) {
-            setIsLoading(false);
-            return {
-              success: false,
-              error: errData?.error || 'Incorrect password. Please verify your credentials and try again.',
-            };
           }
           if (serverRes.status === 403) {
             setIsLoading(false);
@@ -548,105 +699,133 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               error: errData?.error || 'Invalid credentials. Please verify your details.',
             };
           }
-          // On 404 (user not on server), continue to local registered accounts fallback below!
+          // On 401/404, still allow Firebase Auth verification in Step 4 (e.g. if password was reset via Firebase)
         }
       } catch (serverErr: any) {
-        console.warn('Server auth endpoint notice (evaluating local cache):', serverErr.message);
+        console.warn('Server auth endpoint notice (evaluating Firebase Auth):', serverErr.message);
       }
 
-      // 3. Local offline registered accounts fallback
-      try {
-        const localUsers = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
-        const found = localUsers.find((u: any) => {
-          if (u.email && u.email.toLowerCase() === cleanEmail) return true;
-          if (normalizedPhone && u.phone && String(u.phone).replace(/\D/g, '').endsWith(normalizedPhone)) return true;
-          return false;
-        });
+      // 3. Local offline registered accounts fallback (only if server didn't return 401)
+      if (serverStatus !== 401) {
+        try {
+          const localUsers = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
+          const found = localUsers.find((u: any) => {
+            if (u.email && u.email.toLowerCase() === cleanEmail) return true;
+            if (normalizedPhone && u.phone && String(u.phone).replace(/\D/g, '').endsWith(normalizedPhone)) return true;
+            return false;
+          });
 
-        if (found) {
-          if (found.password && found.password !== pass) {
-            setIsLoading(false);
-            return { success: false, error: 'Incorrect password. Please verify and try again.' };
+          if (found && (!found.password || found.password === pass)) {
+            const localProfile: UserProfile = {
+              id: found.id || `usr-${Date.now()}`,
+              uid: found.uid || found.id || `usr-${Date.now()}`,
+              email: found.email,
+              displayName: found.displayName || 'Customer',
+              phone: found.phone || '',
+              role: found.role || 'customer',
+              createdAt: found.createdAt || new Date().toISOString(),
+              addresses: found.addresses || [],
+              vendorDetails: found.vendorDetails,
+            };
+
+            fetch('/api/auth/register-customer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: localProfile.email,
+                password: pass,
+                name: localProfile.displayName,
+                phone: localProfile.phone,
+              }),
+            }).catch(() => {});
+
+            setUser(localProfile);
+            setRole(localProfile.role);
+            localStorage.setItem('pure_sudh_active_user', JSON.stringify(localProfile));
+            closeAuthModal();
+            return { success: true, profile: localProfile };
+          }
+        } catch (localErr) {
+          console.warn('Local storage user search notice:', localErr);
+        }
+      }
+
+      // 4. Firebase Authentication verification (authoritative on Vercel & when Firebase password changed)
+      let firebaseErrorMsg: string | null = null;
+      if (!isPhoneNumber) {
+        isVerifyingLoginRef.current = true;
+        try {
+          const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+          const [claims, hasAdminDoc] = await Promise.all([
+            getCustomClaims(cred.user),
+            checkFirestoreAdminDoc(cred.user.uid),
+          ]);
+
+          let firestoreData: Partial<UserProfile> = {};
+          try {
+            const snap = await Promise.race([
+              getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+            ]);
+            if (snap && snap.exists()) {
+              firestoreData = snap.data() as Partial<UserProfile>;
+            }
+          } catch (fsErr) {
+            console.warn('Firestore user profile read notice:', fsErr);
           }
 
-          const localProfile: UserProfile = {
-            id: found.id || `usr-${Date.now()}`,
-            uid: found.uid || found.id || `usr-${Date.now()}`,
-            email: found.email,
-            displayName: found.displayName || 'Customer',
-            phone: found.phone || '',
-            role: found.role || 'customer',
-            createdAt: found.createdAt || new Date().toISOString(),
-            addresses: found.addresses || [],
-            vendorDetails: found.vendorDetails,
-          };
+          const effectiveRole = resolveEffectiveRole(
+            claims,
+            firestoreData.role,
+            cred.user.email || cleanEmail,
+            hasAdminDoc
+          );
 
-          // Re-sync registered user back to server in background
-          fetch('/api/auth/register-customer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: localProfile.email,
-              password: pass,
-              name: localProfile.displayName,
-              phone: localProfile.phone,
-            }),
-          }).catch(() => {});
+          if (!verifyRoleAccess(effectiveRole, target)) {
+            await signOut(auth).catch(() => {});
+            return {
+              success: false,
+              error: `Access Denied: This account (${cred.user.email || cleanEmail}) has role '${effectiveRole}' and is not authorized for the ${target.toUpperCase()} portal.`,
+            };
+          }
 
-          setUser(localProfile);
-          setRole(localProfile.role);
-          localStorage.setItem('pure_sudh_active_user', JSON.stringify(localProfile));
-          closeAuthModal();
-          return { success: true, profile: localProfile };
-        }
-      } catch (localErr) {
-        console.warn('Local storage user search notice:', localErr);
-      }
-
-      // 4. Firebase Auth fallback if available
-      try {
-        const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
-        const userDocRef = doc(db, COLLECTIONS.USERS, cred.user.uid);
-        const snap = await getDoc(userDocRef);
-        let loadedProfile: UserProfile;
-        if (snap.exists()) {
-          const data = snap.data() as Partial<UserProfile>;
-          loadedProfile = {
-            id: snap.id,
-            uid: cred.user.uid,
-            email: cred.user.email || '',
-            displayName: data.displayName || cred.user.displayName || 'User',
-            phone: data.phone || (isPhoneNumber ? normalizedPhone : ''),
-            role: data.role || 'customer',
-            createdAt: data.createdAt || new Date().toISOString(),
-            addresses: Array.isArray(data.addresses) ? data.addresses : [],
-            vendorDetails: data.vendorDetails,
-          };
-        } else {
-          loadedProfile = {
+          const loadedProfile: UserProfile = {
             id: cred.user.uid,
             uid: cred.user.uid,
             email: cred.user.email || cleanEmail,
-            displayName: cred.user.displayName || 'User',
-            phone: isPhoneNumber ? normalizedPhone : '',
-            role: 'customer',
-            createdAt: new Date().toISOString(),
-            addresses: [],
+            displayName: firestoreData.displayName || cred.user.displayName || 'User',
+            phone: firestoreData.phone || '',
+            role: effectiveRole,
+            createdAt: firestoreData.createdAt || new Date().toISOString(),
+            addresses: Array.isArray(firestoreData.addresses) ? firestoreData.addresses : [],
+            vendorDetails: firestoreData.vendorDetails,
+            staffDetails: firestoreData.staffDetails,
+            customClaims: claims,
+            authMethod: 'password',
+            emailVerified: cred.user.emailVerified,
           };
-        }
 
-        setUser(loadedProfile);
-        setRole(loadedProfile.role);
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
-        closeAuthModal();
-        return { success: true, profile: loadedProfile };
-      } catch {
-        // Fallback error message
+          hadFirebaseUserRef.current = true;
+          setUser(loadedProfile);
+          setRole(loadedProfile.role);
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
+          closeAuthModal();
+          return { success: true, profile: loadedProfile };
+        } catch (fbErr: any) {
+          firebaseErrorMsg = formatFirebaseAuthError(fbErr);
+        } finally {
+          isVerifyingLoginRef.current = false;
+        }
       }
 
       return {
         success: false,
-        error: serverErrorMessage || 'Invalid credentials. Please verify your email/phone and password, or create an account.',
+        error:
+          firebaseErrorMsg ||
+          serverErrorMessage ||
+          (isPhoneNumber
+            ? 'Mobile number password login requires an active local/server session. Please sign in using your registered email address and password, or Continue with Google.'
+            : 'Invalid credentials. Please verify your email and password, or create an account.'),
       };
     } finally {
       setIsLoading(false);
@@ -686,43 +865,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 1. Authoritative Server Registration Call
-      const serverRes = await fetch('/api/auth/register-customer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: pass,
-          name: name.trim(),
-          phone: phone.trim(),
-        }),
-      });
+      const formattedPhone = formatIndianPhone(phone);
 
-      const serverData = await serverRes.json();
-      if (!serverRes.ok || !serverData.success) {
-        setIsLoading(false);
-        return {
-          success: false,
-          error: serverData.error || 'Registration failed. Please verify your details.',
-        };
+      // 1. Optional Express Server Registration Call (when Express backend is available)
+      let serverRegistered = false;
+      let serverProfile: any = null;
+      try {
+        const serverRes = await fetch('/api/auth/register-customer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: pass,
+            name: name.trim(),
+            phone: formattedPhone,
+          }),
+        });
+        const contentType = serverRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const serverData = await serverRes.json().catch(() => null);
+          if (!serverRes.ok || !serverData?.success) {
+            setIsLoading(false);
+            return {
+              success: false,
+              error: serverData?.error || 'Registration failed. Please verify your details.',
+            };
+          }
+          serverRegistered = true;
+          serverProfile = serverData.profile;
+        }
+      } catch (apiErr: any) {
+        console.warn('Express registration endpoint unavailable, continuing with Firebase Auth:', apiErr?.message);
+      }
+
+      // 2. Authoritative Firebase Authentication + Firestore registration
+      let firebaseUid = serverProfile?.uid || serverProfile?.id || '';
+      let emailVerified = false;
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+        firebaseUid = cred.user.uid;
+        emailVerified = cred.user.emailVerified;
+        await updateProfile(cred.user, { displayName: name.trim() }).catch(() => {});
+      } catch (fbErr: any) {
+        if (!serverRegistered) {
+          return {
+            success: false,
+            error: formatFirebaseAuthError(fbErr),
+          };
+        }
+        console.warn('Firebase registration sync note (handled server-side):', fbErr?.message);
       }
 
       const registeredProfile: UserProfile = {
-        id: serverData.profile?.id || `usr-${Date.now()}`,
-        uid: serverData.profile?.uid || serverData.profile?.id || `usr-${Date.now()}`,
+        id: firebaseUid || `usr-${Date.now()}`,
+        uid: firebaseUid || `usr-${Date.now()}`,
         email: cleanEmail,
         displayName: name.trim(),
-        phone: phone.trim(),
+        phone: formattedPhone,
         role: 'customer',
-        createdAt: serverData.profile?.createdAt || new Date().toISOString(),
+        createdAt: serverProfile?.createdAt || new Date().toISOString(),
         addresses: [],
         authMethod: 'password',
+        emailVerified,
       };
 
-      // 2. Cache in client-side offline store for immediate instant re-login
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), registeredProfile, { merge: true });
+        } catch (fsErr) {
+          console.warn('Failed saving customer profile document in Firestore:', fsErr);
+        }
+        hadFirebaseUserRef.current = true;
+      }
+
+      // 3. Cache in client-side store for quick sync
       try {
         const localList = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
-        const filtered = localList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+        const filtered = localList.filter((u: any) => u.email?.toLowerCase() !== cleanEmail);
         filtered.push({
           ...registeredProfile,
           password: pass,
@@ -732,46 +951,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Local register cache note:', cacheErr);
       }
 
-      // 3. Attempt Firebase background sync if service is enabled
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-        await updateProfile(cred.user, { displayName: name });
-        await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), registeredProfile).catch(() => {});
-      } catch (fbErr: any) {
-        console.warn('Firebase registration sync note (handled server-side):', fbErr.message);
-      }
-
       setUser(registeredProfile);
       setRole('customer');
       localStorage.setItem('pure_sudh_active_user', JSON.stringify(registeredProfile));
       closeAuthModal();
       return { success: true, profile: registeredProfile };
     } catch (err: any) {
-      console.warn('Network registration fallback:', err.message);
-
-      // Offline fallback profile creation
-      const offlineProfile: UserProfile = {
-        id: `usr-${Date.now()}`,
-        uid: `usr-${Date.now()}`,
-        email: cleanEmail,
-        displayName: name || 'Customer',
-        phone,
-        role: 'customer',
-        createdAt: new Date().toISOString(),
-        addresses: [],
+      return {
+        success: false,
+        error: err?.message || 'Registration failed. Please check your details and try again.',
       };
-
-      try {
-        const localList = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
-        localList.push({ ...offlineProfile, password: pass });
-        localStorage.setItem('pure_sudh_registered_users', JSON.stringify(localList));
-      } catch {}
-
-      setUser(offlineProfile);
-      setRole('customer');
-      localStorage.setItem('pure_sudh_active_user', JSON.stringify(offlineProfile));
-      closeAuthModal();
-      return { success: true, profile: offlineProfile };
     } finally {
       setIsLoading(false);
     }
@@ -813,65 +1002,107 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 1. Call Authoritative Vendor Registration Endpoint
-      const serverRes = await fetch('/api/auth/register-vendor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: pass,
-          name: name.trim(),
-          phone: phone.trim(),
-          shopName: shopName.trim(),
-          fssai: fssai || '',
-          gst: gst || '',
-        }),
-      });
+      const formattedVendorPhone = formatIndianPhone(phone);
 
-      const serverData = await serverRes.json();
-      if (!serverRes.ok || !serverData.success) {
-        setIsLoading(false);
-        return {
-          success: false,
-          error: serverData.error || 'Vendor registration failed.',
-        };
+      // 1. Optional Express Server Vendor Registration Endpoint
+      let serverRegistered = false;
+      let serverProfile: any = null;
+      try {
+        const serverRes = await fetch('/api/auth/register-vendor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: pass,
+            name: name.trim(),
+            phone: formattedVendorPhone,
+            shopName: shopName.trim(),
+            fssai: fssai || '',
+            gst: gst || '',
+          }),
+        });
+        const contentType = serverRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const serverData = await serverRes.json().catch(() => null);
+          if (!serverRes.ok || !serverData?.success) {
+            setIsLoading(false);
+            return {
+              success: false,
+              error: serverData?.error || 'Vendor registration failed.',
+            };
+          }
+          serverRegistered = true;
+          serverProfile = serverData.profile;
+        }
+      } catch (apiErr: any) {
+        console.warn('Express vendor registration endpoint unavailable, continuing with Firebase Auth:', apiErr?.message);
+      }
+
+      // 2. Authoritative Firebase Authentication + Firestore vendor creation
+      let firebaseUid = serverProfile?.uid || serverProfile?.id || '';
+      let emailVerified = false;
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+        firebaseUid = cred.user.uid;
+        emailVerified = cred.user.emailVerified;
+        await updateProfile(cred.user, { displayName: name.trim() }).catch(() => {});
+      } catch (fbErr: any) {
+        if (!serverRegistered) {
+          return {
+            success: false,
+            error: formatFirebaseAuthError(fbErr),
+          };
+        }
+        console.warn('Firebase vendor registration sync note (handled server-side):', fbErr?.message);
       }
 
       const vendorProfile: UserProfile = {
-        id: serverData.profile?.id || `usr-vdr-${Date.now()}`,
-        uid: serverData.profile?.uid || serverData.profile?.id || `usr-vdr-${Date.now()}`,
+        id: firebaseUid || `usr-vdr-${Date.now()}`,
+        uid: firebaseUid || `usr-vdr-${Date.now()}`,
         email: cleanEmail,
         displayName: name.trim(),
-        phone: phone.trim(),
+        phone: formattedVendorPhone,
         role: 'vendor',
-        createdAt: serverData.profile?.createdAt || new Date().toISOString(),
+        createdAt: serverProfile?.createdAt || new Date().toISOString(),
         vendorDetails: {
-          shopName,
+          shopName: shopName.trim(),
           fssaiLicense: fssai || '',
           gstNumber: gst || '',
           status: 'pending',
         },
         addresses: [],
         authMethod: 'password',
+        emailVerified,
       };
 
-      // 2. Cache in local offline store
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), vendorProfile, { merge: true });
+          await setDoc(doc(db, 'vendorApplications', auth.currentUser.uid), {
+            userId: auth.currentUser.uid,
+            shopName: shopName.trim(),
+            contactName: name.trim(),
+            phone: formattedVendorPhone,
+            email: cleanEmail,
+            fssaiLicense: fssai || '',
+            gstNumber: gst || '',
+            status: 'pending',
+            submittedAt: new Date().toISOString(),
+          }, { merge: true }).catch(() => {});
+        } catch (fsErr) {
+          console.warn('Failed saving vendor profile document in Firestore:', fsErr);
+        }
+        hadFirebaseUserRef.current = true;
+      }
+
+      // 3. Cache in local store
       try {
         const localList = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
-        const filtered = localList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+        const filtered = localList.filter((u: any) => u.email?.toLowerCase() !== cleanEmail);
         filtered.push({ ...vendorProfile, password: pass });
         localStorage.setItem('pure_sudh_registered_users', JSON.stringify(filtered));
       } catch (cacheErr) {
         console.warn('Vendor local cache note:', cacheErr);
-      }
-
-      // 3. Background sync if Firebase Auth enabled
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-        await updateProfile(cred.user, { displayName: name });
-        await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), vendorProfile).catch(() => {});
-      } catch (fbErr: any) {
-        console.warn('Firebase vendor registration fallback note:', fbErr.message);
       }
 
       setUser(vendorProfile);
@@ -880,36 +1111,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       closeAuthModal();
       return { success: true, profile: vendorProfile };
     } catch (err: any) {
-      console.warn('Network vendor registration fallback:', err.message);
-
-      const fallbackVendor: UserProfile = {
-        id: `usr-vdr-${Date.now()}`,
-        uid: `usr-vdr-${Date.now()}`,
-        email: cleanEmail,
-        displayName: name,
-        phone,
-        role: 'vendor',
-        createdAt: new Date().toISOString(),
-        vendorDetails: {
-          shopName,
-          fssaiLicense: fssai || '',
-          gstNumber: gst || '',
-          status: 'pending',
-        },
-        addresses: [],
+      return {
+        success: false,
+        error: err?.message || 'Vendor registration failed. Please check your details and try again.',
       };
-
-      try {
-        const localList = JSON.parse(localStorage.getItem('pure_sudh_registered_users') || '[]');
-        localList.push({ ...fallbackVendor, password: pass });
-        localStorage.setItem('pure_sudh_registered_users', JSON.stringify(localList));
-      } catch {}
-
-      setUser(fallbackVendor);
-      setRole('vendor');
-      localStorage.setItem('pure_sudh_active_user', JSON.stringify(fallbackVendor));
-      closeAuthModal();
-      return { success: true, profile: fallbackVendor };
     } finally {
       setIsLoading(false);
     }
@@ -917,13 +1122,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Forgot Password Email Dispatch
+   * Strictly validates email syntax, disposable domain blocking, server account registration,
+   * and portal RBAC before triggering password reset.
    */
   const sendPasswordReset = async (
-    email: string
+    email: string,
+    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor'
   ): Promise<{ success: boolean; message: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
       throw new Error('Please provide an email address.');
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
+    }
+
+    const emailCheck = isTemporaryEmail(cleanEmail);
+    if (emailCheck.isTemporary) {
+      throw new Error(emailCheck.reason || 'Temporary or disposable email addresses are not permitted.');
+    }
+
+    if (
+      cleanEmail === 'enterpriseadministrationconsole@gmail.com' ||
+      cleanEmail === 'admin@puresudh.com'
+    ) {
+      throw new Error('No registered account found with this email address.');
+    }
+
+    const portal = portalOverride || 'customer';
+
+    // Authoritative server verification when Express backend is running
+    try {
+      const valRes = await fetch('/api/auth/forgot-password-validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, targetPortal: portal }),
+      });
+      const contentType = valRes.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const valData = await valRes.json().catch(() => null);
+        if (!valRes.ok || !valData?.success) {
+          throw new Error(valData?.error || 'No registered account found with this email address.');
+        }
+      }
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+        throw err;
+      }
     }
 
     try {
@@ -933,12 +1180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         message: `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete reset.`,
       };
     } catch (err: any) {
-      console.warn('Send password reset fallback:', err);
-      // Helpful fallback message for offline or demo testing
-      return {
-        success: true,
-        message: `Password reset instructions have been triggered for ${cleanEmail}. Link sent!`,
-      };
+      throw new Error(formatFirebaseAuthError(err));
     }
   };
 
@@ -973,8 +1215,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /**
    * Google Sign-In Architecture
    */
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  const loginWithGoogle = async (
+    target?: 'customer' | 'admin' | 'staff' | 'vendor'
+  ): Promise<{ success: boolean; error?: string; profile?: UserProfile }> => {
     setIsLoading(true);
+    isVerifyingLoginRef.current = true;
     try {
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
@@ -985,63 +1230,149 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cred.user.email) {
         const check = isTemporaryEmail(cred.user.email);
         if (check.isTemporary) {
-          await signOut(auth);
+          await signOut(auth).catch(() => {});
           return { success: false, error: 'Temporary or disposable email addresses are not permitted.' };
         }
       }
 
-      await syncFirebaseUser(cred.user);
+      const [claims, hasAdminDoc] = await Promise.all([
+        getCustomClaims(cred.user),
+        checkFirestoreAdminDoc(cred.user.uid),
+      ]);
+
+      let firestoreData: Partial<UserProfile> = {};
+      try {
+        const snap = await Promise.race([
+          getDoc(doc(db, COLLECTIONS.USERS, cred.user.uid)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+        if (snap && snap.exists()) {
+          firestoreData = snap.data() as Partial<UserProfile>;
+        }
+      } catch {}
+
+      const effectiveRole = resolveEffectiveRole(
+        claims,
+        firestoreData.role,
+        cred.user.email,
+        hasAdminDoc
+      );
+
+      if (target && !verifyRoleAccess(effectiveRole, target)) {
+        await signOut(auth).catch(() => {});
+        return {
+          success: false,
+          error: `Access Denied: Google account (${cred.user.email}) has role '${effectiveRole}' and does not have ${target.toUpperCase()} privileges.`,
+        };
+      }
+
+      hadFirebaseUserRef.current = true;
+      const syncedProfile = await syncFirebaseUser(cred.user);
       closeAuthModal();
-      return { success: true };
+      return { success: true, profile: syncedProfile || undefined };
     } catch (err: any) {
       console.warn('Google sign-in attempt notice:', err.message);
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-allowed' || err.code === 'auth/unauthorized-domain') {
-        // Fallback for iframe preview environment: log in as project owner aanews70@gmail.com
-        const ownerProfile: UserProfile = {
-          id: 'usr-owner-aanews70',
-          uid: 'usr-owner-aanews70',
-          email: 'aanews70@gmail.com',
-          displayName: 'Platform Owner (aanews70@gmail.com)',
-          phone: '+91 94310 12801',
-          role: 'admin',
-          createdAt: new Date().toISOString(),
-          addresses: [],
-          customClaims: { role: 'admin', admin: true },
-          authMethod: 'google',
-          emailVerified: true,
+      if (err.code === 'auth/popup-blocked') {
+        return {
+          success: false,
+          error: 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.',
         };
-        setUser(ownerProfile);
-        setRole('admin');
-        closeAuthModal();
-        return { success: true };
       }
-      let errorMsg = err.message || 'Google sign-in is ready. Ensure popups are allowed and Google provider is enabled.';
+      if (err.code === 'auth/unauthorized-domain') {
+        return {
+          success: false,
+          error: formatFirebaseAuthError(err),
+        };
+      }
+      if (err.code === 'auth/operation-not-allowed') {
+        return {
+          success: false,
+          error: 'Google sign-in is disabled in Firebase Console (auth/operation-not-allowed). Enable Google provider under Authentication → Sign-in method.',
+        };
+      }
+      let errorMsg = formatFirebaseAuthError(err);
       if (err.code === 'auth/popup-closed-by-user') {
         errorMsg = 'Sign in cancelled by closing popup.';
       }
       return { success: false, error: errorMsg };
     } finally {
+      isVerifyingLoginRef.current = false;
       setIsLoading(false);
     }
   };
 
   /**
-   * Logout
+   * Logout - Immediately terminates session, purges storage tokens, resets user state
    */
   const logout = async () => {
+    isLoggingOutRef.current = true;
+    hadFirebaseUserRef.current = false;
+
+    // 1. Immediately terminate active user state so UI updates synchronously
+    setUser(null);
+    setRole('customer');
+    setIsAuthModalOpen(false);
+
+    // 2. Clear user session and authentication tokens from LocalStorage and SessionStorage
+    try {
+      localStorage.removeItem('pure_sudh_active_user');
+      sessionStorage.removeItem('pure_sudh_active_user');
+
+      // Purge Firebase auth tokens and temporary user session tokens
+      const localKeysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith('firebase:authUser') ||
+            k.startsWith('pure_sudh_active') ||
+            k.startsWith('pure_sudh_session') ||
+            k.startsWith('pure_sudh_token'))
+        ) {
+          localKeysToRemove.push(k);
+        }
+      }
+      localKeysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      const sessionKeysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (
+          k &&
+          (k.startsWith('firebase:authUser') ||
+            k.startsWith('pure_sudh_'))
+        ) {
+          sessionKeysToRemove.push(k);
+        }
+      }
+      sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) {
+      console.warn('Storage cleanup notice on logout:', e);
+    }
+
+    // 3. Dispatch an authoritative event so all components and listeners synchronize immediately
+    try {
+      window.dispatchEvent(new CustomEvent('pure_sudh_auth_change', { detail: { user: null } }));
+    } catch {}
+
+    // 4. Terminate Firebase Authentication session
     try {
       await signOut(auth);
     } catch (e) {
       console.warn('Firebase signout note:', e);
+    } finally {
+      isLoggingOutRef.current = false;
     }
-    setUser(null);
-    setRole('customer');
   };
 
   /**
-   * Instant Role Switcher for Demo and Testing
+   * Role Switcher (strictly restricted to already-authenticated admins; never elevates unauthenticated/non-admin users)
    */
   const switchRole = (newRole: UserRole) => {
+    if (!user || user.role !== 'admin') {
+      console.warn('Unauthorized role switch attempt blocked.');
+      return;
+    }
     setRole(newRole);
     if (newRole === 'admin') {
       setUser(defaultAdminUser);
@@ -1081,18 +1412,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }): Promise<{ success: boolean; error?: string }> => {
     if (!user) return { success: false, error: 'Not authenticated' };
 
+    let normalizedPhoneUpdate = updates.phone;
     if (updates.phone) {
       const phoneCheck = isTemporaryOrFakePhone(updates.phone);
       if (phoneCheck.isFake) {
         return { success: false, error: phoneCheck.reason || 'Invalid or temporary mobile number.' };
       }
+      normalizedPhoneUpdate = formatIndianPhone(updates.phone);
     }
 
     const photo = updates.photoURL || updates.avatarUrl;
     const updatedUser: UserProfile = {
       ...user,
       displayName: updates.displayName !== undefined ? updates.displayName : user.displayName,
-      phone: updates.phone !== undefined ? updates.phone : user.phone,
+      phone: normalizedPhoneUpdate !== undefined ? normalizedPhoneUpdate : user.phone,
       photoURL: photo !== undefined ? photo : user.photoURL,
       avatarUrl: photo !== undefined ? photo : user.avatarUrl,
     };
@@ -1109,7 +1442,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userRef = doc(db, COLLECTIONS.USERS, auth.currentUser.uid);
         await updateDoc(userRef, {
           ...(updates.displayName ? { displayName: updates.displayName } : {}),
-          ...(updates.phone ? { phone: updates.phone } : {}),
+          ...(normalizedPhoneUpdate ? { phone: normalizedPhoneUpdate } : {}),
           ...(photo ? { photoURL: photo, avatarUrl: photo } : {}),
           updatedAt: new Date().toISOString(),
         });
@@ -1129,6 +1462,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentAddresses = user.addresses || [];
     const newAddress: Address = {
       ...addrData,
+      phone: addrData.phone ? formatIndianPhone(addrData.phone) : '',
       id: `addr-${Date.now()}`,
       isDefault: currentAddresses.length === 0 ? true : !!addrData.isDefault,
     };

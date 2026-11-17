@@ -16,6 +16,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { AddressLocationPickerModal } from '../maps/AddressLocationPickerModal';
 import { PATNA_PINCODES } from '../../utils/deliveryRules';
+import {
+  isTemporaryOrFakePhone,
+  normalizeIndianPhone10,
+  sanitizePhoneInput10,
+  formatIndianPhone,
+} from '../../validation';
 
 interface AccountAddressesTabProps {
   addresses: Address[];
@@ -48,7 +54,7 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
 
   const resetForm = () => {
     setName(user?.displayName || '');
-    setPhone(user?.phone || '');
+    setPhone(normalizeIndianPhone10(user?.phone || ''));
     setAddressLine('');
     setLandmark('');
     setCity('Patna');
@@ -68,7 +74,7 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
   const openEditModal = (addr: Address) => {
     setEditingId(addr.id);
     setName(addr.name || user?.displayName || '');
-    setPhone(addr.phone || '');
+    setPhone(normalizeIndianPhone10(addr.phone || ''));
     setAddressLine(addr.addressLine || addr.address || '');
     setLandmark(addr.landmark || '');
     setCity(addr.city || 'Patna');
@@ -106,8 +112,9 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
       return;
     }
 
-    if (phone.replace(/\D/g, '').length !== 10) {
-      setFormError('Please enter a valid 10-digit mobile number.');
+    const phoneCheck = isTemporaryOrFakePhone(phone);
+    if (phoneCheck.isFake) {
+      setFormError(phoneCheck.reason || 'Please enter a valid 10-digit Indian mobile number (+91).');
       return;
     }
 
@@ -118,7 +125,7 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
       const newAddress: Address = {
         id: editingId || `addr-${Date.now()}`,
         name: name.trim(),
-        phone: phone.trim(),
+        phone: formatIndianPhone(phone),
         addressLine: addressLine.trim(),
         address: addressLine.trim(),
         landmark: landmark.trim(),
@@ -264,7 +271,7 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
                   {addr.city || 'Patna'}, {addr.state || 'Bihar'} - <span className="font-bold">{addr.pincode}</span>
                 </p>
 
-                <p className="text-xs text-stone-500">📞 +91 {addr.phone}</p>
+                <p className="text-xs text-stone-500">📞 {formatIndianPhone(addr.phone)}</p>
               </div>
 
               {/* Actions */}
@@ -323,16 +330,22 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Mobile Number *</label>
-                  <input
-                    type="tel"
-                    value={phone ?? ''}
-                    onChange={(e) => setPhone(e.target.value)}
-                    required
-                    maxLength={10}
-                    placeholder="10-digit mobile"
-                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-amber-500"
-                  />
+                  <label className="block font-semibold text-stone-700 mb-1">Mobile Number (India +91) *</label>
+                  <div className="flex items-stretch">
+                    <span className="inline-flex items-center px-2.5 bg-stone-100 border border-r-0 border-stone-300 rounded-l-xl text-xs font-bold text-stone-700 select-none">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={phone ?? ''}
+                      onChange={(e) => setPhone(sanitizePhoneInput10(e.target.value))}
+                      required
+                      maxLength={10}
+                      placeholder="10-digit mobile"
+                      className="w-full p-2.5 rounded-r-xl border border-stone-300 focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
                 </div>
               </div>
 

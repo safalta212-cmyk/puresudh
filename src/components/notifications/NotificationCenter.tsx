@@ -60,10 +60,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     };
   }, [isOpen]);
 
-  // Load and listen to notifications
+  // Load and listen to notifications (authenticated user only)
   useEffect(() => {
-    const userId = user?.uid || 'cust-demo-user';
-    
+    if (!user?.uid) {
+      setNotifications([]);
+      setIsOpen(false);
+      return;
+    }
+
+    const userId = user.uid;
+
     // Initial fetch
     fetchCustomerNotifications(userId).then(setNotifications);
 
@@ -78,7 +84,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     }
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

@@ -299,33 +299,82 @@ export function isTemporaryEmail(email: string): { isTemporary: boolean; reason?
 }
 
 /**
- * Validate that a phone number is not a fake, dummy, sequential, or temporary virtual number
+ * Extract the 10-digit Indian mobile core by stripping optional +91 / 0091 / 0 country prefixes.
+ */
+export function normalizeIndianPhone10(phone: string): string {
+  if (!phone || typeof phone !== 'string') return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('0091') && digits.length >= 14) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith('91') && digits.length >= 12) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith('0') && digits.length === 11) {
+    digits = digits.slice(1);
+  }
+  return digits;
+}
+
+/**
+ * Filter live input inside a 10-digit (+91 prefixed) mobile field.
+ * Allows users to type 10 digits or paste +91 / 091 / 0 prefixed numbers smoothly.
+ */
+export function sanitizePhoneInput10(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('0091') && digits.length > 10) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith('91') && digits.length > 10) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith('0') && digits.length > 10) {
+    digits = digits.slice(1);
+  }
+  return digits.slice(0, 10);
+}
+
+/**
+ * Format a valid Indian mobile number into canonical "+91 XXXXXXXXXX" display/storage form.
+ * Never duplicates +91.
+ */
+export function formatIndianPhone(phone: string): string {
+  if (!phone || typeof phone !== 'string') return '';
+  const clean10 = normalizeIndianPhone10(phone);
+  if (clean10.length === 10) {
+    return `+91 ${clean10}`;
+  }
+  return phone.trim();
+}
+
+/**
+ * Validate that a phone number is a genuine 10-digit Indian mobile number (+91)
  */
 export function isTemporaryOrFakePhone(phone: string): { isFake: boolean; reason?: string } {
   if (!phone || typeof phone !== 'string') {
     return { isFake: true, reason: 'Mobile number is required.' };
   }
 
-  // Normalize: remove country code (+91) and all non-digit characters
-  let clean = phone.replace(/\D/g, '');
-  if (clean.startsWith('91') && clean.length === 12) {
-    clean = clean.slice(2);
-  } else if (clean.startsWith('0') && clean.length === 11) {
-    clean = clean.slice(1);
+  const trimmed = phone.trim();
+  if (trimmed.startsWith('+') && !/^\+91[\s-]*/.test(trimmed)) {
+    return {
+      isFake: true,
+      reason: 'Only Indian mobile numbers (+91) with 10 digits are accepted.',
+    };
   }
+
+  // Normalize: remove country code (+91 / 0091 / 0) and all non-digit characters
+  const clean = normalizeIndianPhone10(trimmed);
 
   // 1. Length & Indian mobile starting digit requirement (starts with 6, 7, 8, or 9)
   if (clean.length !== 10) {
     return {
       isFake: true,
-      reason: 'Please enter a genuine 10-digit Indian mobile number.',
+      reason: 'Please enter a valid 10-digit Indian mobile number (+91).',
     };
   }
 
   if (!/^[6-9]/.test(clean)) {
     return {
       isFake: true,
-      reason: 'Mobile numbers in India must start with 6, 7, 8, or 9.',
+      reason: 'Mobile numbers in India (+91) must start with 6, 7, 8, or 9.',
     };
   }
 
@@ -338,7 +387,7 @@ export function isTemporaryOrFakePhone(phone: string): { isFake: boolean; reason
     };
   }
 
-  // 3. Sequential numbers
+  // 3. Sequential / obvious placeholder numbers
   const sequentialPatterns = [
     '1234567890',
     '0123456789',
@@ -361,9 +410,9 @@ export function isTemporaryOrFakePhone(phone: string): { isFake: boolean; reason
     };
   }
 
-  // 4. Low entropy check: a legitimate 10-digit mobile number must contain at least 4 unique digits
+  // 4. Low entropy check: block 1-2 unique digit dummy patterns (e.g. 9999988888, 9797979797)
   const uniqueDigits = new Set(clean.split(''));
-  if (uniqueDigits.size < 4) {
+  if (uniqueDigits.size < 3) {
     return {
       isFake: true,
       reason: 'The phone number entered appears to be a virtual or test number. Please enter a valid personal number.',

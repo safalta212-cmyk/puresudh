@@ -19,7 +19,13 @@ import { registerNewVendor } from '../../services/vendorMarketplaceService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { MediaUploader } from '../common/MediaUploader';
-import { isTemporaryEmail, isTemporaryOrFakePhone } from '../../validation';
+import {
+  isTemporaryEmail,
+  isTemporaryOrFakePhone,
+  normalizeIndianPhone10,
+  sanitizePhoneInput10,
+  formatIndianPhone,
+} from '../../validation';
 
 interface VendorRegisterPageProps {
   onBackToStore: () => void;
@@ -43,7 +49,7 @@ export const VendorRegisterPage: React.FC<VendorRegisterPageProps> = ({
   const [businessName, setBusinessName] = useState('');
   const [ownerName, setOwnerName] = useState(user?.displayName || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const [phone, setPhone] = useState(() => normalizeIndianPhone10(user?.phone || ''));
   const [description, setDescription] = useState('');
   const [logo, setLogo] = useState('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80');
   const [coverImage, setCoverImage] = useState('https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=1200&q=80');
@@ -56,7 +62,7 @@ export const VendorRegisterPage: React.FC<VendorRegisterPageProps> = ({
     if (user) {
       if (user.displayName && !ownerName) setOwnerName(user.displayName);
       if (user.email && !email) setEmail(user.email);
-      if (user.phone && !phone) setPhone(user.phone);
+      if (user.phone && !phone) setPhone(normalizeIndianPhone10(user.phone));
     }
   }, [user]);
 
@@ -98,7 +104,7 @@ export const VendorRegisterPage: React.FC<VendorRegisterPageProps> = ({
         businessName,
         ownerName,
         email,
-        phone,
+        phone: formatIndianPhone(phone),
         description: description || `${businessName} creates fresh traditional recipes with pure desi ingredients.`,
         logo,
         coverImage,
@@ -302,15 +308,22 @@ export const VendorRegisterPage: React.FC<VendorRegisterPageProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Phone *</label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="10-digit mobile number"
-                    value={phone ?? ''}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 text-xs"
-                  />
+                  <label className="block font-semibold text-stone-700 mb-1">Phone (India +91) *</label>
+                  <div className="flex items-stretch">
+                    <span className="inline-flex items-center px-2.5 bg-stone-100 border border-r-0 border-stone-300 rounded-l-xl text-xs font-bold text-stone-700 select-none">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      required
+                      placeholder="10-digit mobile number"
+                      value={phone ?? ''}
+                      onChange={(e) => setPhone(sanitizePhoneInput10(e.target.value))}
+                      className="w-full p-2.5 rounded-r-xl border border-stone-300 text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -19,8 +19,15 @@ import {
   verifyPaymentOnServer,
   submitOrderWithIdempotency,
 } from '../../services/paymentService';
+import { validateCartWithServer, ServerValidationResponse } from '../../services/checkoutValidator';
 import { notificationService } from '../../services/notifications/notificationService';
-import { isTemporaryEmail, isTemporaryOrFakePhone } from '../../validation';
+import {
+  isTemporaryEmail,
+  isTemporaryOrFakePhone,
+  normalizeIndianPhone10,
+  sanitizePhoneInput10,
+  formatIndianPhone,
+} from '../../validation';
 import {
   Lock,
   User,
@@ -79,7 +86,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Form State: Address & Customer Details
   const [name, setName] = useState(user?.displayName || '');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const [phone, setPhone] = useState(() => normalizeIndianPhone10(user?.phone || ''));
   const [pincode, setAddressPincode] = useState(deliveryPincode || '800001');
   const [addressLine, setAddressLine] = useState('');
   const [landmark, setLandmark] = useState('');
@@ -150,7 +157,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   useEffect(() => {
     if (user) {
       if (user.displayName && !name) setName(user.displayName);
-      if (user.phone && !phone) setPhone(user.phone);
+      if (user.phone && !phone) setPhone(normalizeIndianPhone10(user.phone));
     }
   }, [user]);
 
@@ -196,7 +203,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setAuthError(phoneCheck.reason || 'Please enter a genuine 10-digit mobile number.');
       return;
     }
-    const cleanPhone = authPhone.replace(/\D/g, '');
+    const cleanPhone = formatIndianPhone(authPhone);
     if (authPassword.length < 6) {
       setAuthError('Password must be at least 6 characters long.');
       return;
@@ -226,7 +233,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, [pincode, setPincode]);
 
   // Server Price, Inventory & Delivery Verification Function
-  const runAuthoritativeServerVerification = async (customPincode?: string, customCoupon?: string) => {
+  const runAuthoritativeServerVerification = async (
+    customPincode?: string,
+    customCoupon?: string
+  ): Promise<ServerValidationResponse | null> => {
     if (!items || items.length === 0) {
       setServerVerification(null);
       return null;
@@ -234,52 +244,56 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
     setIsValidating(true);
     try {
-      const payload = {
-        items: items.map((i) => ({
-          productId: i.product.id,
-          quantity: i.quantity,
-          weight: i.selectedWeight || i.product.weight,
-        })),
-        pincode: customPincode !== undefined ? customPincode : pincode,
-        couponCode: customCoupon !== undefined ? customCoupon : couponCode,
-      };
-
-      const res = await fetch('/api/orders/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.valid) {
-        setServerVerification(data);
-        return data;
-      } else {
-        showToast(data.error || 'Validation failed on server', 'error');
-        return null;
-      }
+      const targetPincode = customPincode !== undefined ? customPincode : pincode;
+      const targetCoupon = customCoupon !== undefined ? customCoupon : couponCode;
+      const result = await validateCartWithServer(items, targetPincode, targetCoupon);
+      setServerVerification(result);
+      return result;
     } catch (err: any) {
       console.warn('Server verification error:', err);
-      return null;
+      const fallbackErr: ServerValidationResponse = {
+        valid: false,
+        error: err?.message || 'Unable to verify cart and delivery details.',
+        verifiedItems: [],
+        calculatedSubtotal: 0,
+        deliveryCharge: 0,
+        discount: 0,
+        grandTotal: 0,
+        estimatedDeliveryTime: '',
+      };
+      setServerVerification(fallbackErr);
+      return fallbackErr;
     } finally {
       setIsValidating(false);
     }
   };
 
-  // Re-verify on items or coupon changes
+  // Re-verify on items, coupon, or valid 6-digit pincode changes
   useEffect(() => {
+    if (pincode && pincode.length > 0 && pincode.length < 6) {
+      return;
+    }
     runAuthoritativeServerVerification();
-  }, [items, couponCode]);
+  }, [items, couponCode, pincode]);
 
-  // Derived totals strictly preferring authoritative server calculations
-  const authoritativeSubtotal = serverVerification?.calculatedSubtotal ?? clientSubtotal;
-  const authoritativeDeliveryCharge = serverVerification?.deliveryCharge ?? baseDeliveryCharge;
-  const authoritativeDiscount = serverVerification?.discount ?? clientDiscount;
-  const authoritativeGrandTotal =
-    serverVerification?.grandTotal ??
-    Math.max(0, authoritativeSubtotal + authoritativeDeliveryCharge - authoritativeDiscount);
+  // Derived totals strictly preferring authoritative server calculations when valid
+  const isVerifiedValid = Boolean(serverVerification?.valid);
+  const authoritativeSubtotal = isVerifiedValid
+    ? serverVerification!.calculatedSubtotal
+    : clientSubtotal;
+  const authoritativeDeliveryCharge = isVerifiedValid
+    ? serverVerification!.deliveryCharge
+    : baseDeliveryCharge;
+  const authoritativeDiscount = isVerifiedValid
+    ? serverVerification!.discount
+    : clientDiscount;
+  const authoritativeGrandTotal = isVerifiedValid
+    ? serverVerification!.grandTotal
+    : Math.max(0, authoritativeSubtotal + authoritativeDeliveryCharge - authoritativeDiscount);
   const authoritativeETA =
-    serverVerification?.estimatedDeliveryTime || estimatedDeliveryTime || '25-35 mins';
+    (isVerifiedValid ? serverVerification?.estimatedDeliveryTime : '') ||
+    estimatedDeliveryTime ||
+    '25-35 mins';
 
   // Step progression helper
   const goToStep = (step: CheckoutStepType) => {
@@ -335,7 +349,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       // 1. Mandatory Re-verification on server before any transaction is executed
       const verified = await runAuthoritativeServerVerification();
       if (!verified || !verified.valid) {
-        showToast('Cart or pricing verification failed. Please review your order.', 'error');
+        showToast(
+          verified?.error || 'Cart or pricing verification failed. Please review your order.',
+          'error'
+        );
         setIsPlacingOrder(false);
         return;
       }
@@ -355,7 +372,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             provider: selectedPaymentMethod,
             customerName: name || user.displayName || 'Customer',
             customerEmail: user.email,
-            customerPhone: phone || user.phone || '',
+            customerPhone: formatIndianPhone(phone || user.phone || ''),
           });
 
           gatewayOrderId = gatewayOrder.gatewayOrderId;
@@ -400,7 +417,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerId: user.uid,
         customerName: name || user.displayName || 'Customer',
         customerEmail: user.email,
-        customerPhone: phone || user.phone || '',
+        customerPhone: formatIndianPhone(phone || user.phone || ''),
         items: items.map((i) => ({
           productId: i.product.id,
           quantity: i.quantity,
@@ -408,7 +425,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         })),
         deliveryAddress: {
           name,
-          phone,
+          phone: formatIndianPhone(phone || user.phone || ''),
           pincode,
           addressLine,
           landmark,
@@ -422,6 +439,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         gatewayOrderId,
         couponCode: couponCode || undefined,
         notes: [deliveryInstruction, specialNotes].filter(Boolean).join(' • '),
+        verifiedSummary: verified,
       };
 
       const result = await submitOrderWithIdempotency(orderPayload);
@@ -624,19 +642,26 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                      Mobile Number
+                      Mobile Number (India +91)
                     </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
-                      <input
-                        id="checkout-auth-reg-phone"
-                        type="tel"
-                        required
-                        value={authPhone ?? ''}
-                        onChange={(e) => setAuthPhone(e.target.value)}
-                        placeholder="10-digit mobile number"
-                        className="w-full pl-10 pr-3 py-2 rounded-xl border border-stone-200 bg-stone-50/80 focus:bg-white text-xs sm:text-sm focus:ring-2 focus:ring-amber-600 focus:outline-none transition"
-                      />
+                    <div className="flex items-stretch">
+                      <span className="inline-flex items-center px-3 bg-stone-100 border border-r-0 border-stone-200 rounded-l-xl text-xs sm:text-sm font-bold text-stone-700 select-none">
+                        +91
+                      </span>
+                      <div className="relative flex-1">
+                        <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+                        <input
+                          id="checkout-auth-reg-phone"
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          required
+                          value={authPhone ?? ''}
+                          onChange={(e) => setAuthPhone(sanitizePhoneInput10(e.target.value))}
+                          placeholder="10-digit mobile number"
+                          className="w-full pl-9 pr-3 py-2 rounded-r-xl border border-stone-200 bg-stone-50/80 focus:bg-white text-xs sm:text-sm focus:ring-2 focus:ring-amber-600 focus:outline-none transition"
+                        />
+                      </div>
                     </div>
                   </div>
 

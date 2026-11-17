@@ -40,7 +40,8 @@ export async function auditAndPurgeTemporaryAccounts(): Promise<AuditReport> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    if (srvRes.ok) {
+    const contentType = srvRes.headers.get('content-type') || '';
+    if (srvRes.ok && contentType.includes('application/json')) {
       const data = await srvRes.json();
       if (Array.isArray(data.purgedAccounts)) {
         purged.push(...data.purgedAccounts);

@@ -191,7 +191,8 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
               preset: activePreset,
             }),
           });
-          if (serverRes.ok) {
+          const serverCt = serverRes.headers.get('content-type') || '';
+          if (serverRes.ok && serverCt.includes('application/json')) {
             const data = await serverRes.json();
             if (data && data.url) {
               finalUrl = data.url;

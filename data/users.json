@@ -1,27 +1,9 @@
 [
   {
-    "id": "usr-admin-enterprise",
-    "email": "EnterpriseAdministrationConsole@gmail.com",
-    "passwordHash": "29e2786ec358f1f0afece7319a1c8cce1f58714ef90d75de80a0d687a3d177bb",
-    "name": "Enterprise Administration Console",
-    "phone": "+91 94310 12801",
-    "role": "admin",
-    "createdAt": "2026-01-01T00:00:00.000Z"
-  },
-  {
     "id": "usr-admin-master",
     "email": "aanews70@gmail.com",
-    "passwordHash": "49486a048abcfe6e5654bf6891c94a832dae77ec776c9f64bada78fd3137c9d1",
-    "name": "Platform Owner",
-    "phone": "+91 94310 12801",
-    "role": "admin",
-    "createdAt": "2026-01-01T00:00:00.000Z"
-  },
-  {
-    "id": "usr-admin-demo",
-    "email": "admin@puresudh.com",
-    "passwordHash": "49486a048abcfe6e5654bf6891c94a832dae77ec776c9f64bada78fd3137c9d1",
-    "name": "Admin Desk",
+    "passwordHash": "69617a66446397620dab38d811cfd474298eb10a729d221571cb497d21fd4bbd",
+    "name": "Platform Administrator",
     "phone": "+91 94310 12801",
     "role": "admin",
     "createdAt": "2026-01-01T00:00:00.000Z"

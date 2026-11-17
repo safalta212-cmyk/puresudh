@@ -26,6 +26,7 @@ import {
   User,
   Wallet,
   Megaphone,
+  LogOut,
 } from 'lucide-react';
 import { VendorAdvertisingWalletTab } from './tabs/VendorAdvertisingWalletTab';
 import { VendorAdvertisingCampaignsTab } from './tabs/VendorAdvertisingCampaignsTab';
@@ -47,6 +48,12 @@ import {
 import { BRAND } from '../../constants';
 import { formatCurrency, formatDate } from '../../utilities';
 import { MediaUploader } from '../common/MediaUploader';
+import {
+  isTemporaryOrFakePhone,
+  normalizeIndianPhone10,
+  sanitizePhoneInput10,
+  formatIndianPhone,
+} from '../../validation';
 import {
   fetchAllVendors,
   fetchVendorProducts,
@@ -86,7 +93,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   onOpenProductDetails,
   onOpenRegisterNewVendor,
 }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -219,7 +226,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       setProfileForm({
         tagline: currentVendor.tagline || '',
         description: currentVendor.description || '',
-        phone: currentVendor.phone || '',
+        phone: normalizeIndianPhone10(currentVendor.phone || ''),
         email: currentVendor.email || '',
         address: currentVendor.address || '',
         city: currentVendor.city || '',
@@ -234,8 +241,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentVendor) return;
+    if (profileForm.phone.trim()) {
+      const phoneCheck = isTemporaryOrFakePhone(profileForm.phone);
+      if (phoneCheck.isFake) {
+        showToast(phoneCheck.reason || 'Please enter a valid 10-digit Indian mobile number (+91).', 'error');
+        return;
+      }
+    }
     try {
-      const res = await updateVendorProfile(currentVendor.id, profileForm);
+      const res = await updateVendorProfile(currentVendor.id, {
+        ...profileForm,
+        phone: profileForm.phone.trim() ? formatIndianPhone(profileForm.phone) : '',
+      });
       if (res.success) {
         showToast('Vendor profile updated successfully', 'success');
         setIsEditingProfile(false);
@@ -462,6 +479,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Back to Store
+            </button>
+            <button
+              id="vendor-logout-btn"
+              type="button"
+              onClick={async () => {
+                await logout();
+                onBackToStore();
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-rose-900/60 text-stone-300 hover:text-rose-200 font-medium transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
             </button>
           </div>
         </div>
@@ -1676,7 +1705,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                     </div>
                     <div>
                       <span className="text-stone-400 block text-[10px] uppercase font-semibold">Phone</span>
-                      <span className="text-stone-800 font-medium">{currentVendor.phone}</span>
+                      <span className="text-stone-800 font-medium">{formatIndianPhone(currentVendor.phone)}</span>
                     </div>
                     <div>
                       <span className="text-stone-400 block text-[10px] uppercase font-semibold">Email</span>
@@ -1746,13 +1775,21 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-semibold text-stone-700 mb-1">Contact Phone</label>
-                    <input
-                      type="tel"
-                      value={profileForm.phone ?? ''}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                      className="w-full p-2.5 rounded-xl border border-stone-300"
-                    />
+                    <label className="block font-semibold text-stone-700 mb-1">Contact Phone (India +91)</label>
+                    <div className="flex items-stretch">
+                      <span className="inline-flex items-center px-2.5 bg-stone-100 border border-r-0 border-stone-300 rounded-l-xl text-xs font-bold text-stone-700 select-none">
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
+                        placeholder="10-digit mobile number"
+                        value={profileForm.phone ?? ''}
+                        onChange={(e) => setProfileForm({ ...profileForm, phone: sanitizePhoneInput10(e.target.value) })}
+                        className="w-full p-2.5 rounded-r-xl border border-stone-300"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block font-semibold text-stone-700 mb-1">Contact Email</label>

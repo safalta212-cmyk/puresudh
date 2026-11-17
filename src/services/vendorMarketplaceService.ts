@@ -344,7 +344,7 @@ export async function adminUpdateVendorVerification(
     v.verificationInformation = {
       ...v.verificationInformation,
       verifiedAt: new Date().toISOString(),
-      verifiedBy: auth.currentUser?.email || 'admin@puresudh.com',
+      verifiedBy: auth.currentUser?.email || 'aanews70@gmail.com',
       notes: notes || (verificationStatus === 'VERIFIED' ? 'Approved by Admin' : 'Rejected by Admin'),
     };
     v.updatedAt = new Date().toISOString();
@@ -357,7 +357,7 @@ export async function adminUpdateVendorVerification(
       status: verificationStatus === 'VERIFIED' ? 'ACTIVE' : (v?.status || 'PENDING'),
       verificationInformation: {
         verifiedAt: new Date().toISOString(),
-        verifiedBy: auth.currentUser?.email || 'admin@puresudh.com',
+        verifiedBy: auth.currentUser?.email || 'aanews70@gmail.com',
         notes: notes || '',
       },
       updatedAt: new Date().toISOString(),
@@ -571,7 +571,7 @@ export async function fetchVendorOrders(vendorId: string): Promise<VendorOrder[]
   // Query authoritative server endpoint
   try {
     const res = await fetch(`/api/vendor-orders?vendorId=${encodeURIComponent(vendorId)}`);
-    if (res.ok) {
+    if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         return data;
@@ -601,14 +601,14 @@ export async function fetchVendorOrders(vendorId: string): Promise<VendorOrder[]
   // If empty, generate simulated initial fulfillment orders from local orders containing this vendor's items
   if (scoped.length === 0) {
     const allStoreOrders = getLocal<Order[]>('pure_sudh_orders', []);
-    const matching = allStoreOrders.filter((o) => o.vendorId === vendorId || o.items.some((i) => i.productId.includes(vendorId) || vendorId === 'vendor-1'));
+    const matching = allStoreOrders.filter((o) => o.vendorId === vendorId || (o.items || []).some((i) => i.productId.includes(vendorId) || vendorId === 'vendor-1'));
     if (matching.length > 0) {
       const generated: VendorOrder[] = matching.map((o) => ({
         id: `vord-${o.id}-${vendorId}`,
         orderId: o.id,
         orderNumber: o.orderNumber,
         vendorId,
-        items: o.items.map((it: any) => ({
+        items: (o.items || []).map((it: any) => ({
           id: it.id || it.productId,
           orderId: o.id,
           productId: it.productId,
@@ -999,16 +999,24 @@ function getClientAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+async function parseJsonIfOk(res: Response): Promise<any | null> {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchCommissionConfig(): Promise<CommissionConfig> {
   const local = getLocal<CommissionConfig>(FINANCE_STORAGE_KEYS.COMMISSION_CONFIG, INITIAL_COMMISSION_CONFIG);
   try {
     const res = await fetch('/api/finance/commission-config');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.config) {
-        setLocal(FINANCE_STORAGE_KEYS.COMMISSION_CONFIG, data.config);
-        return data.config;
-      }
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (data?.config) {
+      setLocal(FINANCE_STORAGE_KEYS.COMMISSION_CONFIG, data.config);
+      return data.config;
     }
   } catch (err) {
     console.warn('API fetchCommissionConfig fallback to local:', err);
@@ -1025,12 +1033,12 @@ export async function updateCommissionConfig(
       headers: getClientAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (res.ok && data.config) {
+    const data = await parseJsonIfOk(res);
+    if (res.ok && data?.config) {
       setLocal(FINANCE_STORAGE_KEYS.COMMISSION_CONFIG, data.config);
       return { success: true, config: data.config };
     }
-    return { success: false, error: data.error || 'Failed to update commission schedule' };
+    return { success: false, error: data?.error || 'Failed to update commission schedule' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error updating commission' };
   }
@@ -1057,11 +1065,9 @@ export async function fetchVendorFinancialSummary(
 
   try {
     const res = await fetch(`/api/finance/vendor-summary/${vendorId}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.summary) {
-        return data.summary;
-      }
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (data?.summary) {
+      return data.summary;
     }
   } catch (err) {
     console.warn('API fetchVendorFinancialSummary fallback:', err);
@@ -1084,11 +1090,11 @@ export async function fetchAdminFinancialSummary(): Promise<{
     const res = await fetch('/api/finance/admin-summary', {
       headers: getClientAuthHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (data?.platformTotals) {
       return {
         platformTotals: data.platformTotals,
-        vendorSummaries: data.vendorSummaries,
+        vendorSummaries: data.vendorSummaries || [],
       };
     }
   } catch (err) {
@@ -1116,11 +1122,9 @@ export async function fetchVendorLedger(vendorId: string): Promise<FinancialLedg
     const res = await fetch(`/api/finance/ledger/${vendorId}`, {
       headers: getClientAuthHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.ledger)) {
-        return data.ledger;
-      }
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (Array.isArray(data?.ledger)) {
+      return data.ledger;
     }
   } catch (err) {
     console.warn('API fetchVendorLedger fallback:', err);
@@ -1135,11 +1139,9 @@ export async function fetchAllLedgerAdmin(): Promise<FinancialLedgerEntry[]> {
     const res = await fetch('/api/finance/ledger', {
       headers: getClientAuthHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.ledger)) {
-        return data.ledger;
-      }
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (Array.isArray(data?.ledger)) {
+      return data.ledger;
     }
   } catch (err) {
     console.warn('API fetchAllLedgerAdmin fallback:', err);
@@ -1159,11 +1161,11 @@ export async function requestVendorPayout(
       headers: getClientAuthHeaders(),
       body: JSON.stringify({ vendorId, amount, notes, bankAccountId }),
     });
-    const data = await res.json();
-    if (res.ok && data.payout) {
+    const data = await parseJsonIfOk(res);
+    if (res.ok && data?.payout) {
       return { success: true, payout: data.payout };
     }
-    return { success: false, error: data.error || 'Failed to submit payout request' };
+    return { success: false, error: data?.error || 'Failed to submit payout request' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error requesting payout' };
   }
@@ -1181,11 +1183,11 @@ export async function adminProcessVendorPayoutWithVerification(
       headers: getClientAuthHeaders(),
       body: JSON.stringify({ payoutId, transactionRef, notes, approved }),
     });
-    const data = await res.json();
-    if (res.ok && data.payout) {
+    const data = await parseJsonIfOk(res);
+    if (res.ok && data?.payout) {
       return { success: true, payout: data.payout, ledgerEntry: data.ledgerEntry };
     }
-    return { success: false, error: data.error || 'Failed to process payout disbursement' };
+    return { success: false, error: data?.error || 'Failed to process payout disbursement' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error processing payout' };
   }
@@ -1200,11 +1202,11 @@ export async function adminCreateFinancialAdjustment(
       headers: getClientAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (res.ok && data.ledgerEntry) {
+    const data = await parseJsonIfOk(res);
+    if (res.ok && data?.ledgerEntry) {
       return { success: true, ledgerEntry: data.ledgerEntry };
     }
-    return { success: false, error: data.error || 'Failed to apply financial adjustment' };
+    return { success: false, error: data?.error || 'Failed to apply financial adjustment' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error applying adjustment' };
   }
@@ -1215,8 +1217,8 @@ export async function fetchFinancialReportsAdmin(): Promise<any> {
     const res = await fetch('/api/finance/reports', {
       headers: getClientAuthHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (data?.report) {
       return data.report;
     }
   } catch (err) {
@@ -1237,10 +1239,8 @@ export async function fetchPayoutProviderConfig(): Promise<{
     const res = await fetch('/api/finance/payout-provider', {
       headers: getClientAuthHeaders(),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.providerConfig) return data.providerConfig;
-    }
+    const data = res.ok ? await parseJsonIfOk(res) : null;
+    if (data?.providerConfig) return data.providerConfig;
   } catch (err) {
     console.warn('API fetchPayoutProviderConfig fallback:', err);
   }
@@ -1270,11 +1270,11 @@ export async function updatePayoutProviderConfig(
       headers: getClientAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (res.ok && data.providerConfig) {
+    const data = await parseJsonIfOk(res);
+    if (res.ok && data?.providerConfig) {
       return { success: true, providerConfig: data.providerConfig };
     }
-    return { success: false, error: data.error || 'Failed to update payout provider' };
+    return { success: false, error: data?.error || 'Failed to update payout provider' };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error updating payout provider' };
   }

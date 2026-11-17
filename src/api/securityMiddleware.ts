@@ -121,15 +121,11 @@ export function requireRole(allowedRoles: ('customer' | 'admin' | 'staff' | 'ven
     const rawRole = (req.headers['x-user-role'] as string)?.toLowerCase();
     const rawEmail = (req.headers['x-user-email'] as string)?.toLowerCase();
 
+    const validAdminEmail = (process.env.ADMIN_EMAIL || 'aanews70@gmail.com').trim().toLowerCase();
     // Determine role authoritatively
     let effectiveRole: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer';
     if (rawEmail) {
-      if (
-        rawEmail === 'enterpriseadministrationconsole@gmail.com' ||
-        rawEmail === 'admin@puresudh.com' ||
-        rawEmail.startsWith('admin') ||
-        rawEmail === 'aanews70@gmail.com'
-      ) {
+      if (rawEmail === validAdminEmail) {
         effectiveRole = 'admin';
       } else if (rawEmail === 'staff@puresudh.com' || rawEmail.startsWith('staff')) {
         effectiveRole = 'staff';

@@ -50,8 +50,13 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
         },
       });
 
-      if (!res.ok) {
-        throw new Error(`Failed to load campaigns (${res.status})`);
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        throw new Error(
+          !ct.includes('application/json')
+            ? 'Advertising backend API is unavailable in static hosting mode.'
+            : `Failed to load campaigns (${res.status})`
+        );
       }
 
       const data = await res.json();
@@ -122,6 +127,11 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
           reason: actionReason.trim(),
         }),
       });
+
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {

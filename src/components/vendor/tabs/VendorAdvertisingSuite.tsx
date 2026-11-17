@@ -181,7 +181,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
         },
       });
 
-      if (kpiRes.ok) {
+      if (kpiRes.ok && (kpiRes.headers.get('content-type') || '').includes('application/json')) {
         const kpiJson = await kpiRes.json();
         if (kpiJson.success) setKpis(kpiJson.kpis);
       } else {
@@ -199,7 +199,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           'x-vendor-id': vendorId,
         },
       });
-      if (campRes.ok) {
+      if (campRes.ok && (campRes.headers.get('content-type') || '').includes('application/json')) {
         const campJson = await campRes.json();
         if (campJson.success) setCampaigns(campJson.campaigns || []);
       }
@@ -211,7 +211,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           'x-vendor-id': vendorId,
         },
       });
-      if (walRes.ok) {
+      if (walRes.ok && (walRes.headers.get('content-type') || '').includes('application/json')) {
         const walJson = await walRes.json();
         if (walJson.success) {
           setWallet(walJson.wallet);
@@ -226,7 +226,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           'x-vendor-id': vendorId,
         },
       });
-      if (invRes.ok) {
+      if (invRes.ok && (invRes.headers.get('content-type') || '').includes('application/json')) {
         const invJson = await invRes.json();
         if (invJson.success) setInvalidClicks(invJson.invalidClicks || []);
       }
@@ -238,7 +238,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           'x-vendor-id': vendorId,
         },
       });
-      if (prodRes.ok) {
+      if (prodRes.ok && (prodRes.headers.get('content-type') || '').includes('application/json')) {
         const prodJson = await prodRes.json();
         if (prodJson.success && prodJson.products?.length > 0) {
           setVendorProducts(prodJson.products);
@@ -288,7 +288,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
         },
       });
 
-      if (res.ok) {
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
         const data = await res.json();
         if (data.success && data.report) {
           setReportData(data.report);
@@ -329,6 +329,10 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           reason: `Vendor toggled campaign from ${currentStatus} to ${newAction === 'PAUSE' ? 'PAUSED' : 'ACTIVE'}`,
         }),
       });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+      }
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to update campaign status');
@@ -423,6 +427,11 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
           endDate: formEndDate,
         }),
       });
+
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {
