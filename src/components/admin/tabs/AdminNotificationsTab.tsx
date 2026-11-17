@@ -466,8 +466,10 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
                     {n.message}
                   </p>
                   <div className="text-[10px] text-stone-500 flex items-center gap-3">
-                    <span>{new Date(n.createdAt).toLocaleString()}</span>
-                    <span>Target: {n.target}</span>
+                    <span>
+                      {new Date(n.sentAt || (n as any).createdAt || Date.now()).toLocaleString('en-IN')}
+                    </span>
+                    <span>Target: {n.target || n.targetRole || 'all'}</span>
                   </div>
                 </div>
 

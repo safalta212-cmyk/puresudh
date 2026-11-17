@@ -62,7 +62,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
       imageUrl: b.imageUrl,
       link: b.link || '/shop',
       buttonText: b.buttonText || 'Shop Now',
-      displayOrder: b.displayOrder || 1,
+      displayOrder: b.displayOrder ?? b.order ?? 1,
       active: b.active,
     });
     setIsModalOpen(true);
@@ -80,6 +80,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
     }
 
     const bId = editingBanner?.id || `ban-${Date.now()}`;
+    const orderNum = Number(formData.displayOrder) || 1;
     const bannerToSave: OfferBanner = {
       id: bId,
       title: formData.title.trim(),
@@ -88,7 +89,8 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
       imageUrl: formData.imageUrl.trim(),
       link: formData.link?.trim() || '/shop',
       buttonText: formData.buttonText?.trim() || 'Shop Now',
-      displayOrder: Number(formData.displayOrder) || 1,
+      displayOrder: orderNum,
+      order: orderNum,
       active: formData.active,
     };
 
@@ -96,6 +98,10 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
     showToast(`Banner "${bannerToSave.title}" saved!`, 'success');
     setIsModalOpen(false);
   };
+
+  const sortedBanners = [...banners].sort(
+    (a, b) => (a.displayOrder ?? a.order ?? 99) - (b.displayOrder ?? b.order ?? 99)
+  );
 
   return (
     <div className="space-y-6">
@@ -123,7 +129,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {banners.map((banner) => {
+        {sortedBanners.map((banner) => {
           return (
             <div
               key={banner.id}
@@ -145,16 +151,18 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
                   )}
                 </div>
                 <div className="absolute top-2 left-2 bg-stone-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs">
-                  Slide #{banner.displayOrder || 1}
+                  Slide #{banner.displayOrder ?? banner.order ?? 1}
                 </div>
                 <div className="absolute top-2 right-2">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      banner.active ? 'bg-emerald-600 text-white' : 'bg-stone-600 text-white'
+                  <button
+                    type="button"
+                    onClick={() => onSaveBanner({ ...banner, active: !banner.active })}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer shadow-xs transition ${
+                      banner.active ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-stone-600 hover:bg-stone-700 text-white'
                     }`}
                   >
                     {banner.active ? 'Active' : 'Disabled'}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -255,7 +263,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
               <div>
                 <MediaUploader
                   preset="banner"
-                  pathParams={{ bannerId: formData.id || 'new' }}
+                  pathParams={{ bannerId: editingBanner?.id || 'new' }}
                   currentImageUrl={formData.imageUrl}
                   onImageUploaded={(url) => setFormData({ ...formData, imageUrl: url })}
                   label="Upload High-Res Banner Image *"

@@ -1101,19 +1101,59 @@ export async function fetchAdminFinancialSummary(): Promise<{
     console.warn('API fetchAdminFinancialSummary fallback:', err);
   }
 
+  const localVendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, []);
+  const localLedger = getLocal<FinancialLedgerEntry[]>(FINANCE_STORAGE_KEYS.LEDGER, []);
+  const localPayouts = getLocal<VendorPayout[]>(STORAGE_KEYS.PAYOUTS, []);
+  const localOrders = getLocal<Order[]>('pure_sudh_orders', []);
+
+  const activeVendorsCount = localVendors.filter(
+    (v) => String(v.status).toUpperCase() === 'ACTIVE'
+  ).length;
+
+  const vendorSummaries: VendorFinancialSummary[] = localVendors.map((v) => {
+    const paidForVendor = localPayouts
+      .filter((p) => p.vendorId === v.id && p.status === 'completed')
+      .reduce((s, p) => s + (p.amount || 0), 0);
+    return computeVendorFinancialSummary(v.id, v.name, localLedger, paidForVendor, true);
+  });
+
+  const validOrders = localOrders.filter((o) => {
+    const st = String(o.status || '').toUpperCase();
+    return st !== 'CANCELLED' && st !== 'REFUNDED';
+  });
+
+  const totalGrossSales =
+    vendorSummaries.length > 0 && localLedger.length > 0
+      ? vendorSummaries.reduce((s, vs) => s + vs.grossSales, 0)
+      : validOrders.reduce((s, o) => s + (o.total || 0), 0);
+  const totalDiscounts = vendorSummaries.reduce((s, vs) => s + vs.discounts, 0);
+  const totalPlatformCommission = vendorSummaries.reduce((s, vs) => s + vs.commission, 0);
+  const totalRefunds = vendorSummaries.reduce((s, vs) => s + vs.refunds, 0);
+  const totalAdjustments = vendorSummaries.reduce((s, vs) => s + vs.adjustments, 0);
+  const totalNetVendorEarnings = vendorSummaries.reduce((s, vs) => s + vs.vendorEarnings, 0);
+  const totalPendingPayouts =
+    localLedger.length > 0
+      ? vendorSummaries.reduce((s, vs) => s + vs.pendingPayout, 0)
+      : localPayouts
+          .filter((p) => p.status === 'pending' || p.status === 'processing')
+          .reduce((s, p) => s + (p.amount || 0), 0);
+  const totalPaidPayouts = localPayouts
+    .filter((p) => p.status === 'completed')
+    .reduce((s, p) => s + (p.amount || 0), 0);
+
   return {
     platformTotals: {
-      totalGrossSales: 659,
-      totalDiscounts: 0,
-      totalPlatformCommission: 76,
-      totalRefunds: 0,
-      totalAdjustments: 0,
-      totalNetVendorEarnings: 583,
-      totalPendingPayouts: 583,
-      totalPaidPayouts: 19650,
-      activeVendorsCount: 3,
+      totalGrossSales,
+      totalDiscounts,
+      totalPlatformCommission,
+      totalRefunds,
+      totalAdjustments,
+      totalNetVendorEarnings,
+      totalPendingPayouts,
+      totalPaidPayouts,
+      activeVendorsCount,
     },
-    vendorSummaries: [],
+    vendorSummaries,
   };
 }
 

@@ -101,32 +101,50 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     setSubmitting(true);
     try {
       const prodId = product?.id || `prod-${formData.slug || Date.now()}`;
+      const qty = Number(formData.stockQuantity);
+      const disc = formData.discountPrice !== '' ? Number(formData.discountPrice) : undefined;
+      const imgs =
+        formData.images.length > 0
+          ? formData.images
+          : [
+              'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80',
+            ];
+      const avail = Boolean(formData.isAvailable) && qty > 0 && formData.status === 'active';
       const productToSave: Product = {
+        ...product,
         id: prodId,
         name: formData.name.trim(),
         hindiName: formData.hindiName.trim() || undefined,
         slug: formData.slug.trim() || prodId,
         sku: formData.sku.trim(),
         category: formData.category,
+        categorySlug: formData.category,
         categoryId: categories.find((c) => c.slug === formData.category || c.id === formData.category)?.id,
         price: Number(formData.price),
-        discountPrice: formData.discountPrice !== '' ? Number(formData.discountPrice) : undefined,
-        stockQuantity: Number(formData.stockQuantity),
+        discountPrice: disc,
+        salePrice: disc,
+        stockQuantity: qty,
+        stock: qty,
         weight: formData.weight.trim(),
         unit: formData.unit.trim(),
         shortDescription: formData.shortDescription.trim() || undefined,
         description: formData.description.trim(),
         ingredients: formData.ingredients?.trim() || undefined,
         packagingInformation: formData.packagingInformation?.trim() || undefined,
-        images: formData.images.length > 0 ? formData.images : [
-          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80',
-        ],
+        images: imgs,
+        imageUrls: imgs,
         status: formData.status,
-        isAvailable: formData.isAvailable && Number(formData.stockQuantity) > 0,
+        active: formData.status === 'active',
+        isAvailable: avail,
+        availability: avail,
+        inStock: avail,
         isFeatured: formData.isFeatured,
+        featured: formData.isFeatured,
         isBestseller: formData.isBestseller,
+        bestseller: formData.isBestseller,
         rating: product?.rating || 4.9,
-        reviewsCount: product?.reviewsCount || 12,
+        reviewsCount: product?.reviewsCount || product?.reviewCount || 12,
+        reviewCount: product?.reviewCount || product?.reviewsCount || 12,
         createdAt: product?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -357,7 +375,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <MediaUploader
                 key={uploaderKey}
                 preset="product"
-                pathParams={{ productId: formData.id || 'new' }}
+                pathParams={{ productId: product?.id || formData.slug || 'new' }}
                 onImageUploaded={(url) => {
                   if (url) {
                     setFormData((prev) => ({
@@ -396,37 +414,57 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             )}
           </div>
 
-          {/* Flags & Badges */}
-          <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-stone-100">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(formData.isAvailable)}
-                onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
-                className="rounded text-amber-700 focus:ring-amber-500"
-              />
-              <span className="font-semibold text-stone-800">Available to Buy</span>
-            </label>
+          {/* Flags, Status & Badges */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-stone-100">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.isAvailable)}
+                  onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
+                  className="rounded text-amber-700 focus:ring-amber-500"
+                />
+                <span className="font-semibold text-stone-800">Available to Buy</span>
+              </label>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(formData.isFeatured)}
-                onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
-                className="rounded text-amber-700 focus:ring-amber-500"
-              />
-              <span className="font-semibold text-stone-800">Featured Spotlight</span>
-            </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.isFeatured)}
+                  onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
+                  className="rounded text-amber-700 focus:ring-amber-500"
+                />
+                <span className="font-semibold text-stone-800">Featured Spotlight</span>
+              </label>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(formData.isBestseller)}
-                onChange={(e) => setFormData({ ...formData, isBestseller: e.target.checked })}
-                className="rounded text-amber-700 focus:ring-amber-500"
-              />
-              <span className="font-semibold text-stone-800">Best Seller Tag</span>
-            </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.isBestseller)}
+                  onChange={(e) => setFormData({ ...formData, isBestseller: e.target.checked })}
+                  className="rounded text-amber-700 focus:ring-amber-500"
+                />
+                <span className="font-semibold text-stone-800">Best Seller Tag</span>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="font-semibold text-stone-700">Visibility:</label>
+              <select
+                value={formData.status}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    status: e.target.value as 'active' | 'draft' | 'archived',
+                  })
+                }
+                className="px-2.5 py-1.5 bg-stone-50 rounded-lg border border-stone-300 font-semibold text-stone-800 focus:outline-none"
+              >
+                <option value="active">Active (Live on Store)</option>
+                <option value="draft">Draft (Hidden)</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
           </div>
 
           {/* Actions */}

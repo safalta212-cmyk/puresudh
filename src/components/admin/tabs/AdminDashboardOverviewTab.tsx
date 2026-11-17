@@ -103,7 +103,7 @@ export const AdminDashboardOverviewTab: React.FC<AdminDashboardOverviewTabProps>
   }, 0);
 
   const uniqueCustomerEmails = new Set(orders.map((o) => o.customerEmail || o.customerId)).size;
-  const computedCustomersCount = Math.max(uniqueCustomerEmails, 4);
+  const computedCustomersCount = uniqueCustomerEmails;
   const customersCount = propCustomersCount ?? computedCustomersCount;
 
   const productsCount = products.length;

@@ -34,6 +34,7 @@ export const MediaStorageManager: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<MediaPresetType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<MediaRecord | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<MediaRecord | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   // Admin Direct Upload State
@@ -58,16 +59,15 @@ export const MediaStorageManager: React.FC = () => {
     loadMedia();
   }, [activeFilter]);
 
-  const handleDelete = async (record: MediaRecord) => {
-    if (!window.confirm(`Permanently delete "${record.fileName}" from Firebase Storage?`)) {
-      return;
-    }
-
-    setIsDeletingId(record.id);
+  const confirmDeleteMedia = async () => {
+    if (!recordToDelete) return;
+    const target = recordToDelete;
+    setRecordToDelete(null);
+    setIsDeletingId(target.id);
     try {
-      await deleteMedia(record.storagePath, record.thumbnailStoragePath);
-      setMediaList((prev) => prev.filter((m) => m.id !== record.id));
-      if (selectedRecord?.id === record.id) {
+      await deleteMedia(target.storagePath, target.thumbnailStoragePath);
+      setMediaList((prev) => prev.filter((m) => m.id !== target.id));
+      if (selectedRecord?.id === target.id) {
         setSelectedRecord(null);
       }
       showToast('Media deleted successfully from storage.', 'success');
@@ -300,10 +300,10 @@ export const MediaStorageManager: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(record);
+                      setRecordToDelete(record);
                     }}
                     disabled={isDeletingId === record.id}
-                    className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-xs"
+                    className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-xs cursor-pointer"
                     title="Delete Media"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -396,9 +396,9 @@ export const MediaStorageManager: React.FC = () => {
                 Copy URL
               </button>
               <button
-                onClick={() => handleDelete(selectedRecord)}
+                onClick={() => setRecordToDelete(selectedRecord)}
                 disabled={isDeletingId === selectedRecord.id}
-                className="bg-red-50 hover:bg-red-100 text-red-700 font-semibold py-2 px-4 rounded-xl text-xs transition flex items-center justify-center gap-1.5"
+                className="bg-red-50 hover:bg-red-100 text-red-700 font-semibold py-2 px-4 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Image
@@ -465,6 +465,33 @@ export const MediaStorageManager: React.FC = () => {
                   helpText="Automatic WebP optimization and thumbnail generation applied."
                 />
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Media Confirmation Modal */}
+      {recordToDelete && (
+        <div className="fixed inset-0 z-60 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-stone-200 shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-stone-900">Delete Storage Media</h3>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Permanently delete <strong>{recordToDelete.fileName}</strong> from Firebase Storage? Any product or banner referencing this URL will lose its image.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setRecordToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteMedia}
+                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs cursor-pointer"
+              >
+                Delete Permanently
+              </button>
             </div>
           </div>
         </div>

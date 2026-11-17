@@ -37,6 +37,7 @@ import {
   VendorPayout,
   Product,
   Order,
+  Category,
   CommissionConfig,
   VendorFinancialSummary,
   FinancialLedgerEntry,
@@ -67,14 +68,16 @@ import { useToast } from '../../../context/ToastContext';
 interface AdminVendorsTabProps {
   products: Product[];
   orders: Order[];
+  categories?: Category[];
   onOpenVendorDashboard?: (vendorId: string) => void;
 }
 
 export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
-  products,
-  orders,
+  products = [],
+  orders = [],
+  categories = [] as Category[],
   onOpenVendorDashboard,
-}) => {
+}: AdminVendorsTabProps) => {
   const { showToast } = useToast();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [commissions, setCommissions] = useState<VendorCommission[]>([]);
@@ -99,20 +102,20 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
 
   // Commission Editor States (Tiered: Global, Category, Vendor, Product)
   const [globalRateInput, setGlobalRateInput] = useState<number>(10);
-  const [selectedCatForRate, setSelectedCatForRate] = useState<string>('cat-homemade');
+  const [selectedCatForRate, setSelectedCatForRate] = useState<string>(categories[0]?.id || 'cat-homemade');
   const [catRateInput, setCatRateInput] = useState<number>(12);
-  const [selectedProdForRate, setSelectedProdForRate] = useState<string>('prod-thekua-traditional');
+  const [selectedProdForRate, setSelectedProdForRate] = useState<string>(products[0]?.id || '');
   const [prodRateInput, setProdRateInput] = useState<number>(10);
 
   // Commission Simulator State
   const [simSaleAmount, setSimSaleAmount] = useState<number>(1000);
-  const [simVendorId, setSimVendorId] = useState<string>('vendor-1');
-  const [simCategoryId, setSimCategoryId] = useState<string>('cat-homemade');
-  const [simProductId, setSimProductId] = useState<string>('prod-thekua-traditional');
+  const [simVendorId, setSimVendorId] = useState<string>('');
+  const [simCategoryId, setSimCategoryId] = useState<string>(categories[0]?.id || 'cat-homemade');
+  const [simProductId, setSimProductId] = useState<string>(products[0]?.id || '');
 
   // Adjustment Creation State
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
-  const [adjVendorId, setAdjVendorId] = useState<string>('vendor-1');
+  const [adjVendorId, setAdjVendorId] = useState<string>('');
   const [adjAmount, setAdjAmount] = useState<number>(500);
   const [adjType, setAdjType] = useState<'bonus' | 'penalty' | 'fee_reversal' | 'manual_correction'>('fee_reversal');
   const [adjReason, setAdjReason] = useState<string>('');
@@ -148,6 +151,10 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       if (commConf) {
         setGlobalRateInput(commConf.globalRate);
       }
+      if (vList.length > 0) {
+        setSimVendorId((prev) => prev || vList[0].id);
+        setAdjVendorId((prev) => prev || vList[0].id);
+      }
       setPayoutProviderConfig(providerConf);
       setFinancialLedger(ledger);
       setFinancialReports(reports);
@@ -161,6 +168,27 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
   useEffect(() => {
     loadMarketplaceData();
   }, []);
+
+  useEffect(() => {
+    if (categories.length > 0 && !categories.some((c) => c.id === selectedCatForRate)) {
+      setSelectedCatForRate(categories[0].id);
+      setSimCategoryId(categories[0].id);
+    }
+  }, [categories, selectedCatForRate]);
+
+  useEffect(() => {
+    if (products.length > 0 && !products.some((p) => p.id === selectedProdForRate)) {
+      setSelectedProdForRate(products[0].id);
+      setSimProductId(products[0].id);
+    }
+  }, [products, selectedProdForRate]);
+
+  useEffect(() => {
+    if (commissionConfig) {
+      setCatRateInput(commissionConfig.categoryRates?.[selectedCatForRate] ?? commissionConfig.globalRate ?? 10);
+      setProdRateInput(commissionConfig.productRates?.[selectedProdForRate] ?? commissionConfig.globalRate ?? 10);
+    }
+  }, [commissionConfig, selectedCatForRate, selectedProdForRate]);
 
   const handleStatusChange = async (vendorId: string, newStatus: VendorStatus) => {
     try {
@@ -790,16 +818,24 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                   value={selectedCatForRate ?? ''}
                   onChange={(e) => {
                     setSelectedCatForRate(e.target.value);
-                    setCatRateInput(commissionConfig?.categoryRates[e.target.value] ?? 12);
+                    setCatRateInput(commissionConfig?.categoryRates[e.target.value] ?? commissionConfig?.globalRate ?? 10);
                   }}
                   className="w-full p-2 border border-stone-300 rounded-xl bg-white"
                 >
-                  <option value="cat-homemade">Artisanal Snacks & Thekua</option>
-                  <option value="cat-dairy">Fresh Dairy & Paneer</option>
-                  <option value="cat-sweets">Traditional Sweets & Mithai</option>
-                  <option value="cat-khoya">Pure Khoya & Mawa</option>
-                  <option value="cat-pickles">Handcrafted Achaar</option>
-                  <option value="cat-papad">Sun-Dried Papad</option>
+                  {categories.length > 0 ? (
+                    categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="cat-homemade">Artisanal Snacks & Thekua</option>
+                      <option value="cat-dairy">Fresh Dairy & Paneer</option>
+                      <option value="cat-sweets">Traditional Sweets & Mithai</option>
+                      <option value="cat-khoya">Pure Khoya & Mawa</option>
+                    </>
+                  )}
                 </select>
                 <div className="flex items-center gap-2 pt-1">
                   <input
@@ -831,11 +867,11 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                   value={selectedProdForRate ?? ''}
                   onChange={(e) => {
                     setSelectedProdForRate(e.target.value);
-                    setProdRateInput(commissionConfig?.productRates[e.target.value] ?? 10);
+                    setProdRateInput(commissionConfig?.productRates[e.target.value] ?? commissionConfig?.globalRate ?? 10);
                   }}
                   className="w-full p-2 border border-stone-300 rounded-xl bg-white"
                 >
-                  {products.slice(0, 15).map((p) => (
+                  {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -891,7 +927,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                   onChange={(e) => setSimProductId(e.target.value)}
                   className="w-full p-2 border border-stone-300 rounded-xl bg-white"
                 >
-                  {products.slice(0, 10).map((p) => (
+                  {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -906,11 +942,20 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                   onChange={(e) => setSimCategoryId(e.target.value)}
                   className="w-full p-2 border border-stone-300 rounded-xl bg-white"
                 >
-                  <option value="cat-homemade">Homemade / Thekua</option>
-                  <option value="cat-dairy">Dairy & Paneer</option>
-                  <option value="cat-sweets">Sweets & Mithai</option>
-                  <option value="cat-khoya">Khoya</option>
-                  <option value="cat-pickles">Pickles</option>
+                  {categories.length > 0 ? (
+                    categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="cat-homemade">Homemade / Thekua</option>
+                      <option value="cat-dairy">Dairy & Paneer</option>
+                      <option value="cat-sweets">Sweets & Mithai</option>
+                      <option value="cat-khoya">Khoya</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -1214,7 +1259,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                 Disbursement Liability
               </span>
               <div className="text-2xl font-bold font-serif text-blue-900 mt-1">
-                {formatCurrency(financialReports?.summary?.pendingSettlementLiability ?? 583)}
+                {formatCurrency(financialReports?.summary?.pendingSettlementLiability ?? platformTotals?.totalPendingPayouts ?? 0)}
               </div>
             </div>
           </div>

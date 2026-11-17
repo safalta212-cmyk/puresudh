@@ -64,7 +64,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       slug: cat.slug || '',
       description: cat.description || '',
       imageUrl: cat.image || '',
-      displayOrder: cat.displayOrder ?? 1,
+      displayOrder: cat.displayOrder ?? cat.order ?? 1,
       active: cat.active !== false,
     });
     setIsModalOpen(true);
@@ -91,6 +91,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
     }
 
     const catId = editingCategory?.id || `cat-${formData.slug || Date.now()}`;
+    const orderNum = Number(formData.displayOrder) || 1;
     const categoryToSave: Category = {
       id: catId,
       name: formData.name.trim(),
@@ -98,7 +99,8 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       slug: formData.slug.trim() || catId,
       description: formData.description.trim() || undefined,
       image: formData.imageUrl.trim() || undefined,
-      displayOrder: Number(formData.displayOrder) || 1,
+      displayOrder: orderNum,
+      order: orderNum,
       active: formData.active,
       createdAt: editingCategory?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -120,7 +122,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
   };
 
   const sortedCategories = [...categories].sort(
-    (a, b) => (a.displayOrder ?? 99) - (b.displayOrder ?? 99)
+    (a, b) => (a.displayOrder ?? a.order ?? 99) - (b.displayOrder ?? b.order ?? 99)
   );
 
   return (
@@ -169,7 +171,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute top-2 left-2 bg-stone-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs">
-                  Order #{cat.displayOrder ?? 1}
+                  Order #{cat.displayOrder ?? cat.order ?? 1}
                 </div>
                 <div className="absolute top-2 right-2">
                   <button
@@ -311,7 +313,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
               <div>
                 <MediaUploader
                   preset="category"
-                  pathParams={{ categoryId: formData.id || 'new' }}
+                  pathParams={{ categoryId: editingCategory?.id || formData.slug || 'new' }}
                   currentImageUrl={formData.imageUrl}
                   onImageUploaded={(url) => setFormData({ ...formData, imageUrl: url })}
                   label="Upload Category Image"

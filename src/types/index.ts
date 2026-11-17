@@ -82,6 +82,7 @@ export interface Product {
   isPureVeg?: boolean;
   hindiName?: string;
   isAvailable?: boolean;
+  inStock?: boolean;
   isFeatured?: boolean;
   isBestseller?: boolean;
   reviewsCount?: number;
@@ -146,8 +147,8 @@ export interface Category {
   id: string;
   name: string;
   slug: string;
-  description: string;
-  image: string;
+  description?: string;
+  image?: string;
   parentId?: string;
   displayOrder: number;
   active: boolean;
@@ -454,7 +455,7 @@ export interface Offer {
 export interface Banner {
   id: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   link: string;
   imageUrl: string;
   buttonText: string;
@@ -474,6 +475,9 @@ export interface Review {
   orderId?: string;
   customerId: string;
   customerName: string;
+  userId?: string;
+  userName?: string;
+  helpfulVotes?: number;
   rating: number;
   title?: string;
   comment: string;
@@ -803,10 +807,13 @@ export interface HomepageConfig {
   id?: string;
   heroBannerIds: string[];
   featuredCategoryIds: string[];
+  featuredCategorySlugs?: string[];
   featuredProductIds: string[];
   bestsellerProductIds: string[];
+  bestSellerProductIds?: string[];
   activeOfferIds: string[];
   announcementText?: string;
+  showAnnouncement?: boolean;
   updatedAt?: string;
 }
 

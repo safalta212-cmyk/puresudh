@@ -1,5 +1,113 @@
 [
   {
+    "clickId": "inv-click-1794893147145-69fcfe",
+    "campaignId": "camp-vendor-1-mwk91bzh-41a5",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:25:47.142Z",
+    "createdAt": "2026-11-17T05:25:47.142Z"
+  },
+  {
+    "clickId": "inv-click-1794893143830-61802e",
+    "campaignId": "camp-sp-test-1794893143481",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:25:43.825Z",
+    "createdAt": "2026-11-17T05:25:43.825Z"
+  },
+  {
+    "clickId": "inv-click-1794893140267-cd7f33",
+    "campaignId": "camp-vendor-1-mwk916nl-45b9",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "BOT_ACTIVITY_DETECTED",
+    "timestamp": "2026-11-17T05:25:40.264Z",
+    "createdAt": "2026-11-17T05:25:40.264Z"
+  },
+  {
+    "clickId": "inv-click-1794893140262-fd7510",
+    "campaignId": "camp-low-bal-1794893140250",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "reason": "CAMPAIGN_STATUS_PAUSED",
+    "timestamp": "2026-11-17T05:25:40.260Z",
+    "createdAt": "2026-11-17T05:25:40.260Z"
+  },
+  {
+    "clickId": "inv-click-1794893140256-389d34",
+    "campaignId": "camp-low-bal-1794893140250",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "reason": "INSUFFICIENT_WALLET_BALANCE",
+    "timestamp": "2026-11-17T05:25:40.252Z",
+    "createdAt": "2026-11-17T05:25:40.252Z"
+  },
+  {
+    "clickId": "inv-click-1794893140248-83778c",
+    "campaignId": "camp-vendor-1-mwk916nl-45b9",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:25:40.245Z",
+    "createdAt": "2026-11-17T05:25:40.245Z"
+  },
+  {
+    "clickId": "inv-click-1794892535470-2a3096",
+    "campaignId": "camp-vendor-1-mwk8o80n-66ea",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:15:35.467Z",
+    "createdAt": "2026-11-17T05:15:35.467Z"
+  },
+  {
+    "clickId": "inv-click-1794892532240-8413a4",
+    "campaignId": "camp-sp-test-1794892531958",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:15:32.237Z",
+    "createdAt": "2026-11-17T05:15:32.237Z"
+  },
+  {
+    "clickId": "inv-click-1794892528825-3bcedd",
+    "campaignId": "camp-vendor-1-mwk8o2v9-1cae",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "BOT_ACTIVITY_DETECTED",
+    "timestamp": "2026-11-17T05:15:28.822Z",
+    "createdAt": "2026-11-17T05:15:28.822Z"
+  },
+  {
+    "clickId": "inv-click-1794892528820-df59f2",
+    "campaignId": "camp-low-bal-1794892528810",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "reason": "CAMPAIGN_STATUS_PAUSED",
+    "timestamp": "2026-11-17T05:15:28.818Z",
+    "createdAt": "2026-11-17T05:15:28.818Z"
+  },
+  {
+    "clickId": "inv-click-1794892528815-e6c532",
+    "campaignId": "camp-low-bal-1794892528810",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "reason": "INSUFFICIENT_WALLET_BALANCE",
+    "timestamp": "2026-11-17T05:15:28.811Z",
+    "createdAt": "2026-11-17T05:15:28.811Z"
+  },
+  {
+    "clickId": "inv-click-1794892528808-0566d2",
+    "campaignId": "camp-vendor-1-mwk8o2v9-1cae",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "reason": "DUPLICATE_RAPID_CLICK",
+    "timestamp": "2026-11-17T05:15:28.805Z",
+    "createdAt": "2026-11-17T05:15:28.805Z"
+  },
+  {
     "clickId": "inv-click-1794886033188-7ac4fc",
     "campaignId": "camp-vendor-1-mwk4sutq-faa0",
     "vendorId": "vendor-1",

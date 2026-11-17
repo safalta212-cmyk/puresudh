@@ -42,6 +42,7 @@ import {
   Product,
   Order,
   Review,
+  Category,
   VendorFinancialSummary,
   FinancialLedgerEntry,
 } from '../../types';
@@ -74,13 +75,14 @@ import {
   requestVendorPayout,
   updateVendorProfile,
 } from '../../services/vendorMarketplaceService';
-import { fetchAllReviews } from '../../firebase/services';
+import { fetchAllReviews, fetchCategories } from '../../firebase/services';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 interface VendorDashboardProps {
   products: Product[];
   orders: Order[];
+  categories?: Category[];
   onBackToStore: () => void;
   onOpenProductDetails?: (product: Product) => void;
   onOpenRegisterNewVendor?: () => void;
@@ -89,6 +91,7 @@ interface VendorDashboardProps {
 export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   products: initialProducts,
   orders: initialOrders,
+  categories: propCategories,
   onBackToStore,
   onOpenProductDetails,
   onOpenRegisterNewVendor,
@@ -153,6 +156,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const [newProductDesc, setNewProductDesc] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('cat-homemade');
   const [newProductImage, setNewProductImage] = useState('');
+  const [categoriesList, setCategoriesList] = useState<Category[]>(propCategories || []);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
 
   // Bank Form State
   const [bankHolder, setBankHolder] = useState('');
@@ -180,7 +186,17 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       }
     };
     loadAllVendors();
-  }, [user]);
+    if (!propCategories || propCategories.length === 0) {
+      fetchCategories().then((cats) => {
+        if (Array.isArray(cats) && cats.length > 0) {
+          setCategoriesList(cats);
+          setNewProductCategory((prev) => prev || cats[0].id);
+        }
+      }).catch(() => null);
+    } else {
+      setCategoriesList(propCategories);
+    }
+  }, [user, propCategories]);
 
   const currentVendor = vendors.find((v) => v.id === selectedVendorId) || vendors[0];
 
@@ -313,16 +329,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
-    if (!currentVendor) return;
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      try {
-        await deleteVendorProductItem(currentVendor.id, productId);
-        showToast('Product deleted from vendor catalog', 'info');
-        loadScopedVendorData(currentVendor.id);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to delete product', 'error');
-      }
+  const handleDeleteProductConfirm = async () => {
+    if (!currentVendor || !productToDelete) return;
+    setIsDeletingProduct(true);
+    try {
+      await deleteVendorProductItem(currentVendor.id, productToDelete.id);
+      showToast('Product deleted from vendor catalog', 'info');
+      setProductToDelete(null);
+      loadScopedVendorData(currentVendor.id);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete product', 'error');
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -409,7 +427,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
   // Authoritative Server-Side Financial Tracking
   const rawOrdersGross = vendorOrders.reduce((sum, o) => sum + (o.vendorSubtotal || 0), 0) ||
-    (vendorCommissions.reduce((sum, c) => sum + (c.orderTotal || 0), 0) || 12850);
+    vendorCommissions.reduce((sum, c) => sum + (c.orderTotal || 0), 0);
 
   const totalVendorGrossSales = financialSummary?.grossSales ?? rawOrdersGross;
   const totalDiscounts = financialSummary?.discounts ?? 0;
@@ -791,12 +809,14 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   </div>
                   <div className="flex items-center justify-between p-2.5 bg-stone-50 rounded-xl">
                     <span className="text-stone-600">Platform Agreement</span>
-                    <span className="font-bold text-stone-800">Active (10% Tier)</span>
+                    <span className="font-bold text-stone-800">Active ({currentVendor.commissionPercentage ?? 10}% Tier)</span>
                   </div>
                   <div className="flex items-center justify-between p-2.5 bg-stone-50 rounded-xl">
                     <span className="text-stone-600">Primary Bank A/C</span>
                     <span className="font-mono text-stone-800">
-                      {currentVendor.payoutInformation?.accountNumberMasked || '•••• 4001'}
+                      {vendorBankAccounts[0]?.accountNumberMasked ||
+                        currentVendor.payoutInformation?.accountNumberMasked ||
+                        'Not Linked'}
                     </span>
                   </div>
                 </div>
@@ -879,8 +899,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="p-1 text-stone-400 hover:text-rose-600 transition"
+                            onClick={() => setProductToDelete(p)}
+                            className="p-1 text-stone-400 hover:text-rose-600 transition cursor-pointer"
                             title="Delete product"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1937,14 +1957,24 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">Category</label>
                 <select
-                  value={newProductCategory ?? 'cat-homemade'}
+                  value={newProductCategory ?? categoriesList[0]?.id ?? 'cat-homemade'}
                   onChange={(e) => setNewProductCategory(e.target.value)}
                   className="w-full p-2 rounded-xl border border-stone-300 bg-white"
                 >
-                  <option value="cat-homemade">Homemade Snacks & Thekua</option>
-                  <option value="cat-dairy">Dairy & A2 Cow Milk</option>
-                  <option value="cat-mithai">Desi Sweets & Khaja</option>
-                  <option value="cat-ghee">Bilona Desi Ghee</option>
+                  {categoriesList.length > 0 ? (
+                    categoriesList.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="cat-homemade">Homemade Snacks & Thekua</option>
+                      <option value="cat-dairy">Dairy & A2 Cow Milk</option>
+                      <option value="cat-mithai">Desi Sweets & Khaja</option>
+                      <option value="cat-ghee">Bilona Desi Ghee</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -1987,6 +2017,35 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Product Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl border border-stone-200">
+            <h3 className="font-bold font-serif text-stone-900 text-base">Delete Product?</h3>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Remove <strong>{productToDelete.name}</strong> from your vendor catalog? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => setProductToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={handleDeleteProductConfirm}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingProduct ? 'Deleting...' : 'Delete Product'}
+              </button>
+            </div>
           </div>
         </div>
       )}

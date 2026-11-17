@@ -30,6 +30,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [staffToDelete, setStaffToDelete] = useState<StaffMember | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -140,11 +141,17 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     showToast(`Staff member "${s.name}" is now ${!s.active ? 'Active' : 'Inactive'}`, 'info');
   };
 
-  const handleDelete = async (s: StaffMember) => {
-    if (!window.confirm(`Delete staff access for "${s.name}"?`)) return;
-    await deleteStaffMember(s.id);
-    setStaffList((prev) => prev.filter((item) => item.id !== s.id));
-    showToast(`Staff member "${s.name}" removed`, 'info');
+  const confirmDeleteStaff = async () => {
+    if (!staffToDelete) return;
+    try {
+      await deleteStaffMember(staffToDelete.id);
+      setStaffList((prev) => prev.filter((item) => item.id !== staffToDelete.id));
+      showToast(`Staff member "${staffToDelete.name}" removed`, 'info');
+    } catch (err) {
+      showToast('Failed to delete staff member', 'error');
+    } finally {
+      setStaffToDelete(null);
+    }
   };
 
   const roleBadges: Record<string, string> = {
@@ -190,98 +197,110 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {staffList.map((staff) => {
-          return (
-            <div
-              key={staff.id}
-              className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
-                staff.active ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm">
-                      {staff.name.charAt(0)}
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 text-xs">
+          <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-amber-600" />
+          Loading team roster...
+        </div>
+      ) : staffList.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 text-xs">
+          <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          No staff members configured yet. Click &quot;Add Staff Member&quot; to assign team permissions.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {staffList.map((staff) => {
+            return (
+              <div
+                key={staff.id}
+                className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
+                  staff.active ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm">
+                        {staff.name.charAt(0)}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-stone-900 text-sm">{staff.name}</h3>
+                        <span
+                          className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold border mt-0.5 ${
+                            roleBadges[staff.role] || 'bg-stone-100 text-stone-700'
+                          }`}
+                        >
+                          {staff.role.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-stone-900 text-sm">{staff.name}</h3>
-                      <span
-                        className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold border mt-0.5 ${
-                          roleBadges[staff.role] || 'bg-stone-100 text-stone-700'
-                        }`}
-                      >
-                        {staff.role.replace('_', ' ').toUpperCase()}
-                      </span>
+
+                    <button
+                      onClick={() => handleToggleActive(staff)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                        staff.active
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
+                      }`}
+                    >
+                      {staff.active ? 'Active' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  <div className="mt-3.5 space-y-1 text-xs text-stone-600">
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-stone-400" />
+                      <span>{staff.email}</span>
+                    </div>
+                    {staff.phone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-stone-400" />
+                        <span>{staff.phone}</span>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-stone-400 pt-0.5">
+                      Dept: <span className="text-stone-700 font-medium">{staff.department}</span>
                     </div>
                   </div>
 
+                  <div className="mt-3.5 pt-3 border-t border-stone-100">
+                    <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1.5">
+                      Assigned Privileges
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {staff.permissions?.map((p, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] font-medium px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
                   <button
-                    onClick={() => handleToggleActive(staff)}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                      staff.active
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                        : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
-                    }`}
+                    onClick={() => handleOpenEdit(staff)}
+                    className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
+                    title="Edit Staff Member"
                   >
-                    {staff.active ? 'Active' : 'Disabled'}
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setStaffToDelete(staff)}
+                    className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Delete Staff Access"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
-                <div className="mt-3.5 space-y-1 text-xs text-stone-600">
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-stone-400" />
-                    <span>{staff.email}</span>
-                  </div>
-                  {staff.phone && (
-                    <div className="flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-stone-400" />
-                      <span>{staff.phone}</span>
-                    </div>
-                  )}
-                  <div className="text-[11px] text-stone-400 pt-0.5">
-                    Dept: <span className="text-stone-700 font-medium">{staff.department}</span>
-                  </div>
-                </div>
-
-                <div className="mt-3.5 pt-3 border-t border-stone-100">
-                  <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1.5">
-                    Assigned Privileges
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {staff.permissions?.map((p, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] font-medium px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200"
-                      >
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
-                <button
-                  onClick={() => handleOpenEdit(staff)}
-                  className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
-                  title="Edit Staff Member"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleDelete(staff)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title="Delete Staff Access"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add / Edit Staff Modal */}
       {isModalOpen && (
@@ -416,6 +435,33 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Staff Confirmation Modal */}
+      {staffToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-stone-200 shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-stone-900">Revoke Staff Access</h3>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Are you sure you want to remove staff access for <strong>{staffToDelete.name}</strong> ({staffToDelete.email})?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setStaffToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteStaff}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs cursor-pointer"
+              >
+                Remove Staff Member
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -25,6 +25,7 @@ interface AdminOffersTabProps {
   products: Product[];
   onSaveOffer: (offer: Offer) => Promise<void>;
   onDeleteOffer: (offerId: string, title: string) => Promise<void>;
+  onToggleOfferStatus?: (offerId: string, active: boolean) => Promise<void>;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -46,6 +47,7 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
   products,
   onSaveOffer,
   onDeleteOffer,
+  onToggleOfferStatus,
   showToast,
 }) => {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
@@ -99,16 +101,25 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
       badge: o.badge || '',
       offerType: o.offerType || 'todays_offers',
       imageUrl: o.bannerImage || o.imageUrl || '',
-      link: o.link || '/shop',
+      link: o.link || o.targetUrl || '/shop',
       code: o.code || '',
       terms: (o.termsAndConditions || []).join('\n'),
-      targetCategoryId: o.targetCategoryId || '',
+      targetCategoryId: o.targetCategoryId || o.targetCategoryIds?.[0] || '',
       targetProductIds: o.targetProductIds || [],
       startDate: o.startDate ? o.startDate.split('T')[0] : '',
       endDate: o.endDate ? o.endDate.split('T')[0] : '',
       active: o.active,
     });
     setIsModalOpen(true);
+  };
+
+  const toggleTargetProduct = (prodId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      targetProductIds: prev.targetProductIds.includes(prodId)
+        ? prev.targetProductIds.filter((id) => id !== prodId)
+        : [...prev.targetProductIds, prodId],
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,6 +130,7 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
     }
 
     const offerId = editingOffer?.id || `ofr-${Date.now()}`;
+    const resolvedLink = formData.link.trim() || '/shop';
     const offerToSave: Offer = {
       id: offerId,
       title: formData.title.trim(),
@@ -126,20 +138,29 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
       discountText: formData.discountText.trim() || undefined,
       badge: formData.badge.trim() || undefined,
       offerType: formData.offerType,
+      targetType:
+        formData.offerType === 'category_offers'
+          ? 'category'
+          : formData.offerType === 'product_offers'
+          ? 'product'
+          : 'all',
       imageUrl: formData.imageUrl.trim() || undefined,
       bannerImage: formData.imageUrl.trim() || undefined,
-      link: formData.link.trim() || '/shop',
+      link: resolvedLink,
+      targetUrl: resolvedLink,
       code: formData.code.trim().toUpperCase() || undefined,
       termsAndConditions: formData.terms
         .split('\n')
         .map((t) => t.trim())
         .filter(Boolean),
       targetCategoryId: formData.targetCategoryId || undefined,
+      targetCategoryIds: formData.targetCategoryId ? [formData.targetCategoryId] : undefined,
       targetProductIds: formData.targetProductIds.length > 0 ? formData.targetProductIds : undefined,
       startDate: formData.startDate ? new Date(formData.startDate).toISOString() : new Date().toISOString(),
       endDate: formData.endDate ? new Date(formData.endDate).toISOString() : new Date(Date.now() + 86400000 * 14).toISOString(),
       active: formData.active,
       createdAt: editingOffer?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     await onSaveOffer(offerToSave);
@@ -273,13 +294,27 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-stone-100 mt-2">
-                <span className="text-[11px] font-medium text-stone-500">
-                  {offer.active ? (
-                    <span className="text-emerald-700 font-bold">● Active in Store</span>
-                  ) : (
-                    <span className="text-stone-400">○ Inactive</span>
-                  )}
-                </span>
+                {onToggleOfferStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleOfferStatus(offer.id, offer.active)}
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                      offer.active
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                        : 'text-stone-500 bg-stone-100 border-stone-200 hover:bg-stone-200'
+                    }`}
+                  >
+                    {offer.active ? '● Active in Store' : '○ Inactive'}
+                  </button>
+                ) : (
+                  <span className="text-[11px] font-medium text-stone-500">
+                    {offer.active ? (
+                      <span className="text-emerald-700 font-bold">● Active in Store</span>
+                    ) : (
+                      <span className="text-stone-400">○ Inactive</span>
+                    )}
+                  </span>
+                )}
 
                 <div className="flex items-center gap-2">
                   <button
@@ -292,11 +327,7 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Delete offer "${offer.title}"?`)) {
-                        onDeleteOffer(offer.id, offer.title);
-                      }
-                    }}
+                    onClick={() => onDeleteOffer(offer.id, offer.title)}
                     className="p-1.5 text-stone-500 hover:text-rose-700 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                     title="Delete Offer"
                   >
@@ -402,10 +433,38 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Campaign Badge
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.badge ?? ''}
+                    onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
+                    placeholder="e.g. Limited Time"
+                    className="w-full px-3 py-2 border border-stone-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Destination Link
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.link ?? ''}
+                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    placeholder="/shop"
+                    className="w-full px-3 py-2 border border-stone-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
               <div>
                 <MediaUploader
                   preset="banner"
-                  pathParams={{ bannerId: formData.id || 'new' }}
+                  pathParams={{ bannerId: editingOffer?.id || 'new' }}
                   currentImageUrl={formData.imageUrl}
                   onImageUploaded={(url) => setFormData({ ...formData, imageUrl: url })}
                   label="Upload Offer Banner Image"
@@ -431,6 +490,34 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Target Products if product_offers */}
+              {formData.offerType === 'product_offers' && products.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Target Products ({formData.targetProductIds.length} selected)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-stone-50 rounded-xl border border-stone-200">
+                    {products.map((p) => {
+                      const isSelected = formData.targetProductIds.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleTargetProduct(p.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                            isSelected
+                              ? 'bg-amber-800 text-white shadow-xs'
+                              : 'bg-white text-stone-700 border border-stone-300 hover:bg-stone-100'
+                          }`}
+                        >
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

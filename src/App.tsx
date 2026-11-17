@@ -53,6 +53,7 @@ import {
   Coupon,
   SiteSettings,
   OfferBanner,
+  HomepageConfig,
 } from './types';
 import {
   fetchProducts,
@@ -65,6 +66,7 @@ import {
   fetchCoupons,
   fetchOfferBanners,
   fetchOffers,
+  fetchHomepageConfig,
   getInitialProducts,
   getInitialCategories,
   getInitialDeliveryAreas,
@@ -112,11 +114,12 @@ const AppContent: React.FC = () => {
   const [banners, setBanners] = useState<OfferBanner[]>(() => getInitialBanners());
   const [offers, setOffers] = useState<Offer[]>(() => getInitialOffers());
   const [settings, setSettings] = useState<SiteSettings>(() => getInitialSiteSettings());
+  const [homepageConfig, setHomepageConfig] = useState<HomepageConfig | null>(null);
 
   // Load Initial Data
   const loadData = async () => {
     try {
-      const [prods, cats, areas, cpons, bans, ofrs, stt] = await Promise.all([
+      const [prods, cats, areas, cpons, bans, ofrs, stt, homeCfg] = await Promise.all([
         fetchProducts(),
         fetchCategories(),
         fetchDeliveryAreas(),
@@ -124,6 +127,7 @@ const AppContent: React.FC = () => {
         fetchOfferBanners(),
         fetchOffers(),
         fetchSiteSettings(),
+        fetchHomepageConfig().catch(() => null),
       ]);
 
       if (Array.isArray(prods)) setProducts(prods);
@@ -133,6 +137,7 @@ const AppContent: React.FC = () => {
       if (Array.isArray(bans)) setBanners(bans);
       if (Array.isArray(ofrs)) setOffers(ofrs);
       if (stt) setSettings(stt);
+      if (homeCfg) setHomepageConfig(homeCfg);
 
       // Orders are fetched based on permissions
       if (role === 'admin' && user?.uid) {
@@ -1026,6 +1031,7 @@ const AppContent: React.FC = () => {
       <VendorDashboard
         products={products}
         orders={orders}
+        categories={categories}
         onBackToStore={() => handleNavigateView('home')}
         onOpenProductDetails={(p) => setSelectedProduct(p)}
         onOpenRegisterNewVendor={() => handleNavigateView('vendor-register')}
@@ -1059,10 +1065,16 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-stone-900 selection:bg-amber-100 selection:text-amber-900 font-sans antialiased pb-16 lg:pb-0">
       {/* Brand Value & Promo Announcement Bar */}
-      <AnnouncementBar
-        couponCode="PURE50"
-        couponText="Use code PURE50 for ₹50 OFF on first order"
-      />
+      {homepageConfig?.showAnnouncement !== false && (
+        <AnnouncementBar
+          couponCode="PURE50"
+          couponText={
+            homepageConfig?.announcementText ||
+            settings?.announcementText ||
+            'Use code PURE50 for ₹50 OFF on first order'
+          }
+        />
+      )}
 
       {/* Global Header */}
       <Header
@@ -1084,6 +1096,7 @@ const AppContent: React.FC = () => {
             offers={offers}
             coupons={coupons}
             settings={settings}
+            homepageConfig={homepageConfig || undefined}
             onOpenProductDetails={(p) => setSelectedProduct(p)}
             onNavigateCategory={handleOpenCategory}
             onNavigateShop={() => handleNavigateView('shop')}
@@ -1185,7 +1198,12 @@ const AppContent: React.FC = () => {
       />
 
       {/* Floating WhatsApp Support Button */}
-      <FloatingWhatsApp phoneNumber={settings?.whatsappNumber} />
+      {settings?.whatsappChatEnabled !== false && (
+        <FloatingWhatsApp
+          phoneNumber={settings?.whatsappNumber}
+          defaultMessage={settings?.whatsappPrefillMessage}
+        />
+      )}
 
       {/* Persistent Mobile Bottom Navigation Bar */}
       <MobileBottomNav

@@ -53,6 +53,8 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [reviewToDelete, setReviewToDelete] = useState<Review | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Load reviews on mount
   const loadReviews = async () => {
@@ -118,10 +120,15 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
 
   // Filter reviews written by this user
   const userReviews = reviews.filter((r) => {
-    if (user?.uid && r.customerId === user.uid) return true;
-    if (user?.email && (r.customerId === user.email || r.customerName === user.displayName)) return true;
-    // In demo environment or fallback
-    return r.customerId === 'cust-demo-user' || r.verifiedPurchase;
+    if (user?.uid && (r.customerId === user.uid || r.userId === user.uid)) return true;
+    if (
+      user?.email &&
+      (r.customerId === user.email ||
+        (user.displayName && (r.customerName === user.displayName || r.userName === user.displayName)))
+    ) {
+      return true;
+    }
+    return !user?.uid && r.customerId === 'cust-demo-user';
   });
 
   // Determine items pending review (eligible delivered items that user hasn't reviewed yet)
@@ -284,17 +291,19 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
     }
   };
 
-  const handleDeleteReview = async (reviewId: string) => {
-    if (!window.confirm('Are you sure you want to delete this review?')) return;
+  const handleDeleteReviewConfirm = async () => {
+    if (!reviewToDelete) return;
+    setIsDeleting(true);
     try {
-      await fetch(`/api/reviews/${reviewId}`, { method: 'DELETE' });
-      await deleteProductReview(reviewId);
-      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      await fetch(`/api/reviews/${reviewToDelete.id}`, { method: 'DELETE' }).catch(() => null);
+      await deleteProductReview(reviewToDelete.id);
+      setReviews((prev) => prev.filter((r) => r.id !== reviewToDelete.id));
       showToast('Review deleted.', 'info');
+      setReviewToDelete(null);
     } catch {
-      await deleteProductReview(reviewId);
-      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
-      showToast('Review deleted.', 'info');
+      showToast('Failed to delete review.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -490,7 +499,7 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeleteReview(rev.id)}
+                        onClick={() => setReviewToDelete(rev)}
                         className="p-1.5 text-stone-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50"
                         title="Delete Review"
                       >
@@ -649,6 +658,36 @@ export const AccountReviewsTab: React.FC<AccountReviewsTabProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Review Confirmation Modal */}
+      {reviewToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-stone-200 shadow-2xl space-y-4">
+            <h4 className="font-bold text-stone-900 text-base">Delete Review?</h4>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Are you sure you want to permanently remove your review for{' '}
+              <strong>{reviewToDelete.productName || 'this item'}</strong>?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setReviewToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteReviewConfirm}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Review'}
+              </button>
+            </div>
           </div>
         </div>
       )}

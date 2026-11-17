@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -127,17 +127,27 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
 
   // Pagination slice
   const totalPages = Math.ceil(filteredProducts.length / pageSize) || 1;
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const paginatedProducts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredProducts.slice(start, start + pageSize);
   }, [filteredProducts, currentPage]);
 
   const handleToggleActive = async (product: Product) => {
-    const newStatus = product.status === 'active' ? 'draft' : 'active';
+    const isCurrentlyActive = product.status === 'active' || (product.status === undefined && product.active !== false);
+    const newStatus = isCurrentlyActive ? 'draft' : 'active';
+    const isNowActive = newStatus === 'active';
     const updated: Product = {
       ...product,
       status: newStatus,
-      isAvailable: newStatus === 'active',
+      active: isNowActive,
+      isAvailable: isNowActive && (product.stockQuantity ?? product.stock ?? 0) > 0,
+      availability: isNowActive && (product.stockQuantity ?? product.stock ?? 0) > 0,
       updatedAt: new Date().toISOString(),
     };
     await handleSave(updated);
@@ -146,10 +156,14 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
 
   const handleSaveQuickStock = async () => {
     if (!quickStockProduct) return;
+    const qty = Number(quickStockValue);
     const updated: Product = {
       ...quickStockProduct,
-      stockQuantity: Number(quickStockValue),
-      isAvailable: Number(quickStockValue) > 0,
+      stockQuantity: qty,
+      stock: qty,
+      isAvailable: qty > 0,
+      availability: qty > 0,
+      inStock: qty > 0,
       updatedAt: new Date().toISOString(),
     };
     await handleSave(updated);
@@ -300,25 +314,44 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-stone-100">
+                  <div className="flex items-center justify-between gap-2 text-xs pt-2 border-t border-stone-100">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
                         {product.category || 'General'}
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickStockProduct(product);
+                          setQuickStockValue(stock);
+                        }}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer touch-manipulation ${
                           isOutOfStock
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : isLowStock
                             ? 'bg-amber-50 text-amber-800 border-amber-200'
                             : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                         }`}
+                        title="Tap to edit stock"
                       >
-                        {isOutOfStock ? '0 stock' : `${stock} in stock`}
-                      </span>
+                        {isOutOfStock ? '0 stock (edit)' : `${stock} in stock`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(product)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer touch-manipulation ${
+                          product.status === 'active' || (product.status === undefined && product.active !== false)
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-stone-100 text-stone-600 border-stone-200'
+                        }`}
+                      >
+                        {product.status === 'active' || (product.status === undefined && product.active !== false)
+                          ? 'Active'
+                          : 'Draft'}
+                      </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleOpenModal(product)}

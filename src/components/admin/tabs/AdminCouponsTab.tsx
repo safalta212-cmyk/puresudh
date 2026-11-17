@@ -126,21 +126,23 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
 
   const handleOpenEdit = (c: Coupon) => {
     setEditingCoupon(c);
+    const startRaw = c.validFrom || c.startDate;
+    const endRaw = c.validUntil || c.validTill || c.expiryDate;
     setFormData({
       code: c.code,
-      discountType: c.discountType,
+      discountType: (c.discountType === 'flat' ? 'fixed' : c.discountType) as 'percentage' | 'fixed',
       discountValue: c.discountValue,
-      minOrderAmount: c.minOrderAmount,
+      minOrderAmount: c.minOrderAmount ?? c.minimumOrder ?? 0,
       maxDiscount: c.maxDiscount || 0,
       description: c.description || '',
-      startDate: c.validFrom ? c.validFrom.split('T')[0] : new Date().toISOString().split('T')[0],
-      expiryDate: c.validUntil ? c.validUntil.split('T')[0] : '',
+      startDate: startRaw ? startRaw.split('T')[0] : new Date().toISOString().split('T')[0],
+      expiryDate: endRaw ? endRaw.split('T')[0] : '',
       usageLimit: c.usageLimit || 100,
-      perUserLimit: c.perUserLimit || 1,
+      perUserLimit: c.perUserLimit ?? c.perCustomerLimit ?? 1,
       firstOrderOnly: Boolean(c.firstOrderOnly),
-      restrictedProductIds: c.restrictedProductIds || [],
-      restrictedCategoryIds: c.restrictedCategoryIds || [],
-      active: c.active,
+      restrictedProductIds: c.restrictedProductIds || c.productRestrictions || [],
+      restrictedCategoryIds: c.restrictedCategoryIds || c.categoryRestrictions || [],
+      active: c.active !== false,
     });
     setIsModalOpen(true);
   };
@@ -184,24 +186,39 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
     }
 
     const cId = editingCoupon?.id || `cpn-${formData.code.toLowerCase()}`;
+    const validFromIso = formData.startDate ? new Date(formData.startDate).toISOString() : new Date().toISOString();
+    const validUntilIso = formData.expiryDate ? new Date(formData.expiryDate).toISOString() : new Date(Date.now() + 86400000 * 30).toISOString();
+    const minOrderNum = Number(formData.minOrderAmount) || 0;
+    const perUserNum = Number(formData.perUserLimit) || 1;
+    const prodRestricts = formData.restrictedProductIds.length > 0 ? formData.restrictedProductIds : undefined;
+    const catRestricts = formData.restrictedCategoryIds.length > 0 ? formData.restrictedCategoryIds : undefined;
+
     const couponToSave: Coupon = {
       id: cId,
       code: formData.code.trim().toUpperCase(),
       discountType: formData.discountType,
       discountValue: Number(formData.discountValue),
-      minOrderAmount: Number(formData.minOrderAmount),
+      minOrderAmount: minOrderNum,
+      minimumOrder: minOrderNum,
       maxDiscount: formData.discountType === 'percentage' && Number(formData.maxDiscount) > 0 ? Number(formData.maxDiscount) : undefined,
       description: formData.description.trim(),
-      validFrom: formData.startDate ? new Date(formData.startDate).toISOString() : new Date().toISOString(),
-      validUntil: formData.expiryDate ? new Date(formData.expiryDate).toISOString() : new Date(Date.now() + 86400000 * 30).toISOString(),
+      validFrom: validFromIso,
+      startDate: validFromIso,
+      validUntil: validUntilIso,
+      validTill: validUntilIso,
+      expiryDate: validUntilIso,
       usageLimit: Number(formData.usageLimit) || 100,
       usageCount: editingCoupon?.usageCount || 0,
-      perUserLimit: Number(formData.perUserLimit) || 1,
+      perUserLimit: perUserNum,
+      perCustomerLimit: perUserNum,
       firstOrderOnly: formData.firstOrderOnly,
-      restrictedProductIds: formData.restrictedProductIds.length > 0 ? formData.restrictedProductIds : undefined,
-      restrictedCategoryIds: formData.restrictedCategoryIds.length > 0 ? formData.restrictedCategoryIds : undefined,
+      restrictedProductIds: prodRestricts,
+      productRestrictions: prodRestricts,
+      restrictedCategoryIds: catRestricts,
+      categoryRestrictions: catRestricts,
       active: formData.active,
       createdAt: editingCoupon?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     await onSaveCoupon(couponToSave);
@@ -277,8 +294,14 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
       {/* Coupons Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {coupons.map((coupon) => {
-          const isExpired = coupon.validUntil && new Date(coupon.validUntil) < new Date();
-          const isUpcoming = coupon.validFrom && new Date(coupon.validFrom) > new Date();
+          const effectiveUntil = coupon.validUntil || coupon.validTill || coupon.expiryDate;
+          const effectiveFrom = coupon.validFrom || coupon.startDate;
+          const effectiveMinOrder = coupon.minOrderAmount ?? coupon.minimumOrder ?? 0;
+          const effectivePerUser = coupon.perUserLimit ?? coupon.perCustomerLimit ?? 1;
+          const effectiveCatRestrict = coupon.restrictedCategoryIds || coupon.categoryRestrictions || [];
+          const effectiveProdRestrict = coupon.restrictedProductIds || coupon.productRestrictions || [];
+          const isExpired = effectiveUntil && new Date(effectiveUntil) < new Date();
+          const isUpcoming = effectiveFrom && new Date(effectiveFrom) > new Date();
 
           return (
             <div
@@ -364,7 +387,7 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                 <div className="space-y-1.5 py-3 my-2 border-y border-stone-100 text-[11px] text-stone-600">
                   <div className="flex items-center justify-between">
                     <span className="text-stone-500">Min. Order:</span>
-                    <span className="font-semibold text-stone-800">₹{coupon.minOrderAmount}</span>
+                    <span className="font-semibold text-stone-800">₹{effectiveMinOrder}</span>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -377,33 +400,33 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-stone-500">Per-Customer Limit:</span>
                     <span className="font-semibold text-stone-800">
-                      {coupon.perUserLimit || 1} time(s)
+                      {effectivePerUser} time(s)
                     </span>
                   </div>
 
-                  {coupon.validUntil && (
+                  {effectiveUntil && (
                     <div className="flex items-center justify-between">
                       <span className="text-stone-500">Expiry:</span>
                       <span className="font-semibold text-stone-800">
-                        {new Date(coupon.validUntil).toLocaleDateString()}
+                        {new Date(effectiveUntil).toLocaleDateString()}
                       </span>
                     </div>
                   )}
 
-                  {(coupon.restrictedCategoryIds?.length || 0) > 0 && (
+                  {effectiveCatRestrict.length > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-stone-500">Categories:</span>
                       <span className="font-semibold text-amber-800">
-                        {coupon.restrictedCategoryIds?.length} restricted
+                        {effectiveCatRestrict.length} restricted
                       </span>
                     </div>
                   )}
 
-                  {(coupon.restrictedProductIds?.length || 0) > 0 && (
+                  {effectiveProdRestrict.length > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-stone-500">Products:</span>
                       <span className="font-semibold text-amber-800">
-                        {coupon.restrictedProductIds?.length} restricted
+                        {effectiveProdRestrict.length} restricted
                       </span>
                     </div>
                   )}
@@ -416,7 +439,7 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                   <button
                     type="button"
                     onClick={() => onToggleCouponStatus(coupon.id, coupon.active)}
-                    className="text-xs font-semibold text-stone-600 hover:text-stone-900 transition"
+                    className="text-xs font-semibold text-stone-600 hover:text-stone-900 transition cursor-pointer"
                   >
                     {coupon.active ? 'Deactivate' : 'Activate'}
                   </button>
@@ -426,19 +449,15 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(coupon)}
-                    className="p-1.5 text-stone-500 hover:text-amber-700 hover:bg-stone-100 rounded-lg transition"
+                    className="p-1.5 text-stone-500 hover:text-amber-700 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                     title="Edit Coupon"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Delete coupon "${coupon.code}"?`)) {
-                        onDeleteCoupon(coupon.id, coupon.code);
-                      }
-                    }}
-                    className="p-1.5 text-stone-500 hover:text-rose-700 hover:bg-stone-100 rounded-lg transition"
+                    onClick={() => onDeleteCoupon(coupon.id, coupon.code)}
+                    className="p-1.5 text-stone-500 hover:text-rose-700 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                     title="Delete Coupon"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -657,6 +676,36 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                   </div>
                   <span className="text-[10px] text-stone-500">
                     If selected, discount applies only when cart contains items from these categories
+                  </span>
+                </div>
+              )}
+
+              {products.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Product Restriction (Optional)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-stone-50 rounded-xl border border-stone-200">
+                    {products.map((prod: Product) => {
+                      const isSelected = formData.restrictedProductIds.includes(prod.id);
+                      return (
+                        <button
+                          key={prod.id}
+                          type="button"
+                          onClick={() => toggleProductRestriction(prod.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                            isSelected
+                              ? 'bg-amber-800 text-white shadow-xs'
+                              : 'bg-white text-stone-700 border border-stone-300 hover:bg-stone-100'
+                          }`}
+                        >
+                          {prod.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className="text-[10px] text-stone-500">
+                    Restrict coupon validity to specific products ({formData.restrictedProductIds.length} selected)
                   </span>
                 </div>
               )}

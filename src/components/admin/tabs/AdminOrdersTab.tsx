@@ -20,7 +20,7 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react';
-import { Order, OrderStatus } from '../../../types';
+import { Order, OrderStatus, normalizeOrderStatus } from '../../../types';
 import { notificationService } from '../../../services/notifications/notificationService';
 
 interface AdminOrdersTabProps {
@@ -29,6 +29,7 @@ interface AdminOrdersTabProps {
   onProcessRefund: (orderId: string, refundRef: string, reason: string) => Promise<void>;
   onProcessCancel?: (orderId: string, reason: string) => Promise<void>;
   initialSelectedOrder?: Order | null;
+  initialSearchQuery?: string;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -38,9 +39,10 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
   onProcessRefund,
   onProcessCancel,
   initialSelectedOrder,
+  initialSearchQuery,
   showToast,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,6 +56,23 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
       setSelectedOrder(initialSelectedOrder);
     }
   }, [initialSelectedOrder]);
+
+  useEffect(() => {
+    if (initialSearchQuery !== undefined && initialSearchQuery !== '') {
+      setSearchQuery(initialSearchQuery);
+      setCurrentPage(1);
+    }
+  }, [initialSearchQuery]);
+
+  // Keep selectedOrder synchronized if orders list updates
+  useEffect(() => {
+    if (selectedOrder) {
+      const updated = orders.find((o) => o.id === selectedOrder.id);
+      if (updated && updated !== selectedOrder) {
+        setSelectedOrder(updated);
+      }
+    }
+  }, [orders, selectedOrder]);
 
   // Status progression action state
   const [selectedNewStatus, setSelectedNewStatus] = useState<OrderStatus | ''>('');
@@ -107,24 +126,29 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
 
       const matchesStatus =
         statusFilter === 'all' ||
-        o.status === statusFilter ||
-        (statusFilter === 'DELIVERED' && (o.status === 'DELIVERED' || o.status === 'Delivered')) ||
-        (statusFilter === 'CANCELLED' && (o.status === 'CANCELLED' || o.status === 'Cancelled')) ||
-        (statusFilter === 'PLACED' && (o.status === 'PLACED' || o.status === 'Order Placed'));
+        normalizeOrderStatus(o.status) === normalizeOrderStatus(statusFilter as OrderStatus);
 
+      const pm = (o.paymentMethod || '').toLowerCase();
+      const ps = (o.paymentStatus || '').toLowerCase();
       const matchesPayment =
         paymentFilter === 'all' ||
-        (paymentFilter === 'UPI' && (o.paymentMethod === 'UPI' || o.paymentMethod === 'PhonePe')) ||
-        (paymentFilter === 'COD' && o.paymentMethod?.toLowerCase().includes('cash')) ||
-        (paymentFilter === 'Paid' && (o.paymentStatus === 'Paid' || o.paymentStatus === 'Success')) ||
-        (paymentFilter === 'Pending' && o.paymentStatus === 'Pending') ||
-        (paymentFilter === 'Refunded' && o.paymentStatus === 'Refunded');
+        (paymentFilter === 'UPI' && (pm.includes('upi') || pm.includes('phonepe') || pm.includes('gpay') || pm.includes('paytm'))) ||
+        (paymentFilter === 'COD' && (pm.includes('cash') || pm === 'cod')) ||
+        (paymentFilter === 'Paid' && (ps === 'paid' || ps === 'success')) ||
+        (paymentFilter === 'Pending' && ps === 'pending') ||
+        (paymentFilter === 'Refunded' && ps === 'refunded');
 
       return matchesSearch && matchesStatus && matchesPayment;
     });
   }, [orders, searchQuery, statusFilter, paymentFilter]);
 
   const totalPages = Math.ceil(filteredOrders.length / pageSize) || 1;
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredOrders.slice(start, start + pageSize);
@@ -176,6 +200,14 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
     setSelectedOrder({
       ...selectedOrder,
       status: 'CANCELLED',
+      statusHistory: [
+        ...(selectedOrder.statusHistory || []),
+        {
+          status: 'CANCELLED',
+          timestamp: new Date().toISOString(),
+          note: `Cancelled: ${cancelReason}`,
+        },
+      ],
     });
   };
 
@@ -195,6 +227,14 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
       ...selectedOrder,
       status: 'REFUNDED',
       paymentStatus: 'Refunded',
+      statusHistory: [
+        ...(selectedOrder.statusHistory || []),
+        {
+          status: 'REFUNDED',
+          timestamp: new Date().toISOString(),
+          note: `Refund Processed (Ref: ${ref}) - ${refundReason}`,
+        },
+      ],
     });
   };
 
@@ -660,10 +700,39 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
               </div>
             </div>
 
+            {/* Status History Timeline */}
+            {selectedOrder.statusHistory && selectedOrder.statusHistory.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-700" />
+                  Audit Timeline ({selectedOrder.statusHistory.length})
+                </h4>
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {selectedOrder.statusHistory.map((entry, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-3 text-[11px] border-b border-stone-200/70 last:border-b-0 pb-1.5 last:pb-0">
+                      <div>
+                        <span className="font-bold text-stone-900">{entry.status}</span>
+                        {entry.note && <p className="text-stone-600 mt-0.5">{entry.note}</p>}
+                      </div>
+                      <span className="text-stone-400 shrink-0 font-mono">
+                        {new Date(entry.timestamp).toLocaleString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Special Actions: Cancellation & Refund */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-stone-100">
               <div className="flex items-center gap-2">
-                {selectedOrder.status !== 'CANCELLED' && selectedOrder.status !== 'Cancelled' && (
+                {normalizeOrderStatus(selectedOrder.status) !== 'CANCELLED' &&
+                  normalizeOrderStatus(selectedOrder.status) !== 'REFUNDED' && (
                   <button
                     onClick={() => setIsCancelModalOpen(true)}
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
@@ -673,7 +742,8 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
                   </button>
                 )}
 
-                {selectedOrder.paymentStatus !== 'Refunded' && (
+                {selectedOrder.paymentStatus !== 'Refunded' &&
+                  normalizeOrderStatus(selectedOrder.status) !== 'REFUNDED' && (
                   <button
                     onClick={() => {
                       setRefundRefId(`REF-${selectedOrder.orderNumber}`);

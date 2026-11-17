@@ -51,6 +51,8 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
   const [isDefault, setIsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [addressToDelete, setAddressToDelete] = useState<Address | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const resetForm = () => {
     setName(user?.displayName || '');
@@ -95,14 +97,22 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
     showToast('Default delivery address updated.', 'success');
   };
 
-  const handleDelete = async (addressId: string) => {
-    if (!window.confirm('Delete this delivery address?')) return;
-    const remaining = addresses.filter((a) => a.id !== addressId);
-    if (remaining.length > 0 && !remaining.some((a) => a.isDefault)) {
-      remaining[0].isDefault = true;
+  const handleDeleteConfirm = async () => {
+    if (!addressToDelete) return;
+    setIsDeleting(true);
+    try {
+      const remaining = addresses.filter((a) => a.id !== addressToDelete.id);
+      if (remaining.length > 0 && !remaining.some((a) => a.isDefault)) {
+        remaining[0] = { ...remaining[0], isDefault: true };
+      }
+      await onUpdateAddresses(remaining);
+      showToast('Address removed.', 'info');
+      setAddressToDelete(null);
+    } catch {
+      showToast('Failed to delete address.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
-    await onUpdateAddresses(remaining);
-    showToast('Address removed.', 'info');
   };
 
   const handleSaveAddress = async (e: React.FormEvent) => {
@@ -286,7 +296,7 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(addr.id)}
+                  onClick={() => setAddressToDelete(addr)}
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 transition flex items-center gap-1 cursor-pointer"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -481,6 +491,35 @@ export const AccountAddressesTab: React.FC<AccountAddressesTabProps> = ({
           onLocationSelect={handleLocationPicked}
           initialPincode={pincode}
         />
+      )}
+      {/* Delete Address Confirmation Modal */}
+      {addressToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-stone-200 shadow-2xl space-y-4">
+            <h4 className="font-bold text-stone-900 text-base">Delete Delivery Address?</h4>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Remove <strong>{addressToDelete.name}</strong> ({addressToDelete.pincode}) from your saved delivery addresses?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setAddressToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Address'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

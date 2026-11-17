@@ -39,6 +39,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
 
   const [isPurging, setIsPurging] = useState(false);
+  const [isPurgeConfirmOpen, setIsPurgeConfirmOpen] = useState(false);
 
   const loadCustomerData = async () => {
     setLoading(true);
@@ -52,10 +53,8 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
     }
   };
 
-  const handlePurgeTemporaryAccounts = async () => {
-    if (!window.confirm('Scan database now and permanently remove any accounts created with temporary/disposable emails or fake phone numbers?')) {
-      return;
-    }
+  const executePurgeTemporaryAccounts = async () => {
+    setIsPurgeConfirmOpen(false);
     setIsPurging(true);
     try {
       const result = await auditAndPurgeTemporaryAccounts();
@@ -135,9 +134,10 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
             Customer directories, addresses on file, total lifetime value, and access control
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={handlePurgeTemporaryAccounts}
+            type="button"
+            onClick={() => setIsPurgeConfirmOpen(true)}
             disabled={isPurging || loading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200 cursor-pointer disabled:opacity-50"
             title="Scan database and remove any temporary email accounts or dummy phone numbers"
@@ -146,6 +146,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
             <span>{isPurging ? 'Purging Flagged Accounts...' : 'Purge Fake/Temp Accounts'}</span>
           </button>
           <button
+            type="button"
             onClick={loadCustomerData}
             disabled={loading || isPurging}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors border border-stone-300 cursor-pointer disabled:opacity-50"
@@ -185,9 +186,63 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
         </div>
       </div>
 
-      {/* Customers Table */}
+      {/* Customers List: Mobile Cards (< md) + Desktop Table (>= md) */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Cards */}
+        <div className="block md:hidden divide-y divide-stone-100">
+          {filteredCustomers.length === 0 ? (
+            <div className="py-10 text-center text-stone-400 p-4">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-40 text-stone-400" />
+              No customers found matching your search.
+            </div>
+          ) : (
+            filteredCustomers.map((cust) => (
+              <div key={cust.id} className="p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-purple-100 text-purple-800 font-bold flex items-center justify-center text-xs shrink-0">
+                      {cust.displayName?.charAt(0) || 'C'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-stone-900 truncate">{cust.displayName}</div>
+                      <div className="text-[11px] text-stone-500 truncate">{cust.email}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                      cust.status === 'active'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : cust.status === 'suspended'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                    }`}
+                  >
+                    {cust.status || 'active'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-stone-600 pt-1 border-t border-stone-100">
+                  <div>
+                    <span className="font-bold text-stone-900">{cust.totalOrders || 0}</span> orders
+                    <span className="mx-1.5 text-stone-300">•</span>
+                    <span className="font-bold text-emerald-700">₹{(cust.totalSpent || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCustomer(cust)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 min-h-[34px]"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Profile
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider bg-stone-50/80 border-b border-stone-200">
               <tr>
@@ -360,10 +415,25 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
 
             {/* Orders Summary */}
             <div className="space-y-2">
-              <h4 className="font-bold text-stone-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <ShoppingBag className="w-3.5 h-3.5 text-amber-700" />
-                Order History ({customerOrders.length})
-              </h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-bold text-stone-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 text-amber-700" />
+                  Order History ({customerOrders.length})
+                </h4>
+                {onViewCustomerOrders && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedCustomer.email || selectedCustomer.displayName || selectedCustomer.id;
+                      setSelectedCustomer(null);
+                      onViewCustomerOrders(target);
+                    }}
+                    className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline cursor-pointer"
+                  >
+                    Open in Orders Desk →
+                  </button>
+                )}
+              </div>
               {customerOrders.length > 0 ? (
                 <div className="border border-stone-200 rounded-xl divide-y divide-stone-100 max-h-48 overflow-y-auto">
                   {customerOrders.map((ord) => (
@@ -387,7 +457,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
             </div>
 
             {/* Status Control */}
-            <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
+            <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-stone-700">Account Access Control:</span>
               <div className="flex items-center gap-2">
                 <button
@@ -421,6 +491,43 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
                   Block
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purge Temporary Accounts Confirmation Modal */}
+      {isPurgeConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-stone-200 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-stone-900">
+                  Purge Fake & Disposable Accounts
+                </h3>
+                <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                  Scan the customer database now and permanently remove accounts registered with temporary/disposable email domains or invalid placeholder phone numbers?
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsPurgeConfirmOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executePurgeTemporaryAccounts}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs cursor-pointer"
+              >
+                Run Audit & Purge
+              </button>
             </div>
           </div>
         </div>

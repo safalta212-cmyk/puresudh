@@ -62,7 +62,7 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
       maxOrders: s.maxOrders || 50,
       cutoffTime: s.cutoffTime || '06:00 AM',
       days: s.days || ['Daily'],
-      isActive: s.isActive,
+      isActive: s.isActive ?? s.active ?? true,
     });
     setIsModalOpen(true);
   };
@@ -84,6 +84,8 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
       cutoffTime: formData.cutoffTime.trim(),
       days: formData.days,
       isActive: formData.isActive,
+      active: formData.isActive,
+      updatedAt: new Date().toISOString(),
     };
 
     await onSaveSlot(slotToSave);
@@ -108,7 +110,7 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
         </div>
         <button
           onClick={handleOpenAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-xl transition-colors shadow-xs"
+          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-xl transition-colors shadow-xs cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Add Time Slot
@@ -116,78 +118,95 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {deliverySlots.map((slot) => {
-          return (
-            <div
-              key={slot.id}
-              className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
-                slot.isActive ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
-                      <Clock className="w-4 h-4" />
+      {deliverySlots.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 text-xs">
+          <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          No delivery slots configured yet. Click &quot;Add Time Slot&quot; to create dispatch windows.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {deliverySlots.map((slot) => {
+            const slotActive = slot.isActive ?? slot.active ?? true;
+            return (
+              <div
+                key={slot.id}
+                className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
+                  slotActive ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-stone-900 text-sm">{slot.name}</h3>
+                        <p className="text-xs text-amber-800 font-semibold">
+                          {slot.startTime} - {slot.endTime}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSaveSlot({
+                          ...slot,
+                          isActive: !slotActive,
+                          active: !slotActive,
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition ${
+                        slotActive
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
+                      }`}
+                    >
+                      {slotActive ? 'Active' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/70 text-xs grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-stone-500 block">Cutoff Time:</span>
+                      <span className="font-bold text-stone-900">{slot.cutoffTime || '1 hour prior'}</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-stone-900 text-sm">{slot.name}</h3>
-                      <p className="text-xs text-amber-800 font-semibold">
-                        {slot.startTime} - {slot.endTime}
-                      </p>
+                      <span className="text-[10px] text-stone-500 block">Max Orders Capacity:</span>
+                      <span className="font-bold text-amber-900">{slot.maxOrders || 50} orders</span>
+                    </div>
+                    <div className="col-span-2 pt-1">
+                      <span className="text-[10px] text-stone-500 block">Available Days:</span>
+                      <span className="font-semibold text-stone-700">
+                        {slot.days?.join(', ') || 'All Days'}
+                      </span>
                     </div>
                   </div>
+                </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      slot.isActive
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-stone-100 text-stone-600 border-stone-200'
-                    }`}
+                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
+                  <button
+                    onClick={() => handleOpenEdit(slot)}
+                    className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
+                    title="Edit Slot"
                   >
-                    {slot.isActive ? 'Active' : 'Disabled'}
-                  </span>
-                </div>
-
-                <div className="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200/70 text-xs grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[10px] text-stone-500 block">Cutoff Time:</span>
-                    <span className="font-bold text-stone-900">{slot.cutoffTime || '1 hour prior'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-500 block">Max Orders Capacity:</span>
-                    <span className="font-bold text-amber-900">{slot.maxOrders || 50} orders</span>
-                  </div>
-                  <div className="col-span-2 pt-1">
-                    <span className="text-[10px] text-stone-500 block">Available Days:</span>
-                    <span className="font-semibold text-stone-700">
-                      {slot.days?.join(', ') || 'All Days'}
-                    </span>
-                  </div>
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteSlot(slot.id, slot.name)}
+                    className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Delete Slot"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
-                <button
-                  onClick={() => handleOpenEdit(slot)}
-                  className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
-                  title="Edit Slot"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => onDeleteSlot(slot.id, slot.name)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title="Delete Slot"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add / Edit Slot Modal */}
       {isModalOpen && (

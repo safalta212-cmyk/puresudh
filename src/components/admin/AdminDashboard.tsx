@@ -48,6 +48,9 @@ import {
   saveCategory,
   deleteCategory,
   updateOrderStatus,
+  processOrderRefund,
+  processOrderCancellation,
+  fetchCustomers,
   saveDeliveryArea,
   deleteDeliveryArea,
   fetchDeliverySlots,
@@ -65,6 +68,7 @@ import {
   deleteBanner,
   saveSiteSettings,
 } from '../../firebase/services';
+import { normalizeOrderStatus } from '../../types';
 
 // Modular Tabs
 import { AdminDashboardOverviewTab } from './tabs/AdminDashboardOverviewTab';
@@ -148,74 +152,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Sync activeTab if initialTab prop changes from URL/parent routing
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  // Cross-tab drill-down state
+  const [orderInitialSearch, setOrderInitialSearch] = useState('');
+  const [preselectedOrder, setPreselectedOrder] = useState<Order | null>(null);
+  const [customersCount, setCustomersCount] = useState<number>(() => {
+    const uniq = new Set(orders.map((o) => o.customerEmail || o.customerId).filter(Boolean));
+    return uniq.size;
+  });
+
+  // Shared in-app Delete Confirmation Modal (replaces window.confirm across all tabs)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [isConfirmLoading, setIsConfirmLoading] = useState(false);
+
   // Dynamic async state for offers, banners, slots
   const [offersList, setOffersList] = useState<Offer[]>([]);
   const [bannersList, setBannersList] = useState<OfferBanner[]>([]);
-  const [deliverySlotsList, setDeliverySlotsList] = useState<DeliverySlot[]>([
-    {
-      id: 'slot-1',
-      name: 'Early Morning Fresh Dispatch',
-      startTime: '06:30 AM',
-      endTime: '09:00 AM',
-      maxOrders: 50,
-      cutoffTime: '05:30 AM',
-      days: ['Daily'],
-      isActive: true,
-    },
-    {
-      id: 'slot-2',
-      name: 'Afternoon Kitchen Batch',
-      startTime: '12:00 PM',
-      endTime: '03:00 PM',
-      maxOrders: 40,
-      cutoffTime: '11:00 AM',
-      days: ['Daily'],
-      isActive: true,
-    },
-    {
-      id: 'slot-3',
-      name: 'Evening Festive & Sweets Rush',
-      startTime: '05:00 PM',
-      endTime: '08:30 PM',
-      maxOrders: 60,
-      cutoffTime: '04:00 PM',
-      days: ['Daily'],
-      isActive: true,
-    },
-  ]);
+  const [deliverySlotsList, setDeliverySlotsList] = useState<DeliverySlot[]>([]);
 
   // Product Add/Edit Modal
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // Load secondary lists (offers, banners, delivery slots)
+  // Load secondary lists (offers, banners, delivery slots, customers)
+  const loadSupplementaryData = async (isActiveCheck = () => true) => {
+    try {
+      const [offers, banners, slots, customers] = await Promise.all([
+        fetchOffers(true).catch(() => []),
+        fetchBanners(true).catch(() => []),
+        fetchDeliverySlots(undefined, true).catch(() => []),
+        fetchCustomers().catch(() => []),
+      ]);
+
+      if (!isActiveCheck()) return;
+      setOffersList(offers);
+      setBannersList(banners);
+      setDeliverySlotsList(slots);
+      if (customers.length > 0) {
+        setCustomersCount(customers.length);
+      } else {
+        const uniq = new Set(orders.map((o) => o.customerEmail || o.customerId).filter(Boolean));
+        setCustomersCount(uniq.size);
+      }
+    } catch (err) {
+      console.error('Failed to load admin supplementary data:', err);
+    }
+  };
+
   useEffect(() => {
     let active = true;
-
-    const loadExtraData = async () => {
-      try {
-        const [offers, banners, slots] = await Promise.all([
-          fetchOffers().catch(() => []),
-          fetchBanners().catch(() => []),
-          fetchDeliverySlots().catch(() => []),
-        ]);
-
-        if (active) {
-          if (offers.length > 0) setOffersList(offers);
-          if (banners.length > 0) setBannersList(banners);
-          if (slots.length > 0) setDeliverySlotsList(slots);
-        }
-      } catch (err) {
-        console.error('Failed to load admin supplementary data:', err);
-      }
-    };
-
-    loadExtraData();
-
+    loadSupplementaryData(() => active);
     return () => {
       active = false;
     };
-  }, []);
+  }, [orders.length]);
 
   // Handlers for Products
   const handleOpenAddProduct = () => {
@@ -255,11 +254,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDeleteCategory = async (catId: string, catName: string) => {
-    if (window.confirm(`Delete category "${catName}"?`)) {
-      await deleteCategory(catId);
-      showToast(`Category "${catName}" deleted`, 'info');
-      onRefreshData();
-    }
+    setConfirmDialog({
+      title: 'Delete Category?',
+      message: `Are you sure you want to delete category "${catName}"? Products using it will remain in the catalog.`,
+      confirmLabel: 'Delete Category',
+      onConfirm: async () => {
+        await deleteCategory(catId);
+        showToast(`Category "${catName}" deleted`, 'info');
+        onRefreshData();
+      },
+    });
   };
 
   // Handlers for Orders
@@ -273,13 +277,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onRefreshData();
   };
 
-  const handleProcessRefund = async (orderId: string, amount: number, reason: string) => {
-    await updateOrderStatus(
-      orderId,
-      'Cancelled',
-      `Refund Initiated: ₹${amount}. Reason: ${reason}`
-    );
-    showToast(`Refund of ₹${amount} initiated for order #${orderId}`, 'info');
+  const handleProcessRefund = async (orderId: string, refundRef: string, reason?: string) => {
+    await processOrderRefund(orderId, refundRef, reason || 'Admin initiated refund');
+    showToast(`Refund processed (Ref: ${refundRef})`, 'info');
+    onRefreshData();
+  };
+
+  const handleProcessCancel = async (orderId: string, reason: string) => {
+    await processOrderCancellation(orderId, reason);
+    showToast(`Order cancelled: ${reason}`, 'info');
     onRefreshData();
   };
 
@@ -290,11 +296,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDeleteCoupon = async (couponId: string, code: string) => {
-    if (window.confirm(`Delete coupon promo code "${code}"?`)) {
-      await deleteCoupon(couponId);
-      showToast(`Coupon "${code}" deleted`, 'info');
-      onRefreshData();
-    }
+    setConfirmDialog({
+      title: 'Delete Coupon?',
+      message: `Delete promo coupon code "${code}" permanently?`,
+      confirmLabel: 'Delete Coupon',
+      onConfirm: async () => {
+        await deleteCoupon(couponId);
+        showToast(`Coupon "${code}" deleted`, 'info');
+        onRefreshData();
+      },
+    });
   };
 
   const handleToggleCouponStatus = async (couponId: string, active: boolean) => {
@@ -305,23 +316,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Handlers for Offers
   const handleSaveOffer = async (offer: Offer) => {
     await saveOffer(offer);
-    const refreshed = await fetchOffers();
+    const refreshed = await fetchOffers(true);
     setOffersList(refreshed);
   };
 
   const handleDeleteOffer = async (offerId: string, title: string) => {
-    if (window.confirm(`Delete marketing campaign "${title}"?`)) {
-      await deleteOffer(offerId);
-      showToast(`Campaign "${title}" deleted`, 'info');
-      const refreshed = await fetchOffers();
-      setOffersList(refreshed);
-    }
+    setConfirmDialog({
+      title: 'Delete Offer Campaign?',
+      message: `Remove marketing campaign "${title}" from the store?`,
+      confirmLabel: 'Delete Offer',
+      onConfirm: async () => {
+        await deleteOffer(offerId);
+        showToast(`Campaign "${title}" deleted`, 'info');
+        const refreshed = await fetchOffers(true);
+        setOffersList(refreshed);
+      },
+    });
   };
 
   const handleToggleOfferStatus = async (offerId: string, active: boolean) => {
     await toggleOfferStatus(offerId, active);
-    const refreshed = await fetchOffers();
+    const refreshed = await fetchOffers(true);
     setOffersList(refreshed);
+    showToast(`Campaign is now ${active ? 'Active' : 'Paused'}`, 'info');
   };
 
   // Handlers for Delivery Areas
@@ -331,22 +348,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDeleteArea = async (areaId: string, areaName: string) => {
-    if (window.confirm(`Delete delivery area "${areaName}"?`)) {
-      await deleteDeliveryArea(areaId);
-      showToast(`Delivery area "${areaName}" removed`, 'info');
-      onRefreshData();
-    }
+    setConfirmDialog({
+      title: 'Delete Delivery Area?',
+      message: `Remove serviceable delivery zone "${areaName}"?`,
+      confirmLabel: 'Delete Zone',
+      onConfirm: async () => {
+        await deleteDeliveryArea(areaId);
+        showToast(`Delivery area "${areaName}" removed`, 'info');
+        onRefreshData();
+      },
+    });
   };
 
   const handleToggleAreaStatus = async (area: DeliveryArea) => {
-    const updated = {
+    const currentlyActive = area.active !== false && area.isDeliverable !== false;
+    const nextActive = !currentlyActive;
+    const updated: DeliveryArea = {
       ...area,
-      isDeliverable: !area.isDeliverable,
-      active: !area.isDeliverable,
+      isDeliverable: nextActive,
+      active: nextActive,
     };
     await saveDeliveryArea(updated);
     showToast(
-      `Delivery area "${area.areaName}" is now ${updated.isDeliverable ? 'Active' : 'Suspended'}`,
+      `Delivery area "${area.areaName || area.name || area.pincode}" is now ${nextActive ? 'Active' : 'Suspended'}`,
       'info'
     );
     onRefreshData();
@@ -355,33 +379,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Handlers for Delivery Slots
   const handleSaveSlot = async (slot: DeliverySlot) => {
     await saveDeliverySlot(slot);
-    const refreshed = await fetchDeliverySlots();
+    const refreshed = await fetchDeliverySlots(undefined, true);
     setDeliverySlotsList(refreshed);
   };
 
   const handleDeleteSlot = async (slotId: string, slotName: string) => {
-    if (window.confirm(`Delete delivery slot "${slotName}"?`)) {
-      await deleteDeliverySlot(slotId);
-      showToast(`Slot "${slotName}" deleted`, 'info');
-      const refreshed = await fetchDeliverySlots();
-      setDeliverySlotsList(refreshed);
-    }
+    setConfirmDialog({
+      title: 'Delete Delivery Slot?',
+      message: `Delete time slot "${slotName}"?`,
+      confirmLabel: 'Delete Slot',
+      onConfirm: async () => {
+        await deleteDeliverySlot(slotId);
+        showToast(`Slot "${slotName}" deleted`, 'info');
+        const refreshed = await fetchDeliverySlots(undefined, true);
+        setDeliverySlotsList(refreshed);
+      },
+    });
   };
 
   // Handlers for Banners
   const handleSaveBanner = async (banner: OfferBanner) => {
     await saveBanner(banner);
-    const refreshed = await fetchBanners();
+    const refreshed = await fetchBanners(true);
     setBannersList(refreshed);
   };
 
   const handleDeleteBanner = async (bannerId: string, title: string) => {
-    if (window.confirm(`Delete banner slide "${title}"?`)) {
-      await deleteBanner(bannerId);
-      showToast(`Banner "${title}" deleted`, 'info');
-      const refreshed = await fetchBanners();
-      setBannersList(refreshed);
-    }
+    setConfirmDialog({
+      title: 'Delete Hero Banner?',
+      message: `Remove homepage hero banner "${title}"?`,
+      confirmLabel: 'Delete Banner',
+      onConfirm: async () => {
+        await deleteBanner(bannerId);
+        showToast(`Banner "${title}" deleted`, 'info');
+        const refreshed = await fetchBanners(true);
+        setBannersList(refreshed);
+      },
+    });
   };
 
   // Handlers for Site Settings
@@ -401,7 +435,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           id: 'orders' as AdminTab,
           label: 'Orders',
           icon: ShoppingBag,
-          badge: orders.filter((o) => o.status !== 'Delivered' && o.status !== 'Cancelled').length || null,
+          badge:
+            orders.filter((o) => {
+              const norm = normalizeOrderStatus(o.status);
+              return norm !== 'DELIVERED' && norm !== 'CANCELLED' && norm !== 'REFUNDED';
+            }).length || null,
         },
         { id: 'customers' as AdminTab, label: 'Customers', icon: Users, badge: null },
       ],
@@ -486,8 +524,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={onRefreshData}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors border border-stone-700"
+              onClick={async () => {
+                onRefreshData();
+                await loadSupplementaryData();
+                showToast('Data refreshed from Firestore', 'info');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors border border-stone-700 cursor-pointer"
               title="Refresh all collections from Firebase"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -670,11 +712,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <AdminDashboardOverviewTab
               orders={orders}
               products={products}
-              customersCount={142}
+              customersCount={customersCount}
               onNavigate={(tab) => setActiveTab(tab as AdminTab)}
               onNavigateSection={(tab) => setActiveTab(tab as AdminTab)}
               onOpenProductModal={() => handleOpenAddProduct()}
-              onRefreshData={onRefreshData}
+              onOpenOrderDetails={(order) => {
+                setPreselectedOrder(order);
+                setOrderInitialSearch(order.orderNumber || '');
+                setActiveTab('orders');
+              }}
+              onRefreshData={async () => {
+                onRefreshData();
+                await loadSupplementaryData();
+              }}
             />
           )}
 
@@ -683,6 +733,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <AdminVendorsTab
               products={products}
               orders={orders}
+              categories={categories}
             />
           )}
 
@@ -691,6 +742,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <AdminProductsTab
               products={products}
               categories={categories}
+              onSaveProduct={handleSaveProduct}
               onOpenAddProduct={handleOpenAddProduct}
               onOpenEditProduct={handleOpenEditProduct}
               onDeleteProduct={handleDeleteProduct}
@@ -715,13 +767,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               orders={orders}
               onUpdateOrderStatus={handleUpdateOrderStatus}
               onProcessRefund={handleProcessRefund}
+              onProcessCancel={handleProcessCancel}
+              initialSearchQuery={orderInitialSearch}
+              initialSelectedOrder={preselectedOrder}
               showToast={showToast}
             />
           )}
 
           {/* Section 5: Customers Directory */}
           {activeTab === 'customers' && (
-            <AdminCustomersTab orders={orders} showToast={showToast} />
+            <AdminCustomersTab
+              orders={orders}
+              onViewCustomerOrders={(searchKey) => {
+                setPreselectedOrder(null);
+                setOrderInitialSearch(searchKey);
+                setActiveTab('orders');
+              }}
+              showToast={showToast}
+            />
           )}
 
           {/* Section 6: Coupons Management */}
@@ -846,7 +909,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'media' && <MediaStorageManager />}
 
           {/* Auxiliary Section 18: Database Architecture Panel */}
-          {activeTab === 'database' && <DatabaseArchitecturePanel />}
+          {activeTab === 'database' && (
+            <DatabaseArchitecturePanel
+              onDataRefreshed={async () => {
+                onRefreshData();
+                await loadSupplementaryData();
+              }}
+            />
+          )}
         </main>
       </div>
 
@@ -860,6 +930,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onDelete={handleDeleteProduct}
         showToast={showToast}
       />
+
+      {/* Shared In-App Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 border border-stone-200 shadow-2xl space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-stone-900">{confirmDialog.title}</h3>
+              <p className="text-xs text-stone-600 mt-1.5 leading-relaxed">{confirmDialog.message}</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={isConfirmLoading}
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isConfirmLoading}
+                onClick={async () => {
+                  setIsConfirmLoading(true);
+                  try {
+                    await confirmDialog.onConfirm();
+                    setConfirmDialog(null);
+                  } catch {
+                    showToast('Action failed. Please try again.', 'error');
+                  } finally {
+                    setIsConfirmLoading(false);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isConfirmLoading ? 'Processing...' : (confirmDialog.confirmLabel || 'Confirm Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

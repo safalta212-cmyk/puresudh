@@ -160,7 +160,7 @@ export async function initializeDatabase(): Promise<void> {
           ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), cp, { merge: true })),
           ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), b, { merge: true })),
           ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), o, { merge: true })),
-          setDoc(doc(db, 'settings', initialSiteSettings.id || 'site-settings'), initialSiteSettings, { merge: true }),
+          setDoc(doc(db, 'settings', 'site_settings'), initialSiteSettings, { merge: true }),
         ]).catch(() => {});
       }
     }
@@ -922,25 +922,38 @@ export async function updateOrderStatus(
   newStatus: OrderStatus,
   note?: string
 ): Promise<void> {
+  const now = new Date().toISOString();
+  const historyEntry = {
+    status: newStatus,
+    timestamp: now,
+    note: note || `Status updated to ${newStatus}`,
+  };
+
   const all = getLocal<Order[]>(STORAGE_KEYS.ORDERS, []);
   const order = all.find((o) => o.id === orderId);
+  let updatedHistory = order?.statusHistory ? [...order.statusHistory, historyEntry] : [historyEntry];
   if (order) {
     order.status = newStatus;
-    order.updatedAt = new Date().toISOString();
-    order.statusHistory = order.statusHistory || [];
-    order.statusHistory.push({
-      status: newStatus,
-      timestamp: new Date().toISOString(),
-      note: note || `Status updated to ${newStatus}`,
-    });
+    order.updatedAt = now;
+    order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);
   }
 
   try {
     const docRef = doc(db, 'orders', orderId);
+    if (!order) {
+      const snap = await withTimeout(getDoc(docRef));
+      if (snap.exists()) {
+        const remoteHistory = (snap.data() as Partial<Order>)?.statusHistory;
+        if (Array.isArray(remoteHistory)) {
+          updatedHistory = [...remoteHistory, historyEntry];
+        }
+      }
+    }
     await updateDoc(docRef, {
       status: newStatus,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+      statusHistory: updatedHistory,
     });
   } catch (e) {
     console.warn('Firestore status update error:', e);
@@ -1220,7 +1233,10 @@ export async function fetchCustomers(): Promise<CustomerSummary[]> {
         const data = d.data() as Partial<UserProfile>;
         if (data.role === 'customer' || !data.role) {
           const userOrders = orders.filter((o) => o.customerId === d.id || o.customerEmail === data.email);
-          const totalSpent = userOrders.reduce((s, o) => (o.status !== 'CANCELLED' && o.status !== 'Cancelled' ? s + o.total : s), 0);
+          const totalSpent = userOrders.reduce((s, o) => {
+            const normStatus = String(o.status || '').toUpperCase();
+            return normStatus === 'CANCELLED' || normStatus === 'REFUNDED' ? s : s + (o.total || 0);
+          }, 0);
           fetched.push({
             id: d.id,
             uid: d.id,
@@ -1521,25 +1537,38 @@ export async function processOrderRefund(
   refundRef: string,
   reason: string = 'Customer return / order cancelled'
 ): Promise<void> {
+  const now = new Date().toISOString();
+  const historyEntry = {
+    status: 'REFUNDED' as OrderStatus,
+    timestamp: now,
+    note: `Refund processed. Reference ID: ${refundRef}. Reason: ${reason}`,
+  };
   const all = getLocal<Order[]>(STORAGE_KEYS.ORDERS, initialSampleOrders);
   const order = all.find((o) => o.id === orderId);
+  let updatedHistory = order?.statusHistory ? [...order.statusHistory, historyEntry] : [historyEntry];
   if (order) {
     order.status = 'REFUNDED';
     order.paymentStatus = 'Refunded';
-    order.updatedAt = new Date().toISOString();
-    order.statusHistory = order.statusHistory || [];
-    order.statusHistory.push({
-      status: 'REFUNDED',
-      timestamp: new Date().toISOString(),
-      note: `Refund processed. Reference ID: ${refundRef}. Reason: ${reason}`,
-    });
+    order.updatedAt = now;
+    order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);
   }
   try {
-    await updateDoc(doc(db, 'orders', orderId), {
+    const docRef = doc(db, 'orders', orderId);
+    if (!order) {
+      const snap = await withTimeout(getDoc(docRef));
+      if (snap.exists()) {
+        const remoteHistory = (snap.data() as Partial<Order>)?.statusHistory;
+        if (Array.isArray(remoteHistory)) {
+          updatedHistory = [...remoteHistory, historyEntry];
+        }
+      }
+    }
+    await updateDoc(docRef, {
       status: 'REFUNDED',
       paymentStatus: 'Refunded',
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+      statusHistory: updatedHistory,
     });
   } catch (e) {
     console.warn('Firestore refund error:', e);
@@ -1550,23 +1579,36 @@ export async function processOrderCancellation(
   orderId: string,
   reason: string = 'Cancelled by administrator'
 ): Promise<void> {
+  const now = new Date().toISOString();
+  const historyEntry = {
+    status: 'CANCELLED' as OrderStatus,
+    timestamp: now,
+    note: `Order cancelled: ${reason}`,
+  };
   const all = getLocal<Order[]>(STORAGE_KEYS.ORDERS, initialSampleOrders);
   const order = all.find((o) => o.id === orderId);
+  let updatedHistory = order?.statusHistory ? [...order.statusHistory, historyEntry] : [historyEntry];
   if (order) {
     order.status = 'CANCELLED';
-    order.updatedAt = new Date().toISOString();
-    order.statusHistory = order.statusHistory || [];
-    order.statusHistory.push({
-      status: 'CANCELLED',
-      timestamp: new Date().toISOString(),
-      note: `Order cancelled: ${reason}`,
-    });
+    order.updatedAt = now;
+    order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);
   }
   try {
-    await updateDoc(doc(db, 'orders', orderId), {
+    const docRef = doc(db, 'orders', orderId);
+    if (!order) {
+      const snap = await withTimeout(getDoc(docRef));
+      if (snap.exists()) {
+        const remoteHistory = (snap.data() as Partial<Order>)?.statusHistory;
+        if (Array.isArray(remoteHistory)) {
+          updatedHistory = [...remoteHistory, historyEntry];
+        }
+      }
+    }
+    await updateDoc(docRef, {
       status: 'CANCELLED',
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+      statusHistory: updatedHistory,
     });
   } catch (e) {
     console.warn('Firestore cancel order error:', e);

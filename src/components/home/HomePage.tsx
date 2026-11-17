@@ -28,7 +28,7 @@ import {
   Layers,
   HeartHandshake,
 } from 'lucide-react';
-import { Product, Category, OfferBanner, Offer, Coupon, SiteSettings } from '../../types';
+import { Product, Category, OfferBanner, Offer, Coupon, SiteSettings, HomepageConfig } from '../../types';
 import { ProductCard } from '../product/ProductCard';
 import { CategoryCard, OfferCard, Toast } from '../ui';
 import { useDelivery } from '../../context/DeliveryContext';
@@ -47,6 +47,7 @@ export interface HomePageProps {
   offers?: Offer[];
   coupons?: Coupon[];
   settings?: SiteSettings;
+  homepageConfig?: HomepageConfig;
   onOpenProductDetails: (product: Product) => void;
   onNavigateCategory: (slug: string) => void;
   onNavigateShop: () => void;
@@ -63,6 +64,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   offers = [],
   coupons = [],
   settings,
+  homepageConfig,
   onOpenProductDetails,
   onNavigateCategory,
   onNavigateShop,
@@ -128,8 +130,11 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const activeBanners = useMemo(() => {
     const list = Array.isArray(banners) ? banners.filter((b) => b && b.active !== false) : [];
-    return list.length > 0 ? list : [heroBanner];
-  }, [banners, heroBanner]);
+    const curatedIds = homepageConfig?.heroBannerIds || [];
+    const curated = curatedIds.length > 0 ? list.filter((b) => curatedIds.includes(b.id)) : list;
+    const result = curated.length > 0 ? curated : list;
+    return result.length > 0 ? result : [heroBanner];
+  }, [banners, heroBanner, homepageConfig?.heroBannerIds]);
 
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
@@ -144,8 +149,19 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const currentBanner = activeBanners[currentBannerIndex] || heroBanner;
 
+  const displayedCategories = useMemo(() => {
+    const activeCats = (categories || []).filter((c) => c.active !== false);
+    const curatedKeys = homepageConfig?.featuredCategorySlugs || homepageConfig?.featuredCategoryIds || [];
+    if (curatedKeys.length === 0) return activeCats;
+    const curated = activeCats.filter((c) => curatedKeys.includes(c.slug) || curatedKeys.includes(c.id));
+    return curated.length > 0 ? curated : activeCats;
+  }, [categories, homepageConfig?.featuredCategorySlugs, homepageConfig?.featuredCategoryIds]);
+
   // Product splits
-  const bestsellers = products.filter((p) => p.bestseller).slice(0, 4);
+  const curatedBestSellerIds = homepageConfig?.bestSellerProductIds || homepageConfig?.bestsellerProductIds || [];
+  const bestsellers = curatedBestSellerIds.length > 0
+    ? products.filter((p) => curatedBestSellerIds.includes(p.id)).slice(0, 8)
+    : products.filter((p) => p.bestseller).slice(0, 4);
   const newArrivals = products.filter((p) => p.newArrival).slice(0, 4);
   const freshProducts = products
     .filter(
@@ -204,7 +220,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   const whatsappPhone = settings?.whatsappNumber || '+91 98765 43210';
   const cleanPhone = whatsappPhone.replace(/\D/g, '');
   const whatsappUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(
-    'Namaste PURE SUDH! I would like to order fresh products and check daily batch availability.'
+    settings?.whatsappPrefillMessage ||
+      'Namaste PURE SUDH! I would like to order fresh products and check daily batch availability.'
   )}`;
 
   const testimonials = [
@@ -553,9 +570,9 @@ export const HomePage: React.FC<HomePageProps> = ({
           </button>
         </div>
 
-        {/* 10 Category Grid */}
+        {/* Category Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          {(categories || []).map((category) => (
+          {displayedCategories.map((category) => (
             <CategoryCard
               key={category.id}
               category={category}
@@ -1006,7 +1023,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </a>
 
             <a
-              href="https://facebook.com"
+              href={settings?.facebookUrl || "https://facebook.com"}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 hover:border-blue-300 text-stone-700 hover:text-blue-600 text-xs font-bold transition shadow-2xs cursor-pointer"

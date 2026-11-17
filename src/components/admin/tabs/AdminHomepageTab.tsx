@@ -31,8 +31,10 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
 }) => {
   const [config, setConfig] = useState<HomepageConfig>({
     heroBannerIds: banners.map((b) => b.id),
+    featuredCategoryIds: categories.map((c) => c.id),
     featuredCategorySlugs: categories.map((c) => c.slug || c.id),
     featuredProductIds: products.slice(0, 4).map((p) => p.id),
+    bestsellerProductIds: products.slice(0, 4).map((p) => p.id),
     bestSellerProductIds: products.slice(0, 4).map((p) => p.id),
     activeOfferIds: offers.map((o) => o.id),
     announcementText: '⚡ Express Delivery in 30 Mins across Patna • Free shipping on orders above ₹499 • 100% Pure Sudh Guarantee',
@@ -48,7 +50,20 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
       try {
         const loaded = await fetchHomepageConfig();
         if (loaded) {
-          setConfig(loaded);
+          const bestIds = loaded.bestSellerProductIds || loaded.bestsellerProductIds || [];
+          const catIds = loaded.featuredCategoryIds || loaded.featuredCategorySlugs || [];
+          const catSlugs = loaded.featuredCategorySlugs || loaded.featuredCategoryIds || [];
+          setConfig({
+            ...loaded,
+            heroBannerIds: loaded.heroBannerIds || [],
+            featuredCategoryIds: catIds,
+            featuredCategorySlugs: catSlugs,
+            featuredProductIds: loaded.featuredProductIds || [],
+            bestsellerProductIds: bestIds,
+            bestSellerProductIds: bestIds,
+            activeOfferIds: loaded.activeOfferIds || [],
+            showAnnouncement: loaded.showAnnouncement ?? true,
+          });
         }
       } catch (err) {
         console.error('Error fetching homepage config:', err);
@@ -59,23 +74,41 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
     loadConfig();
   }, []);
 
-  const handleToggleProduct = (field: 'featuredProductIds' | 'bestSellerProductIds', id: string) => {
+  const handleToggleBanner = (bannerId: string) => {
     setConfig((prev) => {
-      const currentList = prev[field] || [];
-      const updated = currentList.includes(id)
-        ? currentList.filter((x) => x !== id)
-        : [...currentList, id];
-      return { ...prev, [field]: updated };
+      const currentList = prev.heroBannerIds || [];
+      const updated = currentList.includes(bannerId)
+        ? currentList.filter((x) => x !== bannerId)
+        : [...currentList, bannerId];
+      return { ...prev, heroBannerIds: updated };
     });
   };
 
-  const handleToggleCategory = (slug: string) => {
+  const handleToggleProduct = (field: 'featuredProductIds' | 'bestSellerProductIds', id: string) => {
     setConfig((prev) => {
-      const currentList = prev.featuredCategorySlugs || [];
-      const updated = currentList.includes(slug)
-        ? currentList.filter((x) => x !== slug)
-        : [...currentList, slug];
-      return { ...prev, featuredCategorySlugs: updated };
+      const currentList = (field === 'bestSellerProductIds' ? prev.bestSellerProductIds || prev.bestsellerProductIds : prev.featuredProductIds) || [];
+      const updated = currentList.includes(id)
+        ? currentList.filter((x) => x !== id)
+        : [...currentList, id];
+      if (field === 'bestSellerProductIds') {
+        return { ...prev, bestSellerProductIds: updated, bestsellerProductIds: updated };
+      }
+      return { ...prev, featuredProductIds: updated };
+    });
+  };
+
+  const handleToggleCategory = (cat: Category) => {
+    const slugOrId = cat.slug || cat.id;
+    setConfig((prev) => {
+      const currentSlugs = prev.featuredCategorySlugs || prev.featuredCategoryIds || [];
+      const exists = currentSlugs.includes(slugOrId) || currentSlugs.includes(cat.id);
+      const updatedSlugs = exists
+        ? currentSlugs.filter((x) => x !== slugOrId && x !== cat.id)
+        : [...currentSlugs, slugOrId];
+      const updatedIds = exists
+        ? (prev.featuredCategoryIds || []).filter((x) => x !== cat.id && x !== slugOrId)
+        : Array.from(new Set([...(prev.featuredCategoryIds || []), cat.id]));
+      return { ...prev, featuredCategorySlugs: updatedSlugs, featuredCategoryIds: updatedIds };
     });
   };
 
@@ -92,7 +125,14 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await saveHomepageConfig(config);
+      await saveHomepageConfig({
+        ...config,
+        featuredCategoryIds: config.featuredCategoryIds || config.featuredCategorySlugs || [],
+        featuredCategorySlugs: config.featuredCategorySlugs || config.featuredCategoryIds || [],
+        bestsellerProductIds: config.bestsellerProductIds || config.bestSellerProductIds || [],
+        bestSellerProductIds: config.bestSellerProductIds || config.bestsellerProductIds || [],
+        updatedAt: new Date().toISOString(),
+      });
       showToast('Homepage layout configuration saved successfully!', 'success');
     } catch (err) {
       showToast('Failed to save homepage settings', 'error');
@@ -156,6 +196,58 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
         />
       </div>
 
+      {/* Hero Banners Selector */}
+      <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+              <Layout className="w-4 h-4 text-amber-700" />
+              Homepage Hero Banners Carousel
+            </h3>
+            <p className="text-xs text-stone-500">
+              Select which banners rotate on the homepage main slider ({loading ? 'Loading...' : 'Ready'})
+            </p>
+          </div>
+          <span className="text-xs font-bold text-amber-800">
+            {config.heroBannerIds?.length || 0} selected
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {banners.map((banner) => {
+            const isSelected = config.heroBannerIds?.includes(banner.id);
+            return (
+              <div
+                key={banner.id}
+                onClick={() => handleToggleBanner(banner.id)}
+                className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
+                  isSelected
+                    ? 'bg-amber-50/60 border-amber-400 text-stone-900 font-bold'
+                    : 'bg-stone-50/50 border-stone-200 text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-12 h-8 rounded-lg overflow-hidden bg-stone-200 shrink-0">
+                    <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs line-clamp-1 block">{banner.title}</span>
+                    <span className="text-[10px] text-stone-400 font-normal">Slide #{banner.displayOrder ?? banner.order ?? 1}</span>
+                  </div>
+                </div>
+                <div
+                  className={`w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0 ${
+                    isSelected ? 'bg-amber-700 text-white' : 'border border-stone-300'
+                  }`}
+                >
+                  {isSelected && <Check className="w-3 h-3" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Featured Categories Selector */}
       <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
@@ -169,17 +261,18 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
             </p>
           </div>
           <span className="text-xs font-bold text-amber-800">
-            {config.featuredCategorySlugs?.length || 0} selected
+            {(config.featuredCategorySlugs || config.featuredCategoryIds)?.length || 0} selected
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {categories.map((cat) => {
-            const isSelected = config.featuredCategorySlugs?.includes(cat.slug || cat.id);
+            const list = config.featuredCategorySlugs || config.featuredCategoryIds || [];
+            const isSelected = list.includes(cat.slug || cat.id) || list.includes(cat.id);
             return (
               <div
                 key={cat.id}
-                onClick={() => handleToggleCategory(cat.slug || cat.id)}
+                onClick={() => handleToggleCategory(cat)}
                 className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
                   isSelected
                     ? 'bg-amber-50/60 border-amber-400 text-stone-900 font-bold'

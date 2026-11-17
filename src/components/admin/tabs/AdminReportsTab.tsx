@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp,
   Download,
@@ -14,8 +14,9 @@ import {
   ShieldCheck,
   Megaphone,
 } from 'lucide-react';
-import { Order, Product } from '../../../types';
+import { Order, Product, normalizeOrderStatus } from '../../../types';
 import { VendorAdvertisingSuite } from '../../vendor/tabs/VendorAdvertisingSuite';
+import { fetchAdminFinancialSummary } from '../../../services/vendorMarketplaceService';
 
 interface AdminReportsTabProps {
   orders: Order[];
@@ -30,6 +31,41 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
 }) => {
   const [reportType, setReportType] = useState<'financial' | 'advertising'>('financial');
   const [dateRange, setDateRange] = useState<'today' | '7days' | '30days' | 'all'>('30days');
+  const [platformCommissionTotal, setPlatformCommissionTotal] = useState<number>(0);
+  const [advertisingRevenueTotal, setAdvertisingRevenueTotal] = useState<number>(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSeparationMetrics = async () => {
+      try {
+        const finSummary = await fetchAdminFinancialSummary();
+        if (mounted && finSummary?.platformTotals) {
+          setPlatformCommissionTotal(finSummary.platformTotals.totalPlatformCommission || 0);
+        }
+      } catch {
+        // Default stays 0
+      }
+
+      try {
+        const res = await fetch('/api/advertising/wallets', {
+          headers: { 'x-user-role': 'admin' },
+        });
+        const ct = res.headers.get('content-type') || '';
+        if (res.ok && ct.includes('application/json')) {
+          const data = await res.json();
+          if (mounted && data?.summary) {
+            setAdvertisingRevenueTotal(Number(data.summary.totalSpent || 0));
+          }
+        }
+      } catch {
+        // Static preview fallback: stays 0
+      }
+    };
+    loadSeparationMetrics();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Filter orders by date range
   const filteredOrders = useMemo(() => {
@@ -57,9 +93,10 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
 
   // Valid non-cancelled orders for revenue
   const validOrders = useMemo(() => {
-    return filteredOrders.filter(
-      (o) => o.status !== 'CANCELLED' && o.status !== 'Cancelled' && o.status !== 'REFUNDED'
-    );
+    return filteredOrders.filter((o) => {
+      const norm = normalizeOrderStatus(o.status);
+      return norm !== 'CANCELLED' && norm !== 'REFUNDED';
+    });
   }, [filteredOrders]);
 
   const totalRevenue = useMemo(() => {
@@ -124,15 +161,16 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
       return;
     }
 
+    const csvEscape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const headers = ['OrderNumber', 'Date', 'CustomerName', 'Phone', 'Total', 'PaymentMethod', 'Status'];
     const rows = validOrders.map((o) => [
-      o.orderNumber,
-      new Date(o.createdAt).toISOString(),
-      `"${o.customerName}"`,
-      `"${o.customerPhone}"`,
+      csvEscape(o.orderNumber),
+      csvEscape(new Date(o.createdAt).toISOString()),
+      csvEscape(o.customerName),
+      csvEscape(o.customerPhone),
       o.total,
-      o.paymentMethod,
-      o.status,
+      csvEscape(o.paymentMethod),
+      csvEscape(o.status),
     ]);
 
     const csvContent =
@@ -167,12 +205,16 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           <div className="px-3 py-1.5 rounded-xl bg-white border border-amber-200 text-right shadow-2xs">
             <span className="text-[10px] text-stone-500 block uppercase font-medium">Platform Commission</span>
-            <span className="text-sm font-black text-stone-900 font-serif">₹76</span>
+            <span className="text-sm font-black text-stone-900 font-serif">
+              ₹{platformCommissionTotal.toLocaleString('en-IN')}
+            </span>
           </div>
           <div className="text-stone-300 font-bold">•</div>
           <div className="px-3 py-1.5 rounded-xl bg-amber-900 text-white shadow-2xs text-right">
             <span className="text-[10px] text-amber-200 block uppercase font-medium">Advertising Revenue</span>
-            <span className="text-sm font-black text-amber-100 font-serif">₹350</span>
+            <span className="text-sm font-black text-amber-100 font-serif">
+              ₹{advertisingRevenueTotal.toLocaleString('en-IN')}
+            </span>
           </div>
         </div>
       </div>

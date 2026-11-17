@@ -56,15 +56,19 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
 
   const handleOpenEdit = (a: DeliveryArea) => {
     setEditingArea(a);
+    const pins = a.pincodes && a.pincodes.length > 0 ? a.pincodes : a.pincode ? [a.pincode] : [];
     setFormData({
-      name: a.name,
+      name: a.areaName || a.name || '',
       city: a.city || 'Patna',
-      pincodes: a.pincodes ? a.pincodes.join(', ') : '',
-      deliveryCharge: a.deliveryCharge,
-      freeDeliveryThreshold: a.freeDeliveryThreshold || 499,
-      estimatedTime: a.estimatedTime,
-      isFastDelivery: a.isFastDelivery || false,
-      active: a.active,
+      pincodes: pins.join(', '),
+      deliveryCharge: a.deliveryCharge ?? 30,
+      freeDeliveryThreshold: a.freeDeliveryThreshold ?? a.freeDeliveryAbove ?? 499,
+      estimatedTime:
+        a.estimatedTime ||
+        a.estimatedDeliveryTime ||
+        (a.estimatedTimeMinutes ? `${a.estimatedTimeMinutes} mins` : '30-45 mins'),
+      isFastDelivery: a.isFastDelivery ?? a.fastDeliveryAvailable ?? false,
+      active: a.active !== false && a.isDeliverable !== false,
     });
     setIsModalOpen(true);
   };
@@ -82,22 +86,33 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
       .filter((p) => p.length > 0);
 
     const aId = editingArea?.id || `area-${Date.now()}`;
+    const trimmedName = formData.name.trim();
+    const trimmedEta = formData.estimatedTime.trim() || '30-45 mins';
+    const chargeNum = Number(formData.deliveryCharge) || 0;
+    const freeNum = Number(formData.freeDeliveryThreshold) || 0;
+
     const areaToSave: DeliveryArea = {
       id: aId,
-      name: formData.name.trim(),
+      name: trimmedName,
+      areaName: trimmedName,
       city: formData.city.trim() || 'Patna',
+      pincode: pinArray[0] || editingArea?.pincode,
       pincodes: pinArray,
-      deliveryCharge: Number(formData.deliveryCharge),
-      freeDeliveryThreshold: Number(formData.freeDeliveryThreshold),
-      estimatedTime: formData.estimatedTime.trim() || '30-45 mins',
+      deliveryCharge: chargeNum,
+      freeDeliveryThreshold: freeNum,
+      freeDeliveryAbove: freeNum,
+      estimatedTime: trimmedEta,
+      estimatedDeliveryTime: trimmedEta,
       isFastDelivery: formData.isFastDelivery,
+      fastDeliveryAvailable: formData.isFastDelivery,
       active: formData.active,
+      isDeliverable: formData.active,
       createdAt: editingArea?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     await onSaveArea(areaToSave);
-    showToast(`Delivery area "${areaToSave.name}" saved!`, 'success');
+    showToast(`Delivery area "${trimmedName}" saved!`, 'success');
     setIsModalOpen(false);
   };
 
@@ -126,102 +141,125 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {deliveryAreas.map((area) => {
-          return (
-            <div
-              key={area.id}
-              className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
-                area.active ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
-                      <MapPin className="w-4 h-4" />
+      {deliveryAreas.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 text-xs">
+          <MapPin className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          No delivery areas configured yet. Click &quot;Add Delivery Area&quot; to add serviceable pincodes.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {deliveryAreas.map((area) => {
+            const displayName = area.areaName || area.name || 'Unnamed Zone';
+            const displayPins = area.pincodes && area.pincodes.length > 0 ? area.pincodes : area.pincode ? [area.pincode] : [];
+            const displayFree = area.freeDeliveryThreshold ?? area.freeDeliveryAbove ?? 499;
+            const displayEta = area.estimatedTime || area.estimatedDeliveryTime || (area.estimatedTimeMinutes ? `${area.estimatedTimeMinutes} mins` : '30-45 mins');
+            const isFast = area.isFastDelivery ?? area.fastDeliveryAvailable ?? false;
+            const isActive = area.active !== false && area.isDeliverable !== false;
+
+            return (
+              <div
+                key={area.id}
+                className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between transition-colors ${
+                  isActive ? 'border-stone-200/80 hover:border-amber-400' : 'border-stone-200 opacity-60'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center shrink-0">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-stone-900 text-sm">{displayName}</h3>
+                        <p className="text-[11px] text-stone-500">{area.city || 'Patna'}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSaveArea({
+                          ...area,
+                          active: !isActive,
+                          isDeliverable: !isActive,
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition ${
+                        isActive
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
+                      }`}
+                    >
+                      {isActive ? 'Active' : 'Disabled'}
+                    </button>
+                  </div>
+
+                  {/* Badges / Attributes */}
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    {isFast && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                        <Zap className="w-3 h-3 text-amber-700 fill-amber-500" />
+                        Fast Delivery (Express)
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md">
+                      <Clock className="w-3 h-3" />
+                      ETA: {displayEta}
+                    </span>
+                  </div>
+
+                  {/* Charges */}
+                  <div className="mt-3 p-2.5 bg-stone-50 rounded-xl border border-stone-200/70 text-xs grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-stone-500 block">Delivery Charge:</span>
+                      <span className="font-bold text-stone-900">₹{area.deliveryCharge}</span>
                     </div>
                     <div>
-                      <h3 className="font-bold text-stone-900 text-sm">{area.name}</h3>
-                      <p className="text-[11px] text-stone-500">{area.city || 'Patna'}</p>
+                      <span className="text-[10px] text-stone-500 block">Free Above:</span>
+                      <span className="font-bold text-emerald-700">₹{displayFree}</span>
                     </div>
                   </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      area.active
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-stone-100 text-stone-600 border-stone-200'
-                    }`}
-                  >
-                    {area.active ? 'Active' : 'Disabled'}
-                  </span>
-                </div>
-
-                {/* Badges / Attributes */}
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {area.isFastDelivery && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
-                      <Zap className="w-3 h-3 text-amber-700 fill-amber-500" />
-                      Fast Delivery (Express)
+                  {/* Pincodes */}
+                  <div className="mt-3">
+                    <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1">
+                      Pincodes ({displayPins.length})
                     </span>
-                  )}
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md">
-                    <Clock className="w-3 h-3" />
-                    ETA: {area.estimatedTime}
-                  </span>
-                </div>
-
-                {/* Charges */}
-                <div className="mt-3 p-2.5 bg-stone-50 rounded-xl border border-stone-200/70 text-xs grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[10px] text-stone-500 block">Delivery Charge:</span>
-                    <span className="font-bold text-stone-900">₹{area.deliveryCharge}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-500 block">Free Above:</span>
-                    <span className="font-bold text-emerald-700">₹{area.freeDeliveryThreshold}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {displayPins.map((pin, i) => (
+                        <span
+                          key={i}
+                          className="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200"
+                        >
+                          {pin}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Pincodes */}
-                <div className="mt-3">
-                  <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1">
-                    Pincodes ({area.pincodes?.length || 0})
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {area.pincodes?.map((pin, i) => (
-                      <span
-                        key={i}
-                        className="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200"
-                      >
-                        {pin}
-                      </span>
-                    ))}
-                  </div>
+                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
+                  <button
+                    onClick={() => handleOpenEdit(area)}
+                    className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
+                    title="Edit Area"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteArea(area.id, displayName)}
+                    className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Delete Area"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
-                <button
-                  onClick={() => handleOpenEdit(area)}
-                  className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
-                  title="Edit Area"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => onDeleteArea(area.id, area.name)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title="Delete Area"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add / Edit Area Modal */}
       {isModalOpen && (
