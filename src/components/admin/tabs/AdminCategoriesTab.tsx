@@ -30,6 +30,8 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -106,19 +108,33 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    await onSaveCategory(categoryToSave);
-    showToast(`Category "${categoryToSave.name}" saved successfully!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveCategory(categoryToSave);
+      showToast(`Category "${categoryToSave.name}" saved successfully!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save category', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleToggleStatus = async (cat: Category) => {
-    const updated: Category = {
-      ...cat,
-      active: !cat.active,
-      updatedAt: new Date().toISOString(),
-    };
-    await onSaveCategory(updated);
-    showToast(`Category "${cat.name}" is now ${updated.active ? 'Active' : 'Hidden'}`, 'info');
+    setTogglingId(cat.id);
+    try {
+      const updated: Category = {
+        ...cat,
+        active: cat.active === false,
+        updatedAt: new Date().toISOString(),
+      };
+      await onSaveCategory(updated);
+      showToast(`Category "${cat.name}" is now ${updated.active ? 'Active' : 'Hidden'}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update category status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const sortedCategories = [...categories].sort(
@@ -175,14 +191,16 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
                 </div>
                 <div className="absolute top-2 right-2">
                   <button
+                    type="button"
+                    disabled={togglingId === cat.id}
                     onClick={() => handleToggleStatus(cat)}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-xs transition-colors ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-xs transition-colors cursor-pointer disabled:opacity-50 ${
                       cat.active !== false
                         ? 'bg-emerald-500 text-white border-emerald-600'
                         : 'bg-stone-600 text-white border-stone-700'
                     }`}
                   >
-                    {cat.active !== false ? 'Active' : 'Inactive'}
+                    {togglingId === cat.id ? 'Updating...' : cat.active !== false ? 'Active' : 'Inactive'}
                   </button>
                 </div>
               </div>
@@ -344,9 +362,10 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                  disabled={submitting}
+                  className="px-5 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
                 >
-                  {editingCategory ? 'Update Category' : 'Create Category'}
+                  {submitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
                 </button>
               </div>
             </form>

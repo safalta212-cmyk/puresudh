@@ -253,6 +253,8 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         setCommissionConfig(res.config);
         showToast(`Category commission rate updated to ${catRateInput}%`, 'success');
         loadMarketplaceData();
+      } else {
+        showToast(res.error || 'Failed to update category commission', 'error');
       }
     } catch (err: any) {
       showToast(err.message || 'Error updating category commission', 'error');
@@ -271,6 +273,8 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         setCommissionConfig(res.config);
         showToast(`Product commission rate updated to ${prodRateInput}%`, 'success');
         loadMarketplaceData();
+      } else {
+        showToast(res.error || 'Failed to update product commission', 'error');
       }
     } catch (err: any) {
       showToast(err.message || 'Error updating product commission', 'error');
@@ -290,6 +294,8 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
             : 'Payout provider marked unverified. Disbursements blocked for security.',
           updatedVerified ? 'success' : 'info'
         );
+      } else {
+        showToast(res.error || 'Failed to update provider status', 'error');
       }
     } catch (err: any) {
       showToast('Failed to update provider status', 'error');
@@ -650,6 +656,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                             onClick={() => {
                               setSelectedVendorForModal(vendor);
                               setCommissionEditValue(vendor.commissionPercentage || 10);
+                              setVerificationNotes(vendor.verificationInformation?.notes || '');
                             }}
                             className="px-2.5 py-1 text-xs rounded-lg border border-stone-200 hover:bg-stone-50 font-medium"
                           >
@@ -668,6 +675,13 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                       </td>
                     </tr>
                   ))}
+                  {filteredVendors.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-stone-400">
+                        {isLoading ? 'Loading vendor partners...' : 'No vendors match the current search or status filter.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -744,7 +758,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                   {vendorSummaries.length === 0 && (
                     <tr>
                       <td colSpan={10} className="text-center py-6 text-stone-400">
-                        Loading financial summaries from server...
+                        {isLoading ? 'Loading financial summaries...' : 'No vendor financial summaries available yet.'}
                       </td>
                     </tr>
                   )}
@@ -1083,7 +1097,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                         <td className="px-4 py-3">
                           <div className="font-bold text-stone-900">{vendor?.name || p.vendorId}</div>
                           <div className="text-[10px] text-stone-400 font-mono">
-                            A/C: {vendor?.payoutInformation?.accountNumberMasked || '•••• 4001'}
+                            A/C: {vendor?.payoutInformation?.accountNumberMasked || 'Not configured'}
                           </div>
                         </td>
                         <td className="px-4 py-3 font-extrabold text-stone-900 text-sm">{formatCurrency(p.amount)}</td>
@@ -1121,6 +1135,13 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                       </tr>
                     );
                   })}
+                  {payouts.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8 text-stone-400">
+                        {isLoading ? 'Loading payout queue...' : 'No payout settlement records found.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1317,13 +1338,34 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                       </td>
                       <td className="px-4 py-3 text-stone-500 capitalize">{p.categoryId?.replace('cat-', '')}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">
-                          ACTIVE
-                        </span>
+                        {(() => {
+                          const isOut = (p.stockQuantity ?? p.stock ?? 0) <= 0 || p.status === 'out_of_stock';
+                          const isActive = p.active !== false && p.status !== 'draft' && p.status !== 'archived' && !isOut;
+                          return (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                isActive
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : isOut
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-stone-100 text-stone-600'
+                              }`}
+                            >
+                              {isOut ? 'OUT OF STOCK' : p.status || (isActive ? 'ACTIVE' : 'INACTIVE')}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
                 })}
+                {products.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-stone-400">
+                      No vendor products found in catalog.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1333,7 +1375,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       {/* ================= MODAL: DISBURSE PAYOUT ================= */}
       {selectedPayoutForDisburse && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <h3 className="font-bold text-stone-900 text-sm">Disburse Vendor Payout</h3>
               <button onClick={() => setSelectedPayoutForDisburse(null)} className="text-stone-400">✕</button>
@@ -1389,7 +1431,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       {/* ================= MODAL: CREATE FINANCIAL ADJUSTMENT ================= */}
       {isAdjustmentModalOpen && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-amber-700" />
@@ -1506,7 +1548,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
             </div>
 
             {/* Business Info Grid */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-stone-50 rounded-xl space-y-1">
                 <div className="font-semibold text-stone-600">Business Details</div>
                 <div><strong>Email:</strong> {selectedVendorForModal.email}</div>
@@ -1528,18 +1570,22 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                 <CreditCard className="w-3.5 h-3.5" />
                 Settlement Banking Information
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-1 text-stone-700">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-stone-700">
                 <div>
                   <span className="text-stone-400 block text-[10px]">A/C Holder:</span>
                   <strong>{selectedVendorForModal.payoutInformation?.accountHolderName || selectedVendorForModal.ownerName}</strong>
                 </div>
                 <div>
                   <span className="text-stone-400 block text-[10px]">Bank & IFSC:</span>
-                  <span>{selectedVendorForModal.payoutInformation?.bankName || 'SBI'} ({selectedVendorForModal.payoutInformation?.ifscCode || 'SBIN0001234'})</span>
+                  <span>
+                    {selectedVendorForModal.payoutInformation?.bankName
+                      ? `${selectedVendorForModal.payoutInformation.bankName}${selectedVendorForModal.payoutInformation?.ifscCode ? ` (${selectedVendorForModal.payoutInformation.ifscCode})` : ''}`
+                      : 'Not configured'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-stone-400 block text-[10px]">Account Masked:</span>
-                  <span className="font-mono font-semibold">{selectedVendorForModal.payoutInformation?.accountNumberMasked || '•••• 4001'}</span>
+                  <span className="font-mono font-semibold">{selectedVendorForModal.payoutInformation?.accountNumberMasked || 'Not provided'}</span>
                 </div>
               </div>
             </div>
@@ -1583,7 +1629,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
             </div>
 
             {/* Decision Buttons */}
-            <div className="pt-2 flex items-center justify-between gap-3 border-t border-stone-100">
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100">
               <button
                 type="button"
                 onClick={() => handleVerificationChange(selectedVendorForModal.id, 'REJECTED', verificationNotes)}
@@ -1593,7 +1639,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
                 Reject Verification
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleStatusChange(selectedVendorForModal.id, 'SUSPENDED')}

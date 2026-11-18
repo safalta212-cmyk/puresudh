@@ -11,7 +11,7 @@
  * 6. Invalid Clicks (Debounced rapid clicks, bots, insufficient balance audit trail)
  * 7. Advertising Reports (Filters: Date, Vendor, Campaign, Product, Status; Metrics: Gross Ad Revenue,
  *    Refunds, Net Ad Revenue, Ad Spend, Impressions, Clicks, Orders, Attributed Sales, ROAS;
- *    Strict Financial Separation: Platform Commission ₹76 vs Advertising Revenue ₹350)
+ *    Strict Financial Separation: Platform Commission vs Advertising Revenue
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -46,6 +46,8 @@ import {
   PauseCircle,
   StopCircle,
 } from 'lucide-react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../../firebase/config';
 import {
   AdvertisingCampaign,
   AdvertisingWallet,
@@ -54,44 +56,46 @@ import {
   AdvertisingDashboardKPIs,
   AdvertisingReportResult,
 } from '../../../types/advertising';
-import { Product } from '../../../types';
+import { Product, Vendor } from '../../../types';
 import { initialProducts } from '../../../data/seedData';
 import { INITIAL_MARKETPLACE_VENDORS } from '../../../constants';
+import { fetchProducts } from '../../../firebase/services';
+import { fetchAllVendors, fetchAdminFinancialSummary } from '../../../services/vendorMarketplaceService';
 
-const getDefaultKpis = (commission = 76): AdvertisingDashboardKPIs => ({
-  advertisingRevenue: 350,
-  activeCampaigns: 2,
-  totalAdSpend: 42.5,
-  vendorAdBalance: 1457.5,
-  impressions: 1240,
-  validClicks: 17,
-  invalidClicks: 3,
-  ordersFromAds: 4,
-  ctr: 1.37,
-  roas: 4.8,
-  attributedSales: 2040,
+const getDefaultKpis = (commission = 0): AdvertisingDashboardKPIs => ({
+  advertisingRevenue: 0,
+  activeCampaigns: 0,
+  totalAdSpend: 0,
+  vendorAdBalance: 0,
+  impressions: 0,
+  validClicks: 0,
+  invalidClicks: 0,
+  ordersFromAds: 0,
+  ctr: 0,
+  roas: 0,
+  attributedSales: 0,
   platformCommission: commission,
   isSeparated: true,
 });
 
-const getDefaultReportData = (targetVendor?: string, commission = 76): AdvertisingReportResult => ({
+const getDefaultReportData = (targetVendor?: string, commission = 0): AdvertisingReportResult => ({
   filters: { vendorId: targetVendor },
   summary: {
-    grossAdRevenue: 350,
+    grossAdRevenue: 0,
     refunds: 0,
-    netAdRevenue: 350,
-    adSpend: 42.5,
-    impressions: 1240,
-    clicks: 17,
-    invalidClicks: 3,
-    orders: 4,
-    attributedSales: 2040,
-    roas: 4.8,
-    ctr: 1.37,
+    netAdRevenue: 0,
+    adSpend: 0,
+    impressions: 0,
+    clicks: 0,
+    invalidClicks: 0,
+    orders: 0,
+    attributedSales: 0,
+    roas: 0,
+    ctr: 0,
     financialSeparation: {
       platformCommission: commission,
-      advertisingRevenue: 350,
-      note: 'Platform Commission (₹76) and Advertising Revenue (₹350) are strictly isolated and never commingled.',
+      advertisingRevenue: 0,
+      note: 'Platform Commission and Advertising Revenue are strictly isolated and never commingled.',
     },
   },
   campaigns: [],
@@ -133,6 +137,9 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
   const [transactions, setTransactions] = useState<AdvertisingTransaction[]>([]);
   const [invalidClicks, setInvalidClicks] = useState<AdvertisingInvalidClick[]>([]);
   const [vendorProducts, setVendorProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [platformCommission, setPlatformCommission] = useState<number>(0);
 
   // Filter States for Reports & Tables
   const [filterDateRange, setFilterDateRange] = useState<'today' | '7days' | '30days' | 'all'>('30days');
@@ -164,13 +171,149 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
     setFormEndDate(in30Days);
   }, []);
 
+  const getVendorName = (vId: string): string => {
+    const liveMatch = vendors.find((v) => v.id === vId);
+    if (liveMatch) return liveMatch.name;
+    const seedMatch = INITIAL_MARKETPLACE_VENDORS.find((v) => v.id === vId);
+    return seedMatch ? seedMatch.name : (vId || vendorName);
+  };
+
   // Fetch all authoritative advertising data
   const loadAdvertisingData = async () => {
+    let resolvedCommission = 0;
     try {
       setLoading(true);
       setErrorMessage(null);
 
-      // 1. Fetch KPIs
+      // Hydrate live vendors, products, and real platform commission in parallel
+      const [liveVendors, liveProducts, finSummary] = await Promise.all([
+        fetchAllVendors().catch(() => [] as Vendor[]),
+        fetchProducts().catch(() => [] as Product[]),
+        fetchAdminFinancialSummary().catch(() => null),
+      ]);
+      setVendors(liveVendors);
+      setAllProducts(liveProducts);
+      resolvedCommission =
+        finSummary?.platformTotals?.totalPlatformCommission ??
+        (finSummary?.vendorSummaries || []).reduce((sum: number, s: any) => sum + (s.commission || 0), 0);
+      setPlatformCommission(resolvedCommission);
+
+      // 1. Fetch Campaigns
+      let loadedCampaigns: AdvertisingCampaign[] = [];
+      const campUrl = isAdminMode
+        ? '/api/advertising/campaigns'
+        : `/api/advertising/campaigns/vendor/${vendorId}`;
+      const campRes = await fetch(campUrl, {
+        headers: {
+          'x-user-role': isAdminMode ? 'admin' : 'vendor',
+          'x-vendor-id': vendorId,
+        },
+      });
+      if (campRes.ok && (campRes.headers.get('content-type') || '').includes('application/json')) {
+        const campJson = await campRes.json();
+        if (campJson.success) loadedCampaigns = campJson.campaigns || [];
+      } else {
+        const campQ = isAdminMode
+          ? collection(db, 'advertisingCampaigns')
+          : query(collection(db, 'advertisingCampaigns'), where('vendorId', '==', vendorId));
+        const campSnap = await getDocs(campQ);
+        loadedCampaigns = campSnap.docs.map(
+          (d) => ({ campaignId: d.id, ...d.data() } as AdvertisingCampaign)
+        );
+      }
+      setCampaigns(loadedCampaigns);
+
+      // 2. Fetch Wallet & Transactions
+      let loadedWallet: AdvertisingWallet | null = null;
+      let loadedTxs: AdvertisingTransaction[] = [];
+
+      if (isAdminMode) {
+        const walRes = await fetch('/api/advertising/wallets', {
+          headers: { 'x-user-role': 'admin', 'x-vendor-id': vendorId },
+        });
+        if (walRes.ok && (walRes.headers.get('content-type') || '').includes('application/json')) {
+          const walJson = await walRes.json();
+          const allWallets: AdvertisingWallet[] = walJson.wallets || [];
+          loadedWallet = {
+            walletId: 'platform-aggregate',
+            vendorId: 'ALL',
+            availableBalance: allWallets.reduce((s, w) => s + (w.availableBalance || 0), 0),
+            totalDeposited: allWallets.reduce((s, w) => s + (w.totalDeposited || 0), 0),
+            totalSpent: allWallets.reduce((s, w) => s + (w.totalSpent || 0), 0),
+            totalRefunded: allWallets.reduce((s, w) => s + (w.totalRefunded || 0), 0),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          const wSnap = await getDocs(collection(db, 'advertisingWallets'));
+          const allWallets = wSnap.docs.map((d) => ({ walletId: d.id, ...d.data() } as AdvertisingWallet));
+          loadedWallet = {
+            walletId: 'platform-aggregate',
+            vendorId: 'ALL',
+            availableBalance: allWallets.reduce((s, w) => s + (w.availableBalance || 0), 0),
+            totalDeposited: allWallets.reduce((s, w) => s + (w.totalDeposited || 0), 0),
+            totalSpent: allWallets.reduce((s, w) => s + (w.totalSpent || 0), 0),
+            totalRefunded: allWallets.reduce((s, w) => s + (w.totalRefunded || 0), 0),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+
+        const txSnap = await getDocs(collection(db, 'advertisingTransactions'));
+        loadedTxs = txSnap.docs
+          .map((d) => ({ transactionId: d.id, ...d.data() } as AdvertisingTransaction))
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      } else {
+        const walRes = await fetch(`/api/advertising/wallet/${vendorId}`, {
+          headers: { 'x-user-role': 'vendor', 'x-vendor-id': vendorId },
+        });
+        if (walRes.ok && (walRes.headers.get('content-type') || '').includes('application/json')) {
+          const walJson = await walRes.json();
+          if (walJson.success) {
+            loadedWallet = walJson.wallet;
+            loadedTxs = walJson.transactions || [];
+          }
+        } else {
+          const wSnap = await getDocs(
+            query(collection(db, 'advertisingWallets'), where('vendorId', '==', vendorId))
+          );
+          if (!wSnap.empty) {
+            loadedWallet = { walletId: wSnap.docs[0].id, ...wSnap.docs[0].data() } as AdvertisingWallet;
+          }
+          const tSnap = await getDocs(
+            query(collection(db, 'advertisingTransactions'), where('vendorId', '==', vendorId))
+          );
+          loadedTxs = tSnap.docs
+            .map((d) => ({ transactionId: d.id, ...d.data() } as AdvertisingTransaction))
+            .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        }
+      }
+      setWallet(loadedWallet);
+      setTransactions(loadedTxs);
+
+      // 3. Fetch Invalid Clicks
+      let loadedInvalidClicks: AdvertisingInvalidClick[] = [];
+      const invRes = await fetch(`/api/advertising/invalid-clicks/${filterVendorId || vendorId}`, {
+        headers: {
+          'x-user-role': isAdminMode ? 'admin' : 'vendor',
+          'x-vendor-id': vendorId,
+        },
+      });
+      if (invRes.ok && (invRes.headers.get('content-type') || '').includes('application/json')) {
+        const invJson = await invRes.json();
+        if (invJson.success) loadedInvalidClicks = invJson.invalidClicks || [];
+      } else {
+        const invQ = isAdminMode
+          ? collection(db, 'advertisingInvalidClicks')
+          : query(collection(db, 'advertisingInvalidClicks'), where('vendorId', '==', vendorId));
+        const invSnap = await getDocs(invQ);
+        loadedInvalidClicks = invSnap.docs.map(
+          (d) => ({ clickId: d.id, ...d.data() } as AdvertisingInvalidClick)
+        );
+      }
+      setInvalidClicks(loadedInvalidClicks);
+
+      // 4. Fetch KPIs (compute from live data if Express API is absent)
       const kpiUrl = isAdminMode
         ? '/api/advertising/dashboard-kpis'
         : `/api/advertising/dashboard-kpis/${vendorId}`;
@@ -183,52 +326,33 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
 
       if (kpiRes.ok && (kpiRes.headers.get('content-type') || '').includes('application/json')) {
         const kpiJson = await kpiRes.json();
-        if (kpiJson.success) setKpis(kpiJson.kpis);
-      } else {
-        // Safe fallback
-        setKpis(getDefaultKpis(76));
-      }
-
-      // 2. Fetch Campaigns
-      const campUrl = isAdminMode
-        ? '/api/advertising/campaigns'
-        : `/api/advertising/campaigns/vendor/${vendorId}`;
-      const campRes = await fetch(campUrl, {
-        headers: {
-          'x-user-role': isAdminMode ? 'admin' : 'vendor',
-          'x-vendor-id': vendorId,
-        },
-      });
-      if (campRes.ok && (campRes.headers.get('content-type') || '').includes('application/json')) {
-        const campJson = await campRes.json();
-        if (campJson.success) setCampaigns(campJson.campaigns || []);
-      }
-
-      // 3. Fetch Wallet
-      const walRes = await fetch(`/api/advertising/wallet/${vendorId}`, {
-        headers: {
-          'x-user-role': isAdminMode ? 'admin' : 'vendor',
-          'x-vendor-id': vendorId,
-        },
-      });
-      if (walRes.ok && (walRes.headers.get('content-type') || '').includes('application/json')) {
-        const walJson = await walRes.json();
-        if (walJson.success) {
-          setWallet(walJson.wallet);
-          setTransactions(walJson.transactions || []);
+        if (kpiJson.success) {
+          setKpis({ ...kpiJson.kpis, platformCommission: kpiJson.kpis?.platformCommission ?? resolvedCommission });
         }
-      }
-
-      // 4. Fetch Invalid Clicks
-      const invRes = await fetch(`/api/advertising/invalid-clicks/${vendorId}`, {
-        headers: {
-          'x-user-role': isAdminMode ? 'admin' : 'vendor',
-          'x-vendor-id': vendorId,
-        },
-      });
-      if (invRes.ok && (invRes.headers.get('content-type') || '').includes('application/json')) {
-        const invJson = await invRes.json();
-        if (invJson.success) setInvalidClicks(invJson.invalidClicks || []);
+      } else {
+        const impressions = loadedCampaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+        const validClicks = loadedCampaigns.reduce((s, c) => s + (c.validClicks || 0), 0);
+        const totalSpend = loadedCampaigns.reduce((s, c) => s + (c.spentAmount || 0), 0);
+        const adRev = loadedTxs
+          .filter((t) => t.type === 'AD_SPEND' || t.type === 'WALLET_TOPUP')
+          .reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+        const ordersFromAds = loadedCampaigns.reduce((s, c) => s + (c.orders || 0), 0);
+        const attributedSales = loadedCampaigns.reduce((s, c) => s + (c.attributedSales || 0), 0);
+        setKpis({
+          advertisingRevenue: adRev || totalSpend,
+          activeCampaigns: loadedCampaigns.filter((c) => c.status === 'ACTIVE').length,
+          totalAdSpend: totalSpend,
+          vendorAdBalance: loadedWallet?.availableBalance ?? 0,
+          impressions,
+          validClicks,
+          invalidClicks: loadedInvalidClicks.length,
+          ordersFromAds,
+          ctr: impressions > 0 ? Number(((validClicks / impressions) * 100).toFixed(2)) : 0,
+          roas: totalSpend > 0 ? Number((attributedSales / totalSpend).toFixed(2)) : 0,
+          attributedSales,
+          platformCommission: resolvedCommission,
+          isSeparated: true,
+        });
       }
 
       // 5. Fetch Vendor Products
@@ -246,42 +370,52 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
             setFormProductId(prodJson.products[0].id);
           }
         }
+      } else {
+        const filteredLive = isAdminMode
+          ? liveProducts
+          : liveProducts.filter((p) => !p.vendorId || p.vendorId === vendorId);
+        setVendorProducts(filteredLive);
+        if (!formProductId && filteredLive[0]) {
+          setFormProductId(filteredLive[0].id);
+        }
       }
 
       // 6. Fetch Full Report
-      fetchFilteredReports();
+      fetchFilteredReports(resolvedCommission, loadedCampaigns, loadedTxs, loadedInvalidClicks);
     } catch (err: any) {
       console.warn('[VendorAdvertisingSuite] Error loading advertising suite data:', err);
       setErrorMessage(err.message || 'Error connecting to advertising service.');
-      // Local fallback calculation
-      setKpis(getDefaultKpis(76));
+      setKpis(getDefaultKpis(resolvedCommission));
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
   };
 
-  const fetchFilteredReports = async () => {
+  const fetchFilteredReports = async (
+    commissionOverride?: number,
+    campaignsOverride?: AdvertisingCampaign[],
+    txOverride?: AdvertisingTransaction[],
+    invalidOverride?: AdvertisingInvalidClick[]
+  ) => {
+    const activeCommission = commissionOverride ?? platformCommission;
+    const targetVendor = isAdminMode ? (filterVendorId || undefined) : vendorId;
     try {
-      const query = new URLSearchParams();
-      const targetVendor = isAdminMode ? (filterVendorId || undefined) : vendorId;
-      if (targetVendor) query.set('vendorId', targetVendor);
-      if (filterCampaignId) query.set('campaignId', filterCampaignId);
-      if (filterProductId) query.set('productId', filterProductId);
-      if (filterStatus) query.set('status', filterStatus);
+      const queryParams = new URLSearchParams();
+      if (targetVendor) queryParams.set('vendorId', targetVendor);
+      if (filterCampaignId) queryParams.set('campaignId', filterCampaignId);
+      if (filterProductId) queryParams.set('productId', filterProductId);
+      if (filterStatus) queryParams.set('status', filterStatus);
 
       if (filterDateRange === 'today') {
-        const d = new Date().toISOString().split('T')[0];
-        query.set('startDate', d);
+        queryParams.set('startDate', new Date().toISOString().split('T')[0]);
       } else if (filterDateRange === '7days') {
-        const d = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-        query.set('startDate', d);
+        queryParams.set('startDate', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]);
       } else if (filterDateRange === '30days') {
-        const d = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-        query.set('startDate', d);
+        queryParams.set('startDate', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
       }
 
-      const res = await fetch(`/api/advertising/reports?${query.toString()}`, {
+      const res = await fetch(`/api/advertising/reports?${queryParams.toString()}`, {
         headers: {
           'x-user-role': isAdminMode ? 'admin' : 'vendor',
           'x-vendor-id': vendorId,
@@ -292,14 +426,83 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
         const data = await res.json();
         if (data.success && data.report) {
           setReportData(data.report);
+          return;
         }
-      } else {
-        // Safe fallback
-        setReportData(getDefaultReportData(targetVendor, 76));
       }
+
+      // Fallback: compute live report directly from loaded Firestore arrays
+      const sourceCampaigns = (campaignsOverride ?? campaigns).filter((c) => {
+        if (targetVendor && c.vendorId !== targetVendor) return false;
+        if (filterCampaignId && c.campaignId !== filterCampaignId) return false;
+        if (filterProductId && c.productId !== filterProductId) return false;
+        if (filterStatus && c.status !== filterStatus) return false;
+        return true;
+      });
+      const sourceTxs = (txOverride ?? transactions).filter(
+        (t) => !targetVendor || t.vendorId === targetVendor
+      );
+      const sourceInv = (invalidOverride ?? invalidClicks).filter(
+        (ic) => !targetVendor || ic.vendorId === targetVendor
+      );
+
+      const adSpend = sourceCampaigns.reduce((s, c) => s + (c.spentAmount || 0), 0);
+      const refunds = sourceTxs
+        .filter((t) => t.type === 'REFUND')
+        .reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+      const grossAdRev = adSpend;
+      const netAdRev = Math.max(0, grossAdRev - refunds);
+      const impressions = sourceCampaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+      const clicks = sourceCampaigns.reduce((s, c) => s + (c.validClicks || 0), 0);
+      const orders = sourceCampaigns.reduce((s, c) => s + (c.orders || 0), 0);
+      const attributedSales = sourceCampaigns.reduce((s, c) => s + (c.attributedSales || 0), 0);
+
+      setReportData({
+        filters: { vendorId: targetVendor },
+        summary: {
+          grossAdRevenue: grossAdRev,
+          refunds,
+          netAdRevenue: netAdRev,
+          adSpend,
+          impressions,
+          clicks,
+          invalidClicks: sourceInv.length,
+          orders,
+          attributedSales,
+          roas: adSpend > 0 ? Number((attributedSales / adSpend).toFixed(2)) : 0,
+          ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
+          financialSeparation: {
+            platformCommission: activeCommission,
+            advertisingRevenue: netAdRev,
+            note: 'Platform Commission and Advertising Revenue are strictly isolated and never commingled.',
+          },
+        },
+        campaigns: sourceCampaigns.map((c) => {
+          const imp = c.impressions || 0;
+          const clk = c.validClicks || 0;
+          return {
+            campaignId: c.campaignId,
+            campaignName: c.campaignName,
+            vendorId: c.vendorId,
+            vendorName: getVendorName(c.vendorId),
+            productId: c.productId,
+            productName: getProductName(c.productId),
+            totalBudget: c.totalBudget,
+            spent: c.spentAmount || 0,
+            remaining: c.remainingBalance ?? Math.max(0, c.totalBudget - (c.spentAmount || 0)),
+            cpc: c.cpc,
+            impressions: imp,
+            clicks: clk,
+            ctr: imp > 0 ? Number(((clk / imp) * 100).toFixed(2)) : 0,
+            orders: c.orders || 0,
+            attributedSales: c.attributedSales || 0,
+            status: c.status,
+          };
+        }),
+        ledger: sourceTxs,
+        invalidClicks: sourceInv,
+      });
     } catch {
-      const targetVendor = isAdminMode ? (filterVendorId || undefined) : vendorId;
-      setReportData(getDefaultReportData(targetVendor, 76));
+      setReportData(getDefaultReportData(targetVendor, activeCommission));
     }
   };
 
@@ -349,7 +552,10 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
     if (!reportData) return;
     const rows = [
       ['PURE SUDH - ADVERTISING REPORT', `Generated: ${new Date().toISOString()}`],
-      ['Financial Separation Guarantee:', 'Platform Commission ₹76 and Advertising Revenue ₹350 are strictly decoupled.'],
+      [
+        'Financial Separation Guarantee:',
+        `Platform Commission ₹${platformCommission.toLocaleString('en-IN')} and Advertising Revenue ₹${reportData.summary.grossAdRevenue.toLocaleString('en-IN')} are strictly decoupled.`,
+      ],
       [],
       ['SUMMARY METRICS'],
       ['Gross Ad Revenue', `₹${reportData.summary.grossAdRevenue}`],
@@ -473,6 +679,10 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
   };
 
   const getProductName = (productId: string): string => {
+    const liveMatch =
+      vendorProducts.find((p) => p.id === productId) ||
+      allProducts.find((p) => p.id === productId);
+    if (liveMatch) return liveMatch.name;
     const found = initialProducts.find((p) => p.id === productId);
     return found ? found.name : productId;
   };
@@ -586,13 +796,15 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           <div className="px-3 py-1.5 rounded-xl bg-white border border-amber-200 text-right shadow-2xs">
             <span className="text-[10px] text-stone-500 block uppercase font-medium">Platform Commission</span>
-            <span className="text-sm font-black text-stone-900 font-serif">₹76</span>
+            <span className="text-sm font-black text-stone-900 font-serif">
+              ₹{platformCommission.toLocaleString('en-IN')}
+            </span>
           </div>
           <div className="text-stone-300 font-bold">•</div>
           <div className="px-3 py-1.5 rounded-xl bg-amber-900 text-white shadow-2xs text-right">
             <span className="text-[10px] text-amber-200 block uppercase font-medium">Advertising Revenue</span>
             <span className="text-sm font-black text-amber-100 font-serif">
-              ₹{(kpis?.advertisingRevenue ?? 350).toLocaleString('en-IN')}
+              ₹{(kpis?.advertisingRevenue ?? 0).toLocaleString('en-IN')}
             </span>
           </div>
         </div>
@@ -808,7 +1020,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
                   {campaigns.map((camp) => {
                     const badge = getStatusBadge(camp.status);
                     const prodName = getProductName(camp.productId);
-                    const campImpressions = Math.max(camp.impressions || 0, (camp.validClicks || 0) * 24 + 10);
+                    const campImpressions = camp.impressions || 0;
                     const campCtr = campImpressions > 0 ? ((camp.validClicks || 0) / campImpressions) * 100 : 0;
                     return (
                       <tr key={camp.campaignId} className="hover:bg-stone-50/70 transition">
@@ -817,7 +1029,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
                           <div className="font-mono text-[10px] text-stone-400">{camp.campaignId}</div>
                         </td>
                         <td className="py-3.5 px-3.5 whitespace-nowrap font-medium text-stone-800">
-                          {vendorName}
+                          {getVendorName(camp.vendorId)}
                         </td>
                         <td className="py-3.5 px-3.5">
                           <div className="font-semibold text-stone-800 line-clamp-1">{prodName}</div>
@@ -920,7 +1132,10 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
             {campaigns
               .filter((c) => c.status === 'ACTIVE' || c.status === 'PENDING_APPROVAL')
               .map((camp) => {
-                const prod = initialProducts.find((p) => p.id === camp.productId);
+                const prod =
+                  vendorProducts.find((p) => p.id === camp.productId) ||
+                  allProducts.find((p) => p.id === camp.productId) ||
+                  initialProducts.find((p) => p.id === camp.productId);
                 return (
                   <div
                     key={camp.campaignId}
@@ -1234,7 +1449,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
                   className="w-full px-3 py-2 bg-white border border-stone-300 rounded-xl text-xs focus:outline-none focus:border-amber-600 disabled:bg-stone-50 disabled:text-stone-600"
                 >
                   {isAdminMode && <option value="">All Vendors</option>}
-                  {INITIAL_MARKETPLACE_VENDORS.map((v) => (
+                  {(vendors.length > 0 ? vendors : INITIAL_MARKETPLACE_VENDORS).map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name}
                     </option>
@@ -1380,7 +1595,9 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
                 <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
                   Platform Marketplace Commission
                 </span>
-                <div className="text-2xl font-black font-serif text-stone-900 mt-1">₹76</div>
+                <div className="text-2xl font-black font-serif text-stone-900 mt-1">
+                  ₹{platformCommission.toLocaleString('en-IN')}
+                </div>
                 <p className="text-[11px] text-stone-500 mt-0.5">
                   Authoritatively earned from customer product order volume
                 </p>
@@ -1392,7 +1609,7 @@ export const VendorAdvertisingSuite: React.FC<VendorAdvertisingSuiteProps> = ({
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-2xl font-black font-serif text-amber-100">
-                    ₹{(reportData?.summary.grossAdRevenue ?? 350).toLocaleString('en-IN')}
+                    ₹{(reportData?.summary.grossAdRevenue ?? 0).toLocaleString('en-IN')}
                   </span>
                   {(reportData?.summary.refunds ?? 0) > 0 && (
                     <span className="text-xs text-amber-300">

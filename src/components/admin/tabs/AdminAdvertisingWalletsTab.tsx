@@ -16,8 +16,12 @@ import {
   ExternalLink,
   ShieldAlert,
 } from 'lucide-react';
+import { collection, doc, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { db, assertFirestoreWriteSuccess, OperationType } from '../../../firebase/config';
 import { AdvertisingWallet, AdvertisingTransaction } from '../../../types/advertising';
+import { Vendor } from '../../../types';
 import { INITIAL_MARKETPLACE_VENDORS } from '../../../constants';
+import { fetchAllVendors } from '../../../services/vendorMarketplaceService';
 
 interface AdminAdvertisingWalletsTabProps {
   adminEmail?: string;
@@ -27,6 +31,7 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
   adminEmail = 'aanews70@gmail.com',
 }) => {
   const [wallets, setWallets] = useState<AdvertisingWallet[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [summary, setSummary] = useState<{
     totalWallets: number;
     totalFloat: number;
@@ -64,6 +69,15 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
   const [vendorTransactions, setVendorTransactions] = useState<AdvertisingTransaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
 
+  const loadVendors = async () => {
+    try {
+      const liveVendors = await fetchAllVendors();
+      setVendors(liveVendors);
+    } catch (err) {
+      console.warn('[AdminAdWallets] Vendor hydration warning:', err);
+    }
+  };
+
   const fetchWallets = async () => {
     try {
       setErrorMessage(null);
@@ -75,12 +89,26 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
       });
 
       const ct = res.headers.get('content-type') || '';
-      if (!res.ok || !ct.includes('application/json')) {
-        throw new Error(
-          !ct.includes('application/json')
-            ? 'Advertising backend API is unavailable in static preview/hosting mode.'
-            : `Failed to load advertising wallets (${res.status})`
+      if (!ct.includes('application/json')) {
+        // Static hosting fallback: query Firestore directly
+        const snap = await getDocs(collection(db, 'advertisingWallets'));
+        const list = snap.docs.map(
+          (d) => ({ walletId: d.id, ...d.data() } as AdvertisingWallet)
         );
+        setWallets(list);
+        setSummary({
+          totalWallets: list.length,
+          totalFloat: list.reduce((sum, w) => sum + (w.availableBalance || 0), 0),
+          totalDeposited: list.reduce((sum, w) => sum + (w.totalDeposited || 0), 0),
+          totalSpent: list.reduce((sum, w) => sum + (w.totalSpent || 0), 0),
+          totalRefunded: list.reduce((sum, w) => sum + (w.totalRefunded || 0), 0),
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to load advertising wallets (${res.status})`);
       }
 
       const data = await res.json();
@@ -100,11 +128,13 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
   };
 
   useEffect(() => {
+    loadVendors();
     fetchWallets();
   }, []);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    loadVendors();
     fetchWallets();
   };
 
@@ -183,7 +213,76 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
 
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
-        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+        // Direct Firestore atomic batch fallback when backend API is absent
+        const amt = Number(actionAmount);
+        const prevBal = selectedWallet.availableBalance || 0;
+        const isCredit =
+          actionType === 'ADD_CREDIT' ||
+          (actionType === 'MANUAL_ADJUSTMENT' && adjustmentSubtype === 'CREDIT');
+
+        if (!isCredit && amt > prevBal) {
+          throw new Error(`Cannot deduct more than available balance of ₹${prevBal}.`);
+        }
+
+        const newBal = isCredit ? prevBal + amt : Math.max(0, prevBal - amt);
+        const now = new Date().toISOString();
+        const txId = `adv-tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+        const batch = writeBatch(db);
+        const walletRef = doc(db, 'advertisingWallets', selectedWallet.walletId);
+        const txRef = doc(db, 'advertisingTransactions', txId);
+
+        batch.update(walletRef, {
+          availableBalance: newBal,
+          totalDeposited:
+            actionType === 'ADD_CREDIT'
+              ? (selectedWallet.totalDeposited || 0) + amt
+              : selectedWallet.totalDeposited || 0,
+          totalRefunded:
+            actionType === 'REFUND_BALANCE'
+              ? (selectedWallet.totalRefunded || 0) + amt
+              : selectedWallet.totalRefunded || 0,
+          updatedAt: now,
+        });
+
+        batch.set(txRef, {
+          transactionId: txId,
+          vendorId: selectedWallet.vendorId,
+          type:
+            actionType === 'REFUND_BALANCE'
+              ? 'REFUND'
+              : actionType === 'ADD_CREDIT'
+              ? 'WALLET_TOPUP'
+              : 'MANUAL_ADJUSTMENT',
+          ...(actionType === 'REFUND_BALANCE' ? { refundReasonType: refundSubtype } : {}),
+          amount: isCredit ? amt : -amt,
+          previousBalance: prevBal,
+          newBalance: newBal,
+          description: actionReason.trim(),
+          status: 'COMPLETED',
+          createdAt: now,
+          createdBy: actionAdminId.trim() || adminEmail,
+        });
+
+        try {
+          await batch.commit();
+        } catch (fsErr) {
+          assertFirestoreWriteSuccess(
+            fsErr,
+            OperationType.WRITE,
+            `advertisingWallets/${selectedWallet.walletId}`
+          );
+        }
+
+        setSuccessToast(
+          actionType === 'REFUND_BALANCE'
+            ? `Successfully issued ${refundSubtype} (₹${actionAmount}) for vendor ${selectedWallet.vendorId}.`
+            : `Successfully executed ${actionType} for vendor ${selectedWallet.vendorId}.`
+        );
+        closeActionModal();
+        await fetchWallets();
+        setTimeout(() => setSuccessToast(null), 4000);
+        return;
       }
 
       const data = await res.json();
@@ -218,22 +317,39 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
         },
       });
       const ct = res.headers.get('content-type') || '';
-      if (res.ok && ct.includes('application/json')) {
-        const data = await res.json();
-        if (data.success) {
-          setVendorTransactions(data.transactions || []);
-        }
+      if (!ct.includes('application/json')) {
+        const q = query(
+          collection(db, 'advertisingTransactions'),
+          where('vendorId', '==', vendorId)
+        );
+        const snap = await getDocs(q);
+        const txs = snap.docs
+          .map((d) => ({ transactionId: d.id, ...d.data() } as AdvertisingTransaction))
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setVendorTransactions(txs);
+        return;
+      }
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to load transactions (${res.status})`);
+      }
+      const data = await res.json();
+      if (data.success) {
+        setVendorTransactions(data.transactions || []);
       }
     } catch (err: any) {
       console.error('[AdminAdWallets] Tx error:', err);
+      setErrorMessage(err.message || 'Failed to load advertising transactions');
     } finally {
       setLoadingTransactions(false);
     }
   };
 
   const getVendorName = (vendorId: string): string => {
-    const match = INITIAL_MARKETPLACE_VENDORS.find((v) => v.id === vendorId);
-    return match ? match.name : vendorId;
+    const liveMatch = vendors.find((v) => v.id === vendorId);
+    if (liveMatch) return liveMatch.name;
+    const seedMatch = INITIAL_MARKETPLACE_VENDORS.find((v) => v.id === vendorId);
+    return seedMatch ? seedMatch.name : vendorId;
   };
 
   const filteredWallets = wallets.filter((w) => {
@@ -462,7 +578,7 @@ export const AdminAdvertisingWalletsTab: React.FC<AdminAdvertisingWalletsTabProp
       {/* MODAL: Admin Action (Add Credit / Refund / Manual Adjustment) */}
       {selectedWallet && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50">
               <div className="flex items-center gap-2">
                 <Coins className="w-5 h-5 text-amber-700" />

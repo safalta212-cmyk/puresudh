@@ -35,12 +35,16 @@ service cloud.firestore {
     // Secure Admin Validation with Email Verification and Document Checks
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email == 'aanews70@gmail.com' && request.auth.token.email_verified == true) ||
+        ('email' in request.auth.token &&
+         request.auth.token.email is string &&
+         request.auth.token.email.lower() == 'aanews70@gmail.com' &&
+         'email_verified' in request.auth.token &&
+         request.auth.token.email_verified == true) ||
         request.auth.token.get('role', '') == 'admin' ||
         request.auth.token.get('admin', false) == true ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin')
       );
     }
 
@@ -48,9 +52,9 @@ service cloud.firestore {
     function isStaff() {
       return isSignedIn() && (
         isAdmin() ||
-        (exists(/databases/$(database)/documents/staff/$(request.auth.uid))) ||
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'staff')
       );
     }
 
@@ -59,9 +63,9 @@ service cloud.firestore {
       return isSignedIn() && (
         isAdmin() ||
         request.auth.token.get('role', '') == 'vendor' ||
-        (exists(/databases/$(database)/documents/vendors/$(request.auth.uid))) ||
+        exists(/databases/$(database)/documents/vendors/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'vendor')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'vendor')
       );
     }
 
@@ -74,6 +78,59 @@ service cloud.firestore {
            get(/databases/$(database)/documents/vendors/$(vendorId)).data.get('ownerUserId', '') == request.auth.uid)
         ))
       );
+    }
+
+    function isValidVendorApplication(data) {
+      return data.keys().hasAll(['userId', 'shopName', 'contactName', 'phone', 'email', 'status', 'submittedAt']) &&
+        data.keys().hasOnly([
+          'userId', 'shopName', 'contactName', 'phone', 'email',
+          'fssaiLicense', 'gstNumber', 'status', 'submittedAt',
+          'reviewedAt', 'reviewedBy', 'rejectionReason', 'updatedAt'
+        ]) &&
+        data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+        data.shopName is string && data.shopName.size() > 0 && data.shopName.size() <= 150 &&
+        data.contactName is string && data.contactName.size() > 0 && data.contactName.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 20 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
+        data.status is string && data.status in ['pending', 'approved', 'rejected'] &&
+        data.submittedAt is string && data.submittedAt.size() <= 64 &&
+        (!('fssaiLicense' in data) || (data.fssaiLicense is string && data.fssaiLicense.size() <= 50)) &&
+        (!('gstNumber' in data) || (data.gstNumber is string && data.gstNumber.size() <= 50)) &&
+        (!('reviewedAt' in data) || (data.reviewedAt is string && data.reviewedAt.size() <= 64)) &&
+        (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 128)) &&
+        (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 500));
+    }
+
+    function isValidMediaRegistry(data) {
+      return data.keys().hasAll([
+          'id', 'downloadUrl', 'storagePath', 'fileName', 'size',
+          'contentType', 'uploadedAt', 'preset', 'uploadedBy', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'downloadUrl', 'thumbnailUrl', 'storagePath', 'thumbnailStoragePath',
+          'fileName', 'size', 'originalSize', 'savingsPercentage', 'width', 'height',
+          'contentType', 'uploadedAt', 'preset', 'entityId', 'uploadedBy',
+          'uploadedByEmail', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.downloadUrl is string && data.downloadUrl.size() > 0 && data.downloadUrl.size() <= 2000 &&
+        data.storagePath is string && data.storagePath.size() > 0 && data.storagePath.size() <= 500 &&
+        data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 255 &&
+        data.size is number && data.size >= 0 && data.size <= 52428800 &&
+        data.contentType is string && data.contentType.size() > 0 && data.contentType.size() <= 100 &&
+        data.uploadedAt is string && data.uploadedAt.size() <= 64 &&
+        data.preset is string && data.preset.size() > 0 && data.preset.size() <= 64 &&
+        data.uploadedBy is string && data.uploadedBy.size() > 0 && data.uploadedBy.size() <= 128 &&
+        data.status is string && data.status in ['active', 'archived', 'deleted'] &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        (!('thumbnailUrl' in data) || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 2000)) &&
+        (!('thumbnailStoragePath' in data) || (data.thumbnailStoragePath is string && data.thumbnailStoragePath.size() <= 500)) &&
+        (!('originalSize' in data) || (data.originalSize is number && data.originalSize >= 0)) &&
+        (!('savingsPercentage' in data) || (data.savingsPercentage is number && data.savingsPercentage >= 0 && data.savingsPercentage <= 100)) &&
+        (!('width' in data) || (data.width is number && data.width >= 0)) &&
+        (!('height' in data) || (data.height is number && data.height >= 0)) &&
+        (!('entityId' in data) || (data.entityId is string && data.entityId.size() <= 128)) &&
+        (!('uploadedByEmail' in data) || (data.uploadedByEmail is string && data.uploadedByEmail.size() <= 200));
     }
 
     // Connectivity verification route
@@ -237,7 +294,11 @@ service cloud.firestore {
           get(/databases/$(database)/documents/orders/$(existing().orderId)).data.get('vendorId', '') == request.auth.uid))
       );
       
-      allow list: if isSignedIn(); // Filtered by orderId where parent order is accessible
+      allow list: if isSignedIn() && (
+        isAdmin() || isStaff() ||
+        resource.data.get('customerId', '') == request.auth.uid ||
+        (isVendor() && resource.data.get('vendorId', '') == request.auth.uid)
+      );
       
       allow create: if isSignedIn() && isValidId(itemId) && (
         isAdmin() || isStaff() ||
@@ -256,7 +317,10 @@ service cloud.firestore {
          (get(/databases/$(database)/documents/orders/$(existing().orderId)).data.customerId == request.auth.uid ||
           get(/databases/$(database)/documents/orders/$(existing().orderId)).data.get('vendorId', '') == request.auth.uid))
       );
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && (
+        isAdmin() || isStaff() ||
+        resource.data.get('updatedBy', '') == request.auth.uid
+      );
       allow create: if isSignedIn() || isStaff() || isAdmin();
       allow update, delete: if isAdmin();
     }
@@ -388,9 +452,58 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Media Registry: Storage upload tracking & cleanup audit records
+    match /mediaRegistry/{mediaId} {
+      allow get: if isValidId(mediaId) && (
+        isAdmin() ||
+        (isSignedIn() && existing().uploadedBy == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uploadedBy == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidId(mediaId) &&
+        isValidMediaRegistry(incoming()) &&
+        (isAdmin() || (incoming().uploadedBy == request.auth.uid && incoming().status == 'active'));
+
+      allow update: if isValidId(mediaId) && isValidMediaRegistry(incoming()) && (
+        isAdmin() ||
+        (isSignedIn() &&
+         existing().uploadedBy == request.auth.uid &&
+         incoming().uploadedBy == existing().uploadedBy &&
+         incoming().createdAt == existing().createdAt &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'entityId', 'updatedAt']))
+      );
+
+      allow delete: if isValidId(mediaId) && (
+        isAdmin() ||
+        (isSignedIn() && existing().uploadedBy == request.auth.uid)
+      );
+    }
+
     // =========================================================================
     // 3. FUTURE MARKETPLACE COLLECTIONS (ZERO-TRUST VENDOR ISOLATION)
     // =========================================================================
+
+    // Vendor Applications: Prospective seller onboarding queue (PII protected)
+    match /vendorApplications/{appId} {
+      allow get: if isValidId(appId) && (isOwner(appId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidId(appId) &&
+        isValidVendorApplication(incoming()) &&
+        (isAdmin() || (appId == request.auth.uid && incoming().userId == request.auth.uid && incoming().status == 'pending'));
+
+      allow update: if isValidId(appId) && isValidVendorApplication(incoming()) && (
+        isAdmin() ||
+        (isOwner(appId) &&
+         existing().userId == request.auth.uid &&
+         incoming().userId == existing().userId &&
+         existing().status == 'pending' &&
+         incoming().status == 'pending' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['shopName', 'contactName', 'phone', 'fssaiLicense', 'gstNumber', 'submittedAt']))
+      );
+
+      allow delete: if isValidId(appId) && isAdmin();
+    }
 
     // Vendors: Seller business profiles
     match /vendors/{vendorId} {
@@ -479,12 +592,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Vendor Payouts: Merchant bank settlements (Financial: Client write strictly denied)
+    // Vendor Payouts: Merchant bank settlements (Admin/Server disbursement only; vendors strictly denied)
     match /vendorPayouts/{payoutId} {
       allow get: if isVendorOwner(existing().vendorId) || isAdmin();
       allow list: if (isVendor() && resource.data.vendorId == request.auth.uid) || isAdmin();
-      // Sensitive financial operations: Cloud Functions / Admin only
-      allow write: if false;
+      allow create, update, delete: if isAdmin();
     }
 
     // Vendor Bank Accounts: Payout coordinates (Strict Vendor isolation)

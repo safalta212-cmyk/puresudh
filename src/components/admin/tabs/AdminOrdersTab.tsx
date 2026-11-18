@@ -77,6 +77,7 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
   // Status progression action state
   const [selectedNewStatus, setSelectedNewStatus] = useState<OrderStatus | ''>('');
   const [statusNote, setStatusNote] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Cancellation prompt
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -155,87 +156,108 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
   }, [filteredOrders, currentPage]);
 
   const handleApplyStatusChange = async () => {
-    if (!selectedOrder || !selectedNewStatus) return;
-    await onUpdateOrderStatus(selectedOrder.id, selectedNewStatus, statusNote);
+    if (!selectedOrder || !selectedNewStatus || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onUpdateOrderStatus(selectedOrder.id, selectedNewStatus, statusNote);
 
-    // Dispatch order status update notification via configured channels
-    notificationService.sendOrderStatusUpdate(selectedOrder, selectedNewStatus, statusNote).catch((e) => {
-      console.warn('Status update notification failed:', e);
-    });
+      // Dispatch order status update notification via configured channels
+      notificationService.sendOrderStatusUpdate(selectedOrder, selectedNewStatus, statusNote).catch((e) => {
+        console.warn('Status update notification failed:', e);
+      });
 
-    showToast(`Order #${selectedOrder.orderNumber} status changed to ${selectedNewStatus}`, 'success');
+      showToast(`Order #${selectedOrder.orderNumber} status changed to ${selectedNewStatus}`, 'success');
 
-    // Update locally selected order
-    setSelectedOrder({
-      ...selectedOrder,
-      status: selectedNewStatus,
-      statusHistory: [
-        ...(selectedOrder.statusHistory || []),
-        {
-          status: selectedNewStatus,
-          timestamp: new Date().toISOString(),
-          note: statusNote || `Status changed to ${selectedNewStatus}`,
-        },
-      ],
-    });
-    setSelectedNewStatus('');
-    setStatusNote('');
+      // Update locally selected order
+      setSelectedOrder({
+        ...selectedOrder,
+        status: selectedNewStatus,
+        statusHistory: [
+          ...(selectedOrder.statusHistory || []),
+          {
+            status: selectedNewStatus,
+            timestamp: new Date().toISOString(),
+            note: statusNote || `Status changed to ${selectedNewStatus}`,
+          },
+        ],
+      });
+      setSelectedNewStatus('');
+      setStatusNote('');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update order status', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleConfirmCancel = async () => {
-    if (!selectedOrder) return;
-    if (typeof onProcessCancel === 'function') {
-      await onProcessCancel(selectedOrder.id, cancelReason);
-    } else {
-      await onUpdateOrderStatus(selectedOrder.id, 'CANCELLED', `Cancelled: ${cancelReason}`);
+    if (!selectedOrder || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      if (typeof onProcessCancel === 'function') {
+        await onProcessCancel(selectedOrder.id, cancelReason);
+      } else {
+        await onUpdateOrderStatus(selectedOrder.id, 'CANCELLED', `Cancelled: ${cancelReason}`);
+      }
+
+      // Dispatch order cancellation notification
+      notificationService.sendOrderCancellation(selectedOrder, cancelReason).catch((e) => {
+        console.warn('Order cancellation notification failed:', e);
+      });
+
+      showToast(`Order #${selectedOrder.orderNumber} cancelled`, 'info');
+      setIsCancelModalOpen(false);
+      setSelectedOrder({
+        ...selectedOrder,
+        status: 'CANCELLED',
+        statusHistory: [
+          ...(selectedOrder.statusHistory || []),
+          {
+            status: 'CANCELLED',
+            timestamp: new Date().toISOString(),
+            note: `Cancelled: ${cancelReason}`,
+          },
+        ],
+      });
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to cancel order', 'error');
+    } finally {
+      setIsUpdating(false);
     }
-
-    // Dispatch order cancellation notification
-    notificationService.sendOrderCancellation(selectedOrder, cancelReason).catch((e) => {
-      console.warn('Order cancellation notification failed:', e);
-    });
-
-    showToast(`Order #${selectedOrder.orderNumber} cancelled`, 'info');
-    setIsCancelModalOpen(false);
-    setSelectedOrder({
-      ...selectedOrder,
-      status: 'CANCELLED',
-      statusHistory: [
-        ...(selectedOrder.statusHistory || []),
-        {
-          status: 'CANCELLED',
-          timestamp: new Date().toISOString(),
-          note: `Cancelled: ${cancelReason}`,
-        },
-      ],
-    });
   };
 
   const handleConfirmRefund = async () => {
-    if (!selectedOrder) return;
-    const ref = refundRefId.trim() || `REF-${Date.now().toString(36).toUpperCase()}`;
-    await onProcessRefund(selectedOrder.id, ref, refundReason);
+    if (!selectedOrder || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      const ref = refundRefId.trim() || `REF-${Date.now().toString(36).toUpperCase()}`;
+      await onProcessRefund(selectedOrder.id, ref, refundReason);
 
-    // Dispatch order refund notification
-    notificationService.sendOrderRefund(selectedOrder, selectedOrder.total, ref).catch((e) => {
-      console.warn('Order refund notification failed:', e);
-    });
+      // Dispatch order refund notification
+      notificationService.sendOrderRefund(selectedOrder, selectedOrder.total, ref).catch((e) => {
+        console.warn('Order refund notification failed:', e);
+      });
 
-    showToast(`Refund processed for Order #${selectedOrder.orderNumber}`, 'success');
-    setIsRefundModalOpen(false);
-    setSelectedOrder({
-      ...selectedOrder,
-      status: 'REFUNDED',
-      paymentStatus: 'Refunded',
-      statusHistory: [
-        ...(selectedOrder.statusHistory || []),
-        {
-          status: 'REFUNDED',
-          timestamp: new Date().toISOString(),
-          note: `Refund Processed (Ref: ${ref}) - ${refundReason}`,
-        },
-      ],
-    });
+      showToast(`Refund processed for Order #${selectedOrder.orderNumber}`, 'success');
+      setIsRefundModalOpen(false);
+      setSelectedOrder({
+        ...selectedOrder,
+        status: 'REFUNDED',
+        paymentStatus: 'Refunded',
+        statusHistory: [
+          ...(selectedOrder.statusHistory || []),
+          {
+            status: 'REFUNDED',
+            timestamp: new Date().toISOString(),
+            note: `Refund Processed (Ref: ${ref}) - ${refundReason}`,
+          },
+        ],
+      });
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to process refund', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -595,10 +617,10 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
                 />
                 <button
                   onClick={handleApplyStatusChange}
-                  disabled={!selectedNewStatus}
+                  disabled={!selectedNewStatus || isUpdating}
                   className="px-4 py-1.5 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-xs"
                 >
-                  Update
+                  {isUpdating ? 'Updating...' : 'Update'}
                 </button>
               </div>
             </div>
@@ -800,9 +822,10 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
               </button>
               <button
                 onClick={handleConfirmCancel}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
+                disabled={isUpdating}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg"
               >
-                Confirm Cancellation
+                {isUpdating ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>
@@ -853,9 +876,10 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
               </button>
               <button
                 onClick={handleConfirmRefund}
-                className="px-4 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 rounded-lg shadow-xs"
+                disabled={isUpdating}
+                className="px-4 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 disabled:opacity-50 rounded-lg shadow-xs"
               >
-                Mark as Refunded
+                {isUpdating ? 'Processing...' : 'Mark as Refunded'}
               </button>
             </div>
           </div>

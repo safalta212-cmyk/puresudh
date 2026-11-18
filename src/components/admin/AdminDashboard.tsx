@@ -186,19 +186,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Load secondary lists (offers, banners, delivery slots, customers)
   const loadSupplementaryData = async (isActiveCheck = () => true) => {
     try {
-      const [offers, banners, slots, customers] = await Promise.all([
+      const [offers, banners, slots, customersRes] = await Promise.all([
         fetchOffers(true).catch(() => []),
         fetchBanners(true).catch(() => []),
         fetchDeliverySlots(undefined, true).catch(() => []),
-        fetchCustomers().catch(() => []),
+        fetchCustomers()
+          .then((data) => ({ ok: true as const, data }))
+          .catch(() => ({ ok: false as const, data: [] })),
       ]);
 
       if (!isActiveCheck()) return;
       setOffersList(offers);
       setBannersList(banners);
       setDeliverySlotsList(slots);
-      if (customers.length > 0) {
-        setCustomersCount(customers.length);
+      if (customersRes.ok) {
+        setCustomersCount(customersRes.data.length);
       } else {
         const uniq = new Set(orders.map((o) => o.customerEmail || o.customerId).filter(Boolean));
         setCustomersCount(uniq.size);
@@ -309,8 +311,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleToggleCouponStatus = async (couponId: string, active: boolean) => {
-    await toggleCouponStatus(couponId, active);
-    onRefreshData();
+    try {
+      await toggleCouponStatus(couponId, active);
+      onRefreshData();
+      showToast(`Coupon is now ${active ? 'Active' : 'Inactive'}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update coupon status', 'error');
+      throw err;
+    }
   };
 
   // Handlers for Offers
@@ -522,14 +530,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <button
               onClick={async () => {
                 onRefreshData();
                 await loadSupplementaryData();
                 showToast('Data refreshed from Firestore', 'info');
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors border border-stone-700 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors border border-stone-700 cursor-pointer"
               title="Refresh all collections from Firebase"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -538,10 +546,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               onClick={onBackToStore}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Store</span>
+              <span className="sm:hidden">Store</span>
+              <span className="hidden sm:inline">Back to Store</span>
             </button>
 
             <button
@@ -551,7 +560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 await logout();
                 onBackToStore();
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-rose-200 bg-stone-800 hover:bg-rose-900/60 rounded-lg transition-colors border border-stone-700 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-stone-300 hover:text-rose-200 bg-stone-800 hover:bg-rose-900/60 rounded-lg transition-colors border border-stone-700 cursor-pointer"
               title="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -956,8 +965,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   try {
                     await confirmDialog.onConfirm();
                     setConfirmDialog(null);
-                  } catch {
-                    showToast('Action failed. Please try again.', 'error');
+                  } catch (err: any) {
+                    showToast(err?.message || 'Action failed. Please try again.', 'error');
                   } finally {
                     setIsConfirmLoading(false);
                   }

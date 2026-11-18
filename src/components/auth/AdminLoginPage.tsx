@@ -9,9 +9,12 @@ import {
   ArrowLeft,
   KeyRound,
   AlertTriangle,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { resolvedFirebaseConfig } from '../../firebase/config';
 
 interface AdminLoginPageProps {
   onBackToStore: () => void;
@@ -31,6 +34,14 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [copiedHost, setCopiedHost] = useState(false);
+
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isUnauthorizedDomainError = Boolean(
+    formError &&
+      (formError.includes('auth/unauthorized-domain') ||
+        formError.toLowerCase().includes('not authorized in firebase authentication'))
+  );
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,9 +141,36 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
         {/* Error Feedback */}
         {formError && (
-          <div className="mb-5 p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs font-medium flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <span>{formError}</span>
+          <div className="mb-5 p-3.5 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-200 text-xs font-medium space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{formError}</span>
+            </div>
+            {isUnauthorizedDomainError && currentHostname && (
+              <div className="mt-2 pt-2 border-t border-rose-800/70 space-y-1.5 text-[11px] text-rose-100">
+                <div className="flex items-center justify-between gap-2 bg-stone-950/70 px-2.5 py-1.5 rounded-lg border border-rose-900/60">
+                  <span className="font-mono break-all text-amber-300">{currentHostname}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(currentHostname).catch(() => {});
+                      setCopiedHost(true);
+                      setTimeout(() => setCopiedHost(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 text-[10px] font-semibold shrink-0 cursor-pointer"
+                  >
+                    {copiedHost ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copiedHost ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-stone-300">
+                  Active Project: <strong className="font-mono text-white">{resolvedFirebaseConfig.projectId}</strong> • authDomain: <strong className="font-mono text-white">{resolvedFirebaseConfig.authDomain}</strong>
+                </p>
+                <p className="text-stone-400">
+                  Fix: Add <span className="font-mono text-amber-300">{currentHostname}</span> in Firebase Console → Authentication → Settings → Authorized domains.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

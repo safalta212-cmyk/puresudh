@@ -220,10 +220,10 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
       </div>
 
       {/* Report Switcher Tabs */}
-      <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setReportType('financial')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${
             reportType === 'financial'
               ? 'bg-stone-900 text-white shadow-xs'
               : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
@@ -234,7 +234,7 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
         </button>
         <button
           onClick={() => setReportType('advertising')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${
             reportType === 'advertising'
               ? 'bg-amber-800 text-white shadow-xs'
               : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
@@ -266,12 +266,12 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
                 Revenue trends, average order ticket value, payment split, and CSV ledger downloads
               </p>
             </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Date Range Selector */}
-          <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-semibold">
+          <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-semibold overflow-x-auto no-scrollbar max-w-full">
             <button
               onClick={() => setDateRange('today')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
                 dateRange === 'today' ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-600'
               }`}
             >
@@ -279,7 +279,7 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
             </button>
             <button
               onClick={() => setDateRange('7days')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
                 dateRange === '7days' ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-600'
               }`}
             >
@@ -287,7 +287,7 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
             </button>
             <button
               onClick={() => setDateRange('30days')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
                 dateRange === '30days' ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-600'
               }`}
             >
@@ -295,7 +295,7 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
             </button>
             <button
               onClick={() => setDateRange('all')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
                 dateRange === 'all' ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-600'
               }`}
             >
@@ -305,7 +305,7 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
 
           <button
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-stone-700 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-stone-700 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-colors shadow-2xs whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5 text-stone-600" />
             Export CSV
@@ -365,14 +365,17 @@ export const AdminReportsTab: React.FC<AdminReportsTabProps> = ({
                       <span className="text-stone-400 font-normal">({pct}%)</span>
                     </span>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-stone-100 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        name === 'UPI' ? 'bg-amber-600' : name === 'COD' ? 'bg-emerald-600' : 'bg-blue-600'
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
+                  <progress
+                    value={pct}
+                    max={100}
+                    className={`w-full h-2 rounded-full overflow-hidden appearance-none [&::-webkit-progress-bar]:bg-stone-100 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:rounded-full ${
+                      name === 'UPI'
+                        ? '[&::-webkit-progress-value]:bg-amber-600 [&::-moz-progress-bar]:bg-amber-600'
+                        : name === 'COD'
+                        ? '[&::-webkit-progress-value]:bg-emerald-600 [&::-moz-progress-bar]:bg-emerald-600'
+                        : '[&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600'
+                    }`}
+                  />
                 </div>
               );
             })}

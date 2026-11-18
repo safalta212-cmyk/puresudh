@@ -48,10 +48,10 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([
-    { channel: 'email', name: 'Email Provider (SendGrid / SMTP)', configured: true, active: true, mode: 'sandbox/live' },
-    { channel: 'sms', name: 'SMS Provider (Fast2SMS / Twilio)', configured: true, active: true, mode: 'sandbox/live' },
-    { channel: 'whatsapp', name: 'WhatsApp (Business Cloud API)', configured: true, active: true, mode: 'sandbox/live' },
-    { channel: 'push', name: 'Push (Firebase Cloud Messaging)', configured: true, active: true, mode: 'sandbox/live' },
+    { channel: 'email', name: 'Email Provider (SendGrid / SMTP)', configured: false, active: false, mode: 'checking' },
+    { channel: 'sms', name: 'SMS Provider (Fast2SMS / Twilio)', configured: false, active: false, mode: 'checking' },
+    { channel: 'whatsapp', name: 'WhatsApp (Business Cloud API)', configured: false, active: false, mode: 'checking' },
+    { channel: 'push', name: 'Push (Firebase Cloud Messaging)', configured: false, active: false, mode: 'checking' },
   ]);
 
   // Dispatcher Form State
@@ -64,11 +64,9 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
   ]);
   const [recipientType, setRecipientType] = useState<'all' | 'specific'>('all');
   const [recipientTarget, setRecipientTarget] = useState('');
-  const [orderNumber, setOrderNumber] = useState('PS100001');
-  const [title, setTitle] = useState('Chhath Special: Fresh Bilona Ghee & Thekua Ready!');
-  const [message, setMessage] = useState(
-    'Celebrate with pure artisanal delicacies delivered fresh in 30 minutes across Patna. Use code PURE50 for ₹50 off.'
-  );
+  const [orderNumber, setOrderNumber] = useState('');
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -85,8 +83,17 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
       if (notifsRes.status === 'fulfilled') {
         setNotifications(notifsRes.value);
       }
-      if (providersRes.status === 'fulfilled' && providersRes.value.providers) {
+      if (providersRes.status === 'fulfilled' && Array.isArray(providersRes.value?.providers)) {
         setProviderStatuses(providersRes.value.providers);
+      } else {
+        setProviderStatuses((prev) =>
+          prev.map((p) => ({
+            ...p,
+            configured: false,
+            active: false,
+            mode: 'unavailable',
+          }))
+        );
       }
     } catch (err) {
       console.warn('Could not load notifications:', err);
@@ -108,31 +115,32 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
   // Preset Template Loader
   const handleSelectCategory = (cat: NotificationCategory) => {
     setCategory(cat);
+    const refOrder = orderNumber.trim() || 'ORDER-ID';
     switch (cat) {
       case 'order_confirmation':
-        setTitle('Order #PS100001 Confirmed');
-        setMessage('Your order for Fresh Malai Paneer and Desi Ghee Thekua has been confirmed by our kitchen.');
+        setTitle(`Order #${refOrder} Confirmed`);
+        setMessage('Your order has been confirmed by our kitchen and is being prepared fresh.');
         break;
       case 'order_status':
-        setTitle('Order #PS100001 Out for Delivery');
+        setTitle(`Order #${refOrder} Out for Delivery`);
         setMessage('Your fresh batch is on the way! Rider dispatched with temperature-controlled packaging.');
         break;
       case 'payment_status':
-        setTitle('Payment Received - ₹429');
-        setMessage('Payment via UPI has been verified successfully. Your invoice is available in order tracking.');
+        setTitle(`Payment Verified - Order #${refOrder}`);
+        setMessage('Your payment has been verified successfully. Your invoice is available in order tracking.');
         break;
       case 'cancellation':
-        setTitle('Order #PS100001 Cancelled');
-        setMessage('Your order has been cancelled per your request. If paid, your refund will be credited in 24-48 hrs.');
+        setTitle(`Order #${refOrder} Cancelled`);
+        setMessage('Your order has been cancelled per request. If paid, any applicable refund will be processed within 24-48 hrs.');
         break;
       case 'refund':
-        setTitle('Refund Processed - ₹429');
-        setMessage('Your refund for Order #PS100001 has been initiated to your original payment method.');
+        setTitle(`Refund Processed - Order #${refOrder}`);
+        setMessage(`Your refund for Order #${refOrder} has been initiated to your original payment method.`);
         break;
       case 'promotional':
       default:
-        setTitle('Chhath Special: Fresh Bilona Ghee Ready!');
-        setMessage('Use code PURE50 for flat ₹50 OFF on orders above ₹299. Farm fresh artisanal delicacies.');
+        setTitle('Seasonal Special from PURE SUDH');
+        setMessage('Fresh artisanal dairy & sweets delivered to your doorstep. Explore today’s offers in the shop.');
         break;
     }
   };
@@ -195,8 +203,16 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
         <div>
           <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
             Notification System & Multi-Channel Providers
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-semibold border border-emerald-200">
-              4 Channels Active
+            <span
+              className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
+                providerStatuses.some((p) => p.active && p.configured)
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                  : 'bg-amber-100 text-amber-900 border-amber-200'
+              }`}
+            >
+              {providerStatuses.filter((p) => p.active && p.configured).length > 0
+                ? `${providerStatuses.filter((p) => p.active && p.configured).length} Channels Active`
+                : 'Backend Proxy Offline'}
             </span>
           </h2>
           <p className="text-sm text-stone-500 mt-0.5">
@@ -215,7 +231,7 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
 
       {/* Provider Abstraction & Credential Security Status */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-700" />
             <h3 className="font-bold text-stone-900 text-sm">
@@ -237,6 +253,7 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
             if (p.channel === 'sms') Icon = Smartphone;
             if (p.channel === 'whatsapp') Icon = MessageSquare;
             if (p.channel === 'push') Icon = Bell;
+            const isOnline = Boolean(p.active && p.configured);
 
             return (
               <div
@@ -251,10 +268,25 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
                     <div className="text-xs font-bold text-stone-900 capitalize">
                       {p.channel}
                     </div>
-                    <div className="text-[10px] text-stone-500">{p.name.split('(')[1]?.replace(')', '') || 'Provider'}</div>
+                    <div className="text-[10px] text-stone-500">
+                      {isOnline
+                        ? p.name.split('(')[1]?.replace(')', '') || 'Provider Active'
+                        : p.mode === 'checking'
+                        ? 'Checking provider...'
+                        : 'Server endpoint unavailable'}
+                    </div>
                   </div>
                 </div>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 ring-4 ring-emerald-100" />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isOnline
+                      ? 'bg-emerald-500 ring-4 ring-emerald-100'
+                      : p.mode === 'checking'
+                      ? 'bg-amber-400 ring-4 ring-amber-100'
+                      : 'bg-stone-400 ring-4 ring-stone-200'
+                  }`}
+                  title={isOnline ? 'Configured & Active' : p.mode}
+                />
               </div>
             );
           })}

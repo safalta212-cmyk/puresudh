@@ -11,7 +11,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, auth } from '../firebase/config';
+import { db, auth, assertFirestoreWriteSuccess, OperationType } from '../firebase/config';
 import {
   Vendor,
   VendorStatus,
@@ -301,21 +301,21 @@ export async function adminUpdateVendorStatus(
   vendorId: string,
   status: VendorStatus
 ): Promise<void> {
-  const vendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, initialVendorsSeed);
-  const v = vendors.find((item) => item.id === vendorId);
-  if (v) {
-    v.status = status;
-    v.updatedAt = new Date().toISOString();
-    setLocal(STORAGE_KEYS.VENDORS, vendors);
-  }
-
   try {
     await updateDoc(doc(db, COLLECTIONS.VENDORS, vendorId), {
       status,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
-    console.warn('Firestore adminUpdateVendorStatus warning:', e);
+    assertFirestoreWriteSuccess(e, OperationType.UPDATE, `${COLLECTIONS.VENDORS}/${vendorId}`);
+  }
+
+  const vendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, initialVendorsSeed);
+  const v = vendors.find((item) => item.id === vendorId);
+  if (v) {
+    v.status = status;
+    v.updatedAt = new Date().toISOString();
+    setLocal(STORAGE_KEYS.VENDORS, vendors);
   }
 
   await sendVendorNotification({
@@ -336,20 +336,6 @@ export async function adminUpdateVendorVerification(
 ): Promise<void> {
   const vendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, initialVendorsSeed);
   const v = vendors.find((item) => item.id === vendorId);
-  if (v) {
-    v.verificationStatus = verificationStatus;
-    if (verificationStatus === 'VERIFIED') {
-      v.status = 'ACTIVE';
-    }
-    v.verificationInformation = {
-      ...v.verificationInformation,
-      verifiedAt: new Date().toISOString(),
-      verifiedBy: auth.currentUser?.email || 'aanews70@gmail.com',
-      notes: notes || (verificationStatus === 'VERIFIED' ? 'Approved by Admin' : 'Rejected by Admin'),
-    };
-    v.updatedAt = new Date().toISOString();
-    setLocal(STORAGE_KEYS.VENDORS, vendors);
-  }
 
   try {
     await updateDoc(doc(db, COLLECTIONS.VENDORS, vendorId), {
@@ -363,7 +349,22 @@ export async function adminUpdateVendorVerification(
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
-    console.warn('Firestore adminUpdateVendorVerification warning:', e);
+    assertFirestoreWriteSuccess(e, OperationType.UPDATE, `${COLLECTIONS.VENDORS}/${vendorId}`);
+  }
+
+  if (v) {
+    v.verificationStatus = verificationStatus;
+    if (verificationStatus === 'VERIFIED') {
+      v.status = 'ACTIVE';
+    }
+    v.verificationInformation = {
+      ...v.verificationInformation,
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: auth.currentUser?.email || 'aanews70@gmail.com',
+      notes: notes || (verificationStatus === 'VERIFIED' ? 'Approved by Admin' : 'Rejected by Admin'),
+    };
+    v.updatedAt = new Date().toISOString();
+    setLocal(STORAGE_KEYS.VENDORS, vendors);
   }
 
   await sendVendorNotification({
@@ -383,21 +384,21 @@ export async function adminUpdateVendorCommission(
   vendorId: string,
   commissionPercentage: number
 ): Promise<void> {
-  const vendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, initialVendorsSeed);
-  const v = vendors.find((item) => item.id === vendorId);
-  if (v) {
-    v.commissionPercentage = commissionPercentage;
-    v.updatedAt = new Date().toISOString();
-    setLocal(STORAGE_KEYS.VENDORS, vendors);
-  }
-
   try {
     await updateDoc(doc(db, COLLECTIONS.VENDORS, vendorId), {
       commissionPercentage,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
-    console.warn('Firestore adminUpdateVendorCommission warning:', e);
+    assertFirestoreWriteSuccess(e, OperationType.UPDATE, `${COLLECTIONS.VENDORS}/${vendorId}`);
+  }
+
+  const vendors = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, initialVendorsSeed);
+  const v = vendors.find((item) => item.id === vendorId);
+  if (v) {
+    v.commissionPercentage = commissionPercentage;
+    v.updatedAt = new Date().toISOString();
+    setLocal(STORAGE_KEYS.VENDORS, vendors);
   }
 }
 
@@ -591,45 +592,9 @@ export async function fetchVendorOrders(vendorId: string): Promise<VendorOrder[]
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorOrder));
-    }
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorOrder));
   } catch (e) {
     console.warn('Firestore fetchVendorOrders warning:', e);
-  }
-
-  // If empty, generate simulated initial fulfillment orders from local orders containing this vendor's items
-  if (scoped.length === 0) {
-    const allStoreOrders = getLocal<Order[]>('pure_sudh_orders', []);
-    const matching = allStoreOrders.filter((o) => o.vendorId === vendorId || (o.items || []).some((i) => i.productId.includes(vendorId) || vendorId === 'vendor-1'));
-    if (matching.length > 0) {
-      const generated: VendorOrder[] = matching.map((o) => ({
-        id: `vord-${o.id}-${vendorId}`,
-        orderId: o.id,
-        orderNumber: o.orderNumber,
-        vendorId,
-        items: (o.items || []).map((it: any) => ({
-          id: it.id || it.productId,
-          orderId: o.id,
-          productId: it.productId,
-          productName: it.productName,
-          productImage: it.productImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=100&q=80',
-          quantity: it.quantity,
-          price: it.price || it.unitPrice || 0,
-          total: it.total || it.totalPrice || 0,
-          weight: it.weight || '500g',
-          vendorId,
-        })),
-        vendorSubtotal: o.subtotal || o.total,
-        commissionAmount: Math.round((o.subtotal || o.total) * 0.1),
-        payoutAmount: Math.round((o.subtotal || o.total) * 0.9),
-        status: o.status,
-        createdAt: o.createdAt,
-        updatedAt: o.updatedAt,
-      }));
-      setLocal(STORAGE_KEYS.ORDERS, [...local, ...generated]);
-      return generated;
-    }
   }
 
   return scoped;
@@ -690,52 +655,9 @@ export async function fetchVendorCommissions(vendorId: string): Promise<VendorCo
       where('vendorId', '==', vendorId)
     );
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorCommission));
-    }
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorCommission));
   } catch (e) {
     console.warn('Firestore fetchVendorCommissions warning:', e);
-  }
-
-  // Provide seed calculations if none yet
-  if (scoped.length === 0) {
-    const seedComm: VendorCommission[] = [
-      {
-        id: `comm-${vendorId}-01`,
-        vendorId,
-        orderId: 'PS100001',
-        orderTotal: 680,
-        commissionRate: 10,
-        commissionAmount: 68,
-        netVendorAmount: 612,
-        status: 'settled',
-        calculatedAt: '2026-03-10T10:00:00.000Z',
-      },
-      {
-        id: `comm-${vendorId}-02`,
-        vendorId,
-        orderId: 'PS100002',
-        orderTotal: 1250,
-        commissionRate: 10,
-        commissionAmount: 125,
-        netVendorAmount: 1125,
-        status: 'settled',
-        calculatedAt: '2026-03-15T15:30:00.000Z',
-      },
-      {
-        id: `comm-${vendorId}-03`,
-        vendorId,
-        orderId: 'PS100003',
-        orderTotal: 840,
-        commissionRate: 10,
-        commissionAmount: 84,
-        netVendorAmount: 756,
-        status: 'pending',
-        calculatedAt: '2026-03-20T12:00:00.000Z',
-      },
-    ];
-    setLocal(STORAGE_KEYS.COMMISSIONS, [...local, ...seedComm]);
-    return seedComm;
   }
 
   return scoped;
@@ -745,9 +667,9 @@ export async function fetchAllCommissionsAdmin(): Promise<VendorCommission[]> {
   const local = getLocal<VendorCommission[]>(STORAGE_KEYS.COMMISSIONS, []);
   try {
     const snap = await getDocs(collection(db, COLLECTIONS.VENDOR_COMMISSIONS));
-    if (!snap.empty) {
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorCommission));
-    }
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorCommission));
+    setLocal(STORAGE_KEYS.COMMISSIONS, items);
+    return items;
   } catch (e) {
     console.warn('Firestore fetchAllCommissionsAdmin warning:', e);
   }
@@ -769,55 +691,9 @@ export async function fetchVendorPayouts(vendorId: string): Promise<VendorPayout
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPayout));
-    }
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPayout));
   } catch (e) {
     console.warn('Firestore fetchVendorPayouts warning:', e);
-  }
-
-  if (scoped.length === 0) {
-    const seedPayouts: VendorPayout[] = [
-      {
-        id: `pay-${vendorId}-101`,
-        vendorId,
-        amount: 8450,
-        status: 'completed',
-        periodStart: '2026-02-01',
-        periodEnd: '2026-02-15',
-        ordersCount: 18,
-        transactionRef: `UTR${Date.now().toString().slice(-8)}`,
-        bankAccountId: `bank-${vendorId}`,
-        processedAt: '2026-02-16T11:00:00.000Z',
-        createdAt: '2026-02-15T23:59:59.000Z',
-      },
-      {
-        id: `pay-${vendorId}-102`,
-        vendorId,
-        amount: 11200,
-        status: 'completed',
-        periodStart: '2026-02-16',
-        periodEnd: '2026-02-28',
-        ordersCount: 24,
-        transactionRef: `UTR${Date.now().toString().slice(-8)}`,
-        bankAccountId: `bank-${vendorId}`,
-        processedAt: '2026-03-01T10:30:00.000Z',
-        createdAt: '2026-02-28T23:59:59.000Z',
-      },
-      {
-        id: `pay-${vendorId}-103`,
-        vendorId,
-        amount: 4890,
-        status: 'pending',
-        periodStart: '2026-03-01',
-        periodEnd: '2026-03-15',
-        ordersCount: 11,
-        bankAccountId: `bank-${vendorId}`,
-        createdAt: '2026-03-15T23:59:59.000Z',
-      },
-    ];
-    setLocal(STORAGE_KEYS.PAYOUTS, [...local, ...seedPayouts]);
-    return seedPayouts;
   }
 
   return scoped;
@@ -827,9 +703,9 @@ export async function fetchAllPayoutsAdmin(): Promise<VendorPayout[]> {
   const local = getLocal<VendorPayout[]>(STORAGE_KEYS.PAYOUTS, []);
   try {
     const snap = await getDocs(collection(db, COLLECTIONS.VENDOR_PAYOUTS));
-    if (!snap.empty) {
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPayout));
-    }
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPayout));
+    setLocal(STORAGE_KEYS.PAYOUTS, items);
+    return items;
   } catch (e) {
     console.warn('Firestore fetchAllPayoutsAdmin warning:', e);
   }
@@ -840,15 +716,6 @@ export async function adminProcessVendorPayout(
   payoutId: string,
   transactionRef: string
 ): Promise<void> {
-  const all = getLocal<VendorPayout[]>(STORAGE_KEYS.PAYOUTS, []);
-  const p = all.find((item) => item.id === payoutId);
-  if (p) {
-    p.status = 'completed';
-    p.transactionRef = transactionRef;
-    p.processedAt = new Date().toISOString();
-    setLocal(STORAGE_KEYS.PAYOUTS, all);
-  }
-
   try {
     await updateDoc(doc(db, COLLECTIONS.VENDOR_PAYOUTS, payoutId), {
       status: 'completed',
@@ -856,10 +723,17 @@ export async function adminProcessVendorPayout(
       processedAt: new Date().toISOString(),
     });
   } catch (e) {
-    console.warn('Firestore adminProcessVendorPayout warning:', e);
+    assertFirestoreWriteSuccess(e, OperationType.UPDATE, `${COLLECTIONS.VENDOR_PAYOUTS}/${payoutId}`);
   }
 
+  const all = getLocal<VendorPayout[]>(STORAGE_KEYS.PAYOUTS, []);
+  const p = all.find((item) => item.id === payoutId);
   if (p) {
+    p.status = 'completed';
+    p.transactionRef = transactionRef;
+    p.processedAt = new Date().toISOString();
+    setLocal(STORAGE_KEYS.PAYOUTS, all);
+
     await sendVendorNotification({
       id: `vnotif-${Date.now()}`,
       vendorId: p.vendorId,

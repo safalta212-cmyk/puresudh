@@ -26,6 +26,8 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<OfferBanner | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -94,9 +96,28 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
       active: formData.active,
     };
 
-    await onSaveBanner(bannerToSave);
-    showToast(`Banner "${bannerToSave.title}" saved!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveBanner(bannerToSave);
+      showToast(`Banner "${bannerToSave.title}" saved!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save banner', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleBanner = async (banner: OfferBanner) => {
+    setTogglingId(banner.id);
+    try {
+      await onSaveBanner({ ...banner, active: !banner.active });
+      showToast(`Banner "${banner.title}" is now ${!banner.active ? 'Active' : 'Disabled'}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update banner status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const sortedBanners = [...banners].sort(
@@ -156,12 +177,13 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
                 <div className="absolute top-2 right-2">
                   <button
                     type="button"
-                    onClick={() => onSaveBanner({ ...banner, active: !banner.active })}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer shadow-xs transition ${
+                    disabled={togglingId === banner.id}
+                    onClick={() => handleToggleBanner(banner)}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer shadow-xs transition disabled:opacity-50 ${
                       banner.active ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-stone-600 hover:bg-stone-700 text-white'
                     }`}
                   >
-                    {banner.active ? 'Active' : 'Disabled'}
+                    {togglingId === banner.id ? 'Updating...' : banner.active ? 'Active' : 'Disabled'}
                   </button>
                 </div>
               </div>
@@ -319,9 +341,10 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                  disabled={submitting}
+                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
                 >
-                  {editingBanner ? 'Update Banner' : 'Save Banner'}
+                  {submitting ? 'Saving...' : editingBanner ? 'Update Banner' : 'Save Banner'}
                 </button>
               </div>
             </form>

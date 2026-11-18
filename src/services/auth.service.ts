@@ -67,8 +67,10 @@ export function formatFirebaseAuthError(error: any): string {
       return 'Too many failed login attempts (auth/too-many-requests). Please wait a few minutes or reset your password.';
     case 'auth/operation-not-allowed':
       return `Email/Password sign-in is disabled in Firebase Console (auth/operation-not-allowed)${projectLabel}. Enable Email/Password provider under Authentication → Sign-in method.`;
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized in Firebase Authentication (auth/unauthorized-domain). Add your current domain under Firebase Console → Authentication → Settings → Authorized domains.';
+    case 'auth/unauthorized-domain': {
+      const currentHost = typeof window !== 'undefined' && window.location?.hostname ? window.location.hostname : 'unknown-host';
+      return `This domain (${currentHost}) is not authorized in Firebase Authentication (auth/unauthorized-domain) [Project: ${resolvedFirebaseConfig.projectId || 'unset'}, authDomain: ${resolvedFirebaseConfig.authDomain || 'unset'}]. Add "${currentHost}" under Firebase Console → Authentication → Settings → Authorized domains.`;
+    }
     case 'auth/popup-blocked':
       return 'Sign-in popup was blocked by your browser (auth/popup-blocked). Please allow popups for this site and try again.';
     case 'auth/popup-closed-by-user':
@@ -97,13 +99,17 @@ export async function getCustomClaims(user: FirebaseUser): Promise<Record<string
     const tokenResult: IdTokenResult = await Promise.race([
       user.getIdTokenResult(true),
       new Promise<IdTokenResult>((_, reject) =>
-        setTimeout(() => reject(new Error('Token refresh timeout')), 4000)
+        setTimeout(() => reject(new Error('Token refresh timeout')), 8000)
       ),
     ]);
     return tokenResult.claims || {};
   } catch (err) {
     try {
       const cached = await user.getIdTokenResult(false);
+      if (user.emailVerified && cached.claims?.email_verified !== true) {
+        const refreshed = await user.getIdTokenResult(true);
+        return refreshed.claims || {};
+      }
       return cached.claims || {};
     } catch {
       console.warn('Failed to fetch ID token claims:', err);
@@ -455,21 +461,25 @@ export async function loginWithGoogle(): Promise<UserProfile> {
   provider.addScope('email');
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  const cred = await signInWithPopup(auth, provider);
-  const profile = await getCurrentUserProfile();
+  try {
+    const cred = await signInWithPopup(auth, provider);
+    const profile = await getCurrentUserProfile();
 
-  return (
-    profile || {
-      id: cred.user.uid,
-      uid: cred.user.uid,
-      email: cred.user.email || '',
-      displayName: cred.user.displayName || 'Google User',
-      role: 'customer',
-      createdAt: new Date().toISOString(),
-      addresses: [],
-      authMethod: 'google',
-    }
-  );
+    return (
+      profile || {
+        id: cred.user.uid,
+        uid: cred.user.uid,
+        email: cred.user.email || '',
+        displayName: cred.user.displayName || 'Google User',
+        role: 'customer',
+        createdAt: new Date().toISOString(),
+        addresses: [],
+        authMethod: 'google',
+      }
+    );
+  } catch (err: any) {
+    throw new Error(formatFirebaseAuthError(err));
+  }
 }
 
 /**

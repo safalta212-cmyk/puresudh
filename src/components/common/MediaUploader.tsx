@@ -541,12 +541,11 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
                   ? `Uploading to Firebase Storage (${uploadProgress}%)`
                   : 'Finalizing Secure Storage...'}
               </span>
-              <div className="w-48 bg-stone-700 rounded-full h-1.5 mt-3 overflow-hidden">
-                <div
-                  className="bg-amber-400 h-full rounded-full transition-all duration-200"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
+              <progress
+                value={uploadProgress}
+                max={100}
+                className="w-48 h-1.5 mt-3 rounded-full overflow-hidden appearance-none [&::-webkit-progress-bar]:bg-stone-700 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-value]:bg-amber-400 [&::-webkit-progress-value]:rounded-full [&::-moz-progress-bar]:bg-amber-400"
+              />
             </div>
           )}
 

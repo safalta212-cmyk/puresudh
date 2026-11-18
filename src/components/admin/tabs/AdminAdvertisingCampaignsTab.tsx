@@ -15,9 +15,14 @@ import {
   X,
   Package,
 } from 'lucide-react';
+import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
+import { db, assertFirestoreWriteSuccess, OperationType } from '../../../firebase/config';
 import { AdvertisingCampaign, AdvertisingCampaignStatus } from '../../../types/advertising';
+import { Product, Vendor } from '../../../types';
 import { INITIAL_MARKETPLACE_VENDORS } from '../../../constants';
 import { initialProducts } from '../../../data/seedData';
+import { fetchAllVendors } from '../../../services/vendorMarketplaceService';
+import { fetchProducts } from '../../../firebase/services';
 
 interface AdminAdvertisingCampaignsTabProps {
   adminEmail?: string;
@@ -27,6 +32,8 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
   adminEmail = 'aanews70@gmail.com',
 }) => {
   const [campaigns, setCampaigns] = useState<AdvertisingCampaign[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -40,6 +47,19 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
   const [actionReason, setActionReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const loadLookupData = async () => {
+    try {
+      const [liveVendors, liveProducts] = await Promise.all([
+        fetchAllVendors(),
+        fetchProducts(),
+      ]);
+      setVendors(liveVendors);
+      setProducts(liveProducts);
+    } catch (err) {
+      console.warn('[AdminAdCampaigns] Lookup hydration warning:', err);
+    }
+  };
+
   const fetchCampaigns = async () => {
     try {
       setErrorMessage(null);
@@ -51,12 +71,19 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
       });
 
       const ct = res.headers.get('content-type') || '';
-      if (!res.ok || !ct.includes('application/json')) {
-        throw new Error(
-          !ct.includes('application/json')
-            ? 'Advertising backend API is unavailable in static hosting mode.'
-            : `Failed to load campaigns (${res.status})`
-        );
+      if (!ct.includes('application/json')) {
+        // Static hosting fallback: query Firestore directly
+        const snap = await getDocs(collection(db, 'advertisingCampaigns'));
+        const list = snap.docs
+          .map((d) => ({ campaignId: d.id, ...d.data() } as AdvertisingCampaign))
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setCampaigns(list);
+        return;
+      }
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to load campaigns (${res.status})`);
       }
 
       const data = await res.json();
@@ -73,11 +100,13 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
   };
 
   useEffect(() => {
+    loadLookupData();
     fetchCampaigns();
   }, []);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    loadLookupData();
     fetchCampaigns();
   };
 
@@ -130,7 +159,38 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
 
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
-        throw new Error('Advertising backend API is unavailable in static hosting mode.');
+        // Direct Firestore update fallback when Express backend is absent
+        const statusMap: Record<typeof actionType, AdvertisingCampaignStatus> = {
+          APPROVE: 'ACTIVE',
+          RESUME: 'ACTIVE',
+          REJECT: 'REJECTED',
+          PAUSE: 'PAUSED',
+          STOP: 'COMPLETED',
+        };
+        const nextStatus = statusMap[actionType];
+        const campaignRef = doc(db, 'advertisingCampaigns', selectedCampaign.campaignId);
+        try {
+          await updateDoc(campaignRef, {
+            status: nextStatus,
+            adminActionReason: actionReason.trim(),
+            moderatedBy: adminEmail,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (fsErr) {
+          assertFirestoreWriteSuccess(
+            fsErr,
+            OperationType.UPDATE,
+            `advertisingCampaigns/${selectedCampaign.campaignId}`
+          );
+        }
+
+        setSuccessToast(
+          `Campaign "${selectedCampaign.campaignName}" updated to ${nextStatus}.`
+        );
+        closeActionModal();
+        await fetchCampaigns();
+        setTimeout(() => setSuccessToast(null), 4000);
+        return;
       }
 
       const data = await res.json();
@@ -151,13 +211,17 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
   };
 
   const getVendorName = (vendorId: string): string => {
-    const match = INITIAL_MARKETPLACE_VENDORS.find((v) => v.id === vendorId);
-    return match ? match.name : vendorId;
+    const liveMatch = vendors.find((v) => v.id === vendorId);
+    if (liveMatch) return liveMatch.name;
+    const seedMatch = INITIAL_MARKETPLACE_VENDORS.find((v) => v.id === vendorId);
+    return seedMatch ? seedMatch.name : vendorId;
   };
 
   const getProductName = (productId: string): string => {
-    const match = initialProducts.find((p) => p.id === productId);
-    return match ? match.name : productId;
+    const liveMatch = products.find((p) => p.id === productId);
+    if (liveMatch) return liveMatch.name;
+    const seedMatch = initialProducts.find((p) => p.id === productId);
+    return seedMatch ? seedMatch.name : productId;
   };
 
   const filteredCampaigns = campaigns.filter((c) => {
@@ -493,7 +557,7 @@ export const AdminAdvertisingCampaignsTab: React.FC<AdminAdvertisingCampaignsTab
       {/* CONFIRMATION / REASON MODAL */}
       {selectedCampaign && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50">
               <div className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-700" />

@@ -314,6 +314,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(fullProfile);
         setRole(fullProfile.role);
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(fullProfile));
+        if (effRole === 'admin') {
+          try {
+            await fbUser.reload().catch(() => {});
+            await fbUser.getIdToken(true);
+          } catch {}
+          if (firestoreData.role !== 'admin') {
+            setDoc(doc(db, COLLECTIONS.USERS, fbUser.uid), { role: 'admin', updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+          }
+          if (!hasAdminDoc) {
+            setDoc(
+              doc(db, 'admins', fbUser.uid),
+              { uid: fbUser.uid, email: fullProfile.email, role: 'admin', updatedAt: new Date().toISOString() },
+              { merge: true }
+            ).catch(() => {});
+          }
+        }
         return fullProfile;
       } else {
         // First-time profile creation in Firestore
@@ -332,8 +348,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           emailVerified: fbUser.emailVerified,
         };
         try {
+          if (effRole === 'admin') {
+            try {
+              await fbUser.getIdToken(true);
+            } catch {}
+          }
           const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
           await setDoc(userRef, newProfile, { merge: true });
+          if (effRole === 'admin' && !hasAdminDoc) {
+            await setDoc(
+              doc(db, 'admins', fbUser.uid),
+              { uid: fbUser.uid, email: newProfile.email, role: 'admin', createdAt: newProfile.createdAt },
+              { merge: true }
+            ).catch(() => {});
+          }
         } catch (err) {
           console.warn('Firestore initial user write fallback:', err);
         }
@@ -508,21 +536,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             emailVerified: cred.user.emailVerified,
           };
 
-          // Ensure Firestore user document exists with role 'admin' (non-blocking)
+          // Ensure fresh ID token & Firestore admin/user documents exist with role 'admin'
           try {
-            await setDoc(
-              doc(db, COLLECTIONS.USERS, cred.user.uid),
-              {
-                id: adminProfile.id,
-                uid: adminProfile.uid,
-                email: adminProfile.email,
-                displayName: adminProfile.displayName,
-                role: 'admin',
-                createdAt: adminProfile.createdAt,
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            );
+            await cred.user.getIdToken(true);
+          } catch {}
+          try {
+            await Promise.allSettled([
+              setDoc(
+                doc(db, COLLECTIONS.USERS, cred.user.uid),
+                {
+                  id: adminProfile.id,
+                  uid: adminProfile.uid,
+                  email: adminProfile.email,
+                  displayName: adminProfile.displayName,
+                  role: 'admin',
+                  createdAt: adminProfile.createdAt,
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+              ),
+              setDoc(
+                doc(db, 'admins', cred.user.uid),
+                {
+                  uid: adminProfile.uid,
+                  email: adminProfile.email,
+                  role: 'admin',
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+              ),
+            ]);
           } catch {}
 
           hadFirebaseUserRef.current = true;

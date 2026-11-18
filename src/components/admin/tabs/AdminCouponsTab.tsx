@@ -41,6 +41,8 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     code: '',
@@ -221,9 +223,28 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    await onSaveCoupon(couponToSave);
-    showToast(`Coupon "${couponToSave.code}" saved successfully!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveCoupon(couponToSave);
+      showToast(`Coupon "${couponToSave.code}" saved successfully!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save coupon', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleCoupon = async (coupon: Coupon) => {
+    if (!onToggleCouponStatus) return;
+    setTogglingId(coupon.id);
+    try {
+      await onToggleCouponStatus(coupon.id, !coupon.active);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update coupon status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const handleCopyCode = (code: string) => {
@@ -438,10 +459,15 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                 {onToggleCouponStatus && (
                   <button
                     type="button"
-                    onClick={() => onToggleCouponStatus(coupon.id, coupon.active)}
-                    className="text-xs font-semibold text-stone-600 hover:text-stone-900 transition cursor-pointer"
+                    disabled={togglingId === coupon.id}
+                    onClick={() => handleToggleCoupon(coupon)}
+                    className="text-xs font-semibold text-stone-600 hover:text-stone-900 disabled:opacity-50 transition cursor-pointer"
                   >
-                    {coupon.active ? 'Deactivate' : 'Activate'}
+                    {togglingId === coupon.id
+                      ? 'Updating...'
+                      : coupon.active
+                      ? 'Deactivate'
+                      : 'Activate'}
                   </button>
                 )}
 
@@ -748,9 +774,10 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl transition shadow-xs cursor-pointer"
+                  disabled={submitting}
+                  className="px-5 py-2 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 disabled:opacity-50 rounded-xl transition shadow-xs cursor-pointer"
                 >
-                  {editingCoupon ? 'Update Coupon' : 'Create Coupon'}
+                  {submitting ? 'Saving...' : editingCoupon ? 'Update Coupon' : 'Create Coupon'}
                 </button>
               </div>
             </form>

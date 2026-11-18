@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { SiteSettings } from '../../../types';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 import { MediaUploader } from '../../common/MediaUploader';
 
 interface AdminSettingsTabProps {
@@ -49,8 +50,8 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
       };
       await onSaveSettings(payload);
       showToast('System settings saved and applied to storefront!', 'success');
-    } catch {
-      showToast('Failed to save settings', 'error');
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save settings'), 'error');
     } finally {
       setSaving(false);
     }

@@ -37,6 +37,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'blocked'>('all');
 
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [isPurging, setIsPurging] = useState(false);
   const [isPurgeConfirmOpen, setIsPurgeConfirmOpen] = useState(false);
@@ -85,14 +86,22 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
     customerId: string,
     status: 'active' | 'suspended' | 'blocked'
   ) => {
-    await updateCustomerStatus(customerId, status);
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === customerId || c.uid === customerId ? { ...c, status } : c))
-    );
-    if (selectedCustomer && (selectedCustomer.id === customerId || selectedCustomer.uid === customerId)) {
-      setSelectedCustomer((prev) => (prev ? { ...prev, status } : null));
+    if (isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    try {
+      await updateCustomerStatus(customerId, status);
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === customerId || c.uid === customerId ? { ...c, status } : c))
+      );
+      if (selectedCustomer && (selectedCustomer.id === customerId || selectedCustomer.uid === customerId)) {
+        setSelectedCustomer((prev) => (prev ? { ...prev, status } : null));
+      }
+      showToast(`Customer status updated to ${status}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update customer status', 'error');
+    } finally {
+      setIsUpdatingStatus(false);
     }
-    showToast(`Customer status updated to ${status}`, 'info');
   };
 
   const filteredCustomers = useMemo(() => {
@@ -362,7 +371,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
             </div>
 
             {/* Profile Info Grid */}
-            <div className="grid grid-cols-2 gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
               <div>
                 <span className="text-[11px] text-stone-500 block">Email Address:</span>
                 <span className="font-semibold text-stone-900">{selectedCustomer.email}</span>
@@ -461,8 +470,10 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
               <span className="font-semibold text-stone-700">Account Access Control:</span>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
+                  disabled={isUpdatingStatus}
                   onClick={() => handleUpdateStatus(selectedCustomer.id, 'active')}
-                  className={`px-3 py-1 rounded-lg font-semibold border ${
+                  className={`px-3 py-1 rounded-lg font-semibold border disabled:opacity-50 cursor-pointer ${
                     selectedCustomer.status === 'active'
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-emerald-50'
@@ -471,8 +482,10 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
                   Active
                 </button>
                 <button
+                  type="button"
+                  disabled={isUpdatingStatus}
                   onClick={() => handleUpdateStatus(selectedCustomer.id, 'suspended')}
-                  className={`px-3 py-1 rounded-lg font-semibold border ${
+                  className={`px-3 py-1 rounded-lg font-semibold border disabled:opacity-50 cursor-pointer ${
                     selectedCustomer.status === 'suspended'
                       ? 'bg-amber-600 text-white border-amber-600'
                       : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-amber-50'
@@ -481,8 +494,10 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
                   Suspend
                 </button>
                 <button
+                  type="button"
+                  disabled={isUpdatingStatus}
                   onClick={() => handleUpdateStatus(selectedCustomer.id, 'blocked')}
-                  className={`px-3 py-1 rounded-lg font-semibold border ${
+                  className={`px-3 py-1 rounded-lg font-semibold border disabled:opacity-50 cursor-pointer ${
                     selectedCustomer.status === 'blocked'
                       ? 'bg-rose-600 text-white border-rose-600'
                       : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-rose-50'

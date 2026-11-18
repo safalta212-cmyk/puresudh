@@ -19,6 +19,7 @@ import {
   deleteStaffMember,
   toggleStaffStatus,
 } from '../../../firebase/services';
+import { isTemporaryEmail } from '../../../validation';
 
 interface AdminStaffTabProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -31,6 +32,8 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<StaffMember | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -113,32 +116,53 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       return;
     }
 
-    const sId = editingStaff?.id || `stf-${Date.now()}`;
-    const staffToSave: StaffMember = {
-      id: sId,
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      phone: formData.phone.trim() || undefined,
-      role: formData.role,
-      department: formData.department.trim(),
-      permissions: formData.permissions,
-      active: formData.active,
-      createdAt: editingStaff?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const emailCheck = isTemporaryEmail(formData.email);
+    if (emailCheck.isTemporary) {
+      showToast(emailCheck.reason || 'Please enter a valid work email address', 'error');
+      return;
+    }
 
-    await saveStaffMember(staffToSave);
-    await loadStaff();
-    showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      const sId = editingStaff?.id || `stf-${Date.now()}`;
+      const staffToSave: StaffMember = {
+        id: sId,
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim() || undefined,
+        role: formData.role,
+        department: formData.department.trim(),
+        permissions: formData.permissions,
+        active: formData.active,
+        createdAt: editingStaff?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await saveStaffMember(staffToSave);
+      await loadStaff();
+      showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save staff member', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleToggleActive = async (s: StaffMember) => {
-    await toggleStaffStatus(s.id, !s.active);
-    setStaffList((prev) =>
-      prev.map((item) => (item.id === s.id ? { ...item, active: !item.active } : item))
-    );
-    showToast(`Staff member "${s.name}" is now ${!s.active ? 'Active' : 'Inactive'}`, 'info');
+    if (togglingId === s.id) return;
+    setTogglingId(s.id);
+    try {
+      await toggleStaffStatus(s.id, !s.active);
+      setStaffList((prev) =>
+        prev.map((item) => (item.id === s.id ? { ...item, active: !item.active } : item))
+      );
+      showToast(`Staff member "${s.name}" is now ${!s.active ? 'Active' : 'Inactive'}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update staff status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const confirmDeleteStaff = async () => {
@@ -236,14 +260,16 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                     </div>
 
                     <button
+                      type="button"
+                      disabled={togglingId === staff.id}
                       onClick={() => handleToggleActive(staff)}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer disabled:opacity-50 ${
                         staff.active
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
                       }`}
                     >
-                      {staff.active ? 'Active' : 'Disabled'}
+                      {togglingId === staff.id ? 'Updating...' : staff.active ? 'Active' : 'Disabled'}
                     </button>
                   </div>
 
@@ -388,7 +414,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                 <label className="block font-semibold text-stone-700 mb-2">
                   Granular Permissions
                 </label>
-                <div className="grid grid-cols-2 gap-2 p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-stone-50 rounded-xl border border-stone-200">
                   {availablePermissions.map((perm) => (
                     <label
                       key={perm.key}
@@ -429,9 +455,10 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                  disabled={submitting}
+                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
                 >
-                  {editingStaff ? 'Update Staff' : 'Save Staff Member'}
+                  {submitting ? 'Saving...' : editingStaff ? 'Update Staff' : 'Save Staff Member'}
                 </button>
               </div>
             </form>

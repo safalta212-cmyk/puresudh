@@ -519,7 +519,7 @@ apiRouter.delete('/delivery/slots/:id', requireRole(['admin']), (req: Request, r
 });
 
 // Coupon Validation with Abuse Prevention & Advanced Rules
-apiRouter.post('/coupons/validate', couponLimiter, (req: Request, res: Response) => {
+apiRouter.post('/coupons/validate', couponLimiter, async (req: Request, res: Response) => {
   const {
     code,
     cartSubtotal,
@@ -536,6 +536,7 @@ apiRouter.post('/coupons/validate', couponLimiter, (req: Request, res: Response)
 
   const effectiveSubtotal = Number(cartSubtotal ?? subtotal) || 0;
   const cleanCode = String(code).trim().toUpperCase();
+  await hydrateCatalogIfNeeded([], undefined, cleanCode);
   const coupon = serverCoupons.find((c) => c.code.toUpperCase() === cleanCode);
 
   if (!coupon) {
@@ -605,22 +606,76 @@ function decodeFirestoreDoc(docJson: any): Record<string, any> | null {
   return parsed;
 }
 
+let lastCatalogSync = 0;
+let lastAreasSync = 0;
+let lastCouponsSync = 0;
+const CATALOG_SYNC_TTL_MS = 15000;
+
+function normalizeServerProduct(d: Record<string, any>): Record<string, any> {
+  const price = Number(d.price ?? 0);
+  const rawSale = d.salePrice ?? d.discountPrice;
+  const salePrice = rawSale !== undefined && rawSale !== null && rawSale !== '' ? Number(rawSale) : undefined;
+  const stockQuantity =
+    d.stockQuantity !== undefined
+      ? Number(d.stockQuantity)
+      : d.stock !== undefined
+      ? Number(d.stock)
+      : undefined;
+  const availability = d.availability !== false && d.isAvailable !== false;
+  return {
+    ...d,
+    price: Number.isFinite(price) ? price : 0,
+    ...(salePrice !== undefined && Number.isFinite(salePrice) && salePrice > 0 ? { salePrice, discountPrice: salePrice } : {}),
+    ...(stockQuantity !== undefined && Number.isFinite(stockQuantity) ? { stockQuantity, stock: stockQuantity } : {}),
+    availability,
+    isAvailable: availability,
+  };
+}
+
+function normalizeServerArea(d: Record<string, any>): Record<string, any> {
+  return {
+    ...d,
+    deliveryCharge: d.deliveryCharge !== undefined ? Number(d.deliveryCharge) : 30,
+    minimumOrder: d.minimumOrder !== undefined ? Number(d.minimumOrder) : 0,
+    freeDeliveryAbove: d.freeDeliveryAbove !== undefined ? Number(d.freeDeliveryAbove) : undefined,
+    isDeliverable: d.isDeliverable !== false,
+    active: d.active !== false,
+  };
+}
+
+function normalizeServerCoupon(d: Record<string, any>): Record<string, any> {
+  return {
+    ...d,
+    code: String(d.code || '').trim().toUpperCase(),
+    discountValue: Number(d.discountValue ?? 0),
+    minOrderAmount: Number(d.minOrderAmount ?? 0),
+    maxDiscount: d.maxDiscount !== undefined ? Number(d.maxDiscount) : undefined,
+    usageLimit: d.usageLimit !== undefined ? Number(d.usageLimit) : undefined,
+    usageCount: Number(d.usageCount ?? 0),
+    active: d.active !== false,
+  };
+}
+
 async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any[]> {
   const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
   const envDbId = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
   const targets: Array<{ projectId: string; dbId: string }> = [];
+  const isCustomEnvOverride = Boolean(envProjectId && envProjectId !== firebaseAppletConfig?.projectId);
 
-  if (envProjectId) {
+  if (isCustomEnvOverride && envProjectId) {
     targets.push({ projectId: envProjectId, dbId: envDbId || '(default)' });
-  }
-  if (!targets.some((t) => t.projectId === 'puresudh-561f1')) {
-    targets.push({ projectId: 'puresudh-561f1', dbId: '(default)' });
   }
   if (firebaseAppletConfig?.projectId && !targets.some((t) => t.projectId === firebaseAppletConfig.projectId)) {
     targets.push({
       projectId: firebaseAppletConfig.projectId,
       dbId: firebaseAppletConfig.firestoreDatabaseId || '(default)',
     });
+  }
+  if (envProjectId && !targets.some((t) => t.projectId === envProjectId)) {
+    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)' });
+  }
+  if (!targets.some((t) => t.projectId === 'puresudh-561f1')) {
+    targets.push({ projectId: 'puresudh-561f1', dbId: '(default)' });
   }
 
   for (const target of targets) {
@@ -649,51 +704,61 @@ async function hydrateCatalogIfNeeded(
   pincode?: string,
   couponCode?: string
 ): Promise<void> {
+  const now = Date.now();
   const safeItems = Array.isArray(items) ? items : [];
   const missingProduct = safeItems.some((i) => {
     const pid = String(i?.productId || i?.id || '');
     return pid && !serverProducts.some((p) => p.id === pid);
   });
+  const shouldSyncProducts = missingProduct || now - lastCatalogSync > CATALOG_SYNC_TTL_MS;
 
   const cleanPin = pincode ? String(pincode).replace(/\D/g, '').trim() : '';
   const missingPincode = Boolean(cleanPin && !matchDeliveryArea(cleanPin, serverAreas));
+  const shouldSyncAreas = missingPincode || (Boolean(cleanPin) && now - lastAreasSync > CATALOG_SYNC_TTL_MS);
 
   const cleanCoupon = couponCode ? String(couponCode).trim().toUpperCase() : '';
   const missingCoupon = Boolean(cleanCoupon && !serverCoupons.some((c) => c.code.toUpperCase() === cleanCoupon));
+  const shouldSyncCoupons = missingCoupon || (Boolean(cleanCoupon) && now - lastCouponsSync > CATALOG_SYNC_TTL_MS);
 
   const tasks: Promise<void>[] = [];
 
-  if (missingProduct) {
+  if (shouldSyncProducts) {
     tasks.push(
       fetchFirestoreCollectionDocs('products').then((docs) => {
-        for (const d of docs) {
+        lastCatalogSync = Date.now();
+        for (const raw of docs) {
+          const d = normalizeServerProduct(raw);
           const idx = serverProducts.findIndex((p) => p.id === d.id);
           if (idx >= 0) serverProducts[idx] = { ...serverProducts[idx], ...d };
-          else serverProducts.push(d);
+          else serverProducts.push(d as any);
         }
       })
     );
   }
 
-  if (missingPincode) {
+  if (shouldSyncAreas) {
     tasks.push(
       fetchFirestoreCollectionDocs('deliveryAreas').then((docs) => {
-        for (const d of docs) {
+        lastAreasSync = Date.now();
+        for (const raw of docs) {
+          const d = normalizeServerArea(raw);
           const idx = serverAreas.findIndex((a) => a.id === d.id);
           if (idx >= 0) serverAreas[idx] = { ...serverAreas[idx], ...d };
-          else serverAreas.push(d);
+          else serverAreas.push(d as any);
         }
       })
     );
   }
 
-  if (missingCoupon) {
+  if (shouldSyncCoupons) {
     tasks.push(
       fetchFirestoreCollectionDocs('coupons').then((docs) => {
-        for (const d of docs) {
+        lastCouponsSync = Date.now();
+        for (const raw of docs) {
+          const d = normalizeServerCoupon(raw);
           const idx = serverCoupons.findIndex((c) => c.id === d.id || c.code.toUpperCase() === String(d.code || '').toUpperCase());
           if (idx >= 0) serverCoupons[idx] = { ...serverCoupons[idx], ...d };
-          else serverCoupons.push(d);
+          else serverCoupons.push(d as any);
         }
       })
     );
@@ -774,7 +839,7 @@ export function verifyCartItemsServer(
     }
 
     // 3. Prevent unavailable product purchase
-    if (product.availability === false) {
+    if (product.availability === false || (product as any).isAvailable === false) {
       return {
         valid: false,
         error: `Product '${product.name}' is currently unavailable for order.`,
@@ -789,12 +854,13 @@ export function verifyCartItemsServer(
     }
 
     // 4. Prevent out-of-stock purchase (treat missing stockQuantity on Firestore records as default available stock unless marked out of stock)
-    const availableStock =
-      typeof product.stockQuantity === 'number'
-        ? product.stockQuantity
-        : typeof product.stock === 'number'
-        ? product.stock
+    const rawStock =
+      product.stockQuantity !== undefined && product.stockQuantity !== null
+        ? Number(product.stockQuantity)
+        : product.stock !== undefined && product.stock !== null
+        ? Number(product.stock)
         : 10;
+    const availableStock = Number.isFinite(rawStock) ? rawStock : 10;
     if (availableStock <= 0) {
       return {
         valid: false,
@@ -825,8 +891,9 @@ export function verifyCartItemsServer(
     }
 
     // 6. Prevent price manipulation: NEVER trust client price!
-    const authoritativePrice =
-      product.salePrice && product.salePrice > 0 ? product.salePrice : product.price;
+    const rawSalePrice = Number(product.salePrice ?? (product as any).discountPrice ?? 0);
+    const basePrice = Number(product.price ?? 0);
+    const authoritativePrice = rawSalePrice > 0 ? rawSalePrice : basePrice;
     const itemTotal = authoritativePrice * quantity;
     calculatedSubtotal += itemTotal;
 
@@ -835,9 +902,9 @@ export function verifyCartItemsServer(
     const verifiedEntry = {
       productId: product.id,
       productName: product.name,
-      productImage: product.images?.[0] || '',
+      productImage: product.images?.[0] || (product as any).imageUrls?.[0] || '',
       price: authoritativePrice,
-      originalPrice: product.price,
+      originalPrice: basePrice,
       quantity,
       weight: item.weight || product.weight,
       total: itemTotal,

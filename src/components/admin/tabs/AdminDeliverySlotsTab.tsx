@@ -12,6 +12,7 @@ import {
   Sunset,
 } from 'lucide-react';
 import { DeliverySlot } from '../../../types';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminDeliverySlotsTabProps {
   deliverySlots: DeliverySlot[];
@@ -28,6 +29,8 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<DeliverySlot | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: 'Morning Fresh Milk & Sweets',
@@ -88,9 +91,33 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    await onSaveSlot(slotToSave);
-    showToast(`Delivery slot "${slotToSave.name}" saved!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveSlot(slotToSave);
+      showToast(`Delivery slot "${slotToSave.name}" saved!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save delivery slot'), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleSlot = async (slot: DeliverySlot, slotActive: boolean) => {
+    setTogglingId(slot.id);
+    try {
+      await onSaveSlot({
+        ...slot,
+        isActive: !slotActive,
+        active: !slotActive,
+        updatedAt: new Date().toISOString(),
+      });
+      showToast(`Slot "${slot.name}" is now ${!slotActive ? 'Active' : 'Disabled'}`, 'info');
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to toggle delivery slot'), 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   return (
@@ -150,21 +177,15 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
 
                     <button
                       type="button"
-                      onClick={() =>
-                        onSaveSlot({
-                          ...slot,
-                          isActive: !slotActive,
-                          active: !slotActive,
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition ${
+                      disabled={togglingId === slot.id}
+                      onClick={() => handleToggleSlot(slot, slotActive)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition disabled:opacity-50 ${
                         slotActive
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
                       }`}
                     >
-                      {slotActive ? 'Active' : 'Disabled'}
+                      {togglingId === slot.id ? 'Updating...' : slotActive ? 'Active' : 'Disabled'}
                     </button>
                   </div>
 
@@ -316,9 +337,10 @@ export const AdminDeliverySlotsTab: React.FC<AdminDeliverySlotsTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                  disabled={submitting}
+                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
                 >
-                  {editingSlot ? 'Update Slot' : 'Save Slot'}
+                  {submitting ? 'Saving...' : editingSlot ? 'Update Slot' : 'Save Slot'}
                 </button>
               </div>
             </form>

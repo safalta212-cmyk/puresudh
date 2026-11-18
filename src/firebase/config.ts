@@ -132,5 +132,21 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 }
 
+export function assertFirestoreWriteSuccess(error: unknown, operationType: OperationType, path: string | null): void {
+  handleFirestoreError(error, operationType, path);
+  if (auth.currentUser) {
+    throw error instanceof Error ? error : new Error(String(error));
+  }
+  console.warn(`Firestore write (${operationType} ${path || ''}) offline warning:`, error);
+}
+
+export function formatFirestorePermissionMessage(error: unknown, fallback: string = 'Firestore operation failed'): string {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  if (raw.includes('Missing or insufficient permissions') || raw.includes('permission-denied')) {
+    return `Firestore permission denied on project "${resolvedFirebaseConfig.projectId}" (database "${resolvedFirestoreDatabaseId}"). Publish this app's firestore.rules to "${resolvedFirebaseConfig.projectId}" in Firebase Console → Firestore Database → Rules.`;
+  }
+  return raw || fallback;
+}
+
 export { app, auth, db, storage, functions };
 

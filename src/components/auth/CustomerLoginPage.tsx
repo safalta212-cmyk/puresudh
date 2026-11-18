@@ -12,9 +12,12 @@ import {
   ArrowLeft,
   ShieldCheck,
   AlertCircle,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { resolvedFirebaseConfig } from '../../firebase/config';
 import { isTemporaryEmail, isTemporaryOrFakePhone, sanitizePhoneInput10, formatIndianPhone } from '../../validation';
 
 interface CustomerLoginPageProps {
@@ -42,6 +45,14 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [copiedHost, setCopiedHost] = useState(false);
+
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isUnauthorizedDomainError = Boolean(
+    formError &&
+      (formError.includes('auth/unauthorized-domain') ||
+        formError.toLowerCase().includes('not authorized in firebase authentication'))
+  );
 
   useEffect(() => {
     setMode(initialMode);
@@ -262,9 +273,36 @@ export const CustomerLoginPage: React.FC<CustomerLoginPageProps> = ({
 
         {/* Error Feedback */}
         {formError && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2 shadow-2xs">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <span className="leading-snug">{formError}</span>
+          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl space-y-2 shadow-2xs">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span className="leading-snug">{formError}</span>
+            </div>
+            {isUnauthorizedDomainError && currentHostname && (
+              <div className="pt-2 border-t border-rose-200/80 space-y-1.5 text-[11px] text-rose-900">
+                <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-rose-200">
+                  <span className="font-mono break-all font-semibold text-stone-900">{currentHostname}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(currentHostname).catch(() => {});
+                      setCopiedHost(true);
+                      setTimeout(() => setCopiedHost(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 text-[10px] font-semibold shrink-0 cursor-pointer"
+                  >
+                    {copiedHost ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    {copiedHost ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p>
+                  Active Project: <strong className="font-mono">{resolvedFirebaseConfig.projectId}</strong> • authDomain: <strong className="font-mono">{resolvedFirebaseConfig.authDomain}</strong>
+                </p>
+                <p className="text-rose-700">
+                  Add this hostname in Firebase Console → Authentication → Settings → Authorized domains.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

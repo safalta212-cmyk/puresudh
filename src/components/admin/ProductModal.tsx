@@ -142,9 +142,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         featured: formData.isFeatured,
         isBestseller: formData.isBestseller,
         bestseller: formData.isBestseller,
-        rating: product?.rating || 4.9,
-        reviewsCount: product?.reviewsCount || product?.reviewCount || 12,
-        reviewCount: product?.reviewCount || product?.reviewsCount || 12,
+        rating: product?.rating ?? 0,
+        reviewsCount: product?.reviewsCount ?? product?.reviewCount ?? 0,
+        reviewCount: product?.reviewCount ?? product?.reviewsCount ?? 0,
         createdAt: product?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

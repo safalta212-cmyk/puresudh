@@ -53,6 +53,8 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -163,9 +165,28 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    await onSaveOffer(offerToSave);
-    showToast(`Offer "${offerToSave.title}" saved successfully!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveOffer(offerToSave);
+      showToast(`Offer "${offerToSave.title}" saved successfully!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save offer', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleOffer = async (offer: Offer) => {
+    if (!onToggleOfferStatus) return;
+    setTogglingId(offer.id);
+    try {
+      await onToggleOfferStatus(offer.id, !offer.active);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to toggle offer status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const filteredOffers = offers.filter((o) => {
@@ -297,14 +318,15 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
                 {onToggleOfferStatus ? (
                   <button
                     type="button"
-                    onClick={() => onToggleOfferStatus(offer.id, offer.active)}
-                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                    disabled={togglingId === offer.id}
+                    onClick={() => handleToggleOffer(offer)}
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer disabled:opacity-50 ${
                       offer.active
                         ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
                         : 'text-stone-500 bg-stone-100 border-stone-200 hover:bg-stone-200'
                     }`}
                   >
-                    {offer.active ? '● Active in Store' : '○ Inactive'}
+                    {togglingId === offer.id ? 'Updating...' : offer.active ? '● Active in Store' : '○ Inactive'}
                   </button>
                 ) : (
                   <span className="text-[11px] font-medium text-stone-500">
@@ -556,9 +578,10 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl transition shadow-xs cursor-pointer"
+                  disabled={submitting}
+                  className="px-5 py-2 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 disabled:opacity-50 rounded-xl transition shadow-xs cursor-pointer"
                 >
-                  {editingOffer ? 'Update Offer' : 'Create Offer'}
+                  {submitting ? 'Saving...' : editingOffer ? 'Update Offer' : 'Create Offer'}
                 </button>
               </div>
             </form>

@@ -11,11 +11,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { DeliveryArea } from '../../../types';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminDeliveryAreasTabProps {
   deliveryAreas: DeliveryArea[];
   onSaveArea: (area: DeliveryArea) => Promise<void>;
   onDeleteArea: (areaId: string, areaName: string) => Promise<void>;
+  onToggleStatus?: (area: DeliveryArea) => Promise<void>;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -23,10 +25,13 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
   deliveryAreas,
   onSaveArea,
   onDeleteArea,
+  onToggleStatus,
   showToast,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingArea, setEditingArea] = useState<DeliveryArea | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -96,7 +101,7 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
       name: trimmedName,
       areaName: trimmedName,
       city: formData.city.trim() || 'Patna',
-      pincode: pinArray[0] || editingArea?.pincode,
+      pincode: pinArray[0] || editingArea?.pincode || '',
       pincodes: pinArray,
       deliveryCharge: chargeNum,
       freeDeliveryThreshold: freeNum,
@@ -111,9 +116,40 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    await onSaveArea(areaToSave);
-    showToast(`Delivery area "${trimmedName}" saved!`, 'success');
-    setIsModalOpen(false);
+    setSubmitting(true);
+    try {
+      await onSaveArea(areaToSave);
+      showToast(`Delivery area "${trimmedName}" saved!`, 'success');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save delivery area'), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleArea = async (area: DeliveryArea, isActive: boolean, displayName: string) => {
+    setTogglingId(area.id);
+    try {
+      if (onToggleStatus) {
+        await onToggleStatus(area);
+      } else {
+        await onSaveArea({
+          ...area,
+          active: !isActive,
+          isDeliverable: !isActive,
+          updatedAt: new Date().toISOString(),
+        });
+        showToast(
+          `Delivery area "${displayName}" is now ${!isActive ? 'Active' : 'Suspended'}`,
+          'info'
+        );
+      }
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update delivery area status'), 'error');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   return (
@@ -177,21 +213,15 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
 
                     <button
                       type="button"
-                      onClick={() =>
-                        onSaveArea({
-                          ...area,
-                          active: !isActive,
-                          isDeliverable: !isActive,
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition ${
+                      disabled={togglingId === area.id}
+                      onClick={() => handleToggleArea(area, isActive, displayName)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer transition disabled:opacity-50 ${
                         isActive
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
                       }`}
                     >
-                      {isActive ? 'Active' : 'Disabled'}
+                      {togglingId === area.id ? 'Updating...' : isActive ? 'Active' : 'Disabled'}
                     </button>
                   </div>
 
@@ -396,9 +426,10 @@ export const AdminDeliveryAreasTab: React.FC<AdminDeliveryAreasTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                  disabled={submitting}
+                  className="px-5 py-2 font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
                 >
-                  {editingArea ? 'Update Area' : 'Save Area'}
+                  {submitting ? 'Saving...' : editingArea ? 'Update Area' : 'Save Area'}
                 </button>
               </div>
             </form>

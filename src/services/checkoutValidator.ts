@@ -82,16 +82,17 @@ async function validateCartAgainstCatalog(
     // Prefer authoritative Firestore/catalog record when present, else item.product snapshot
     const catalogProduct = catalogProducts.find((p) => p.id === item.product.id) || item.product;
 
-    if (catalogProduct.availability === false) {
+    if (catalogProduct.availability === false || catalogProduct.isAvailable === false) {
       return invalidResponse(`Product '${catalogProduct.name}' is currently unavailable for order.`);
     }
 
-    const availableStock =
-      typeof catalogProduct.stockQuantity === 'number'
-        ? catalogProduct.stockQuantity
-        : typeof catalogProduct.stock === 'number'
-        ? catalogProduct.stock
+    const rawStock =
+      catalogProduct.stockQuantity !== undefined && catalogProduct.stockQuantity !== null
+        ? Number(catalogProduct.stockQuantity)
+        : catalogProduct.stock !== undefined && catalogProduct.stock !== null
+        ? Number(catalogProduct.stock)
         : 10;
+    const availableStock = Number.isFinite(rawStock) ? rawStock : 10;
 
     if (availableStock <= 0) {
       return invalidResponse(`Product '${catalogProduct.name}' is completely out of stock.`);
@@ -103,10 +104,9 @@ async function validateCartAgainstCatalog(
       );
     }
 
-    const price =
-      catalogProduct.salePrice && catalogProduct.salePrice > 0
-        ? catalogProduct.salePrice
-        : catalogProduct.price;
+    const rawSalePrice = Number(catalogProduct.salePrice ?? catalogProduct.discountPrice ?? 0);
+    const basePrice = Number(catalogProduct.price ?? 0);
+    const price = rawSalePrice > 0 ? rawSalePrice : basePrice;
     const total = price * qty;
     calculatedSubtotal += total;
 
@@ -116,7 +116,7 @@ async function validateCartAgainstCatalog(
       productName: catalogProduct.name,
       productImage: catalogProduct.images?.[0] || catalogProduct.imageUrls?.[0] || '',
       price,
-      originalPrice: catalogProduct.price,
+      originalPrice: basePrice,
       quantity: qty,
       weight: item.selectedWeight || catalogProduct.weight,
       total,
@@ -273,22 +273,16 @@ export async function validateCartWithServer(
       return data as ServerValidationResponse;
     }
 
-    const errorMessage = String(data?.error || 'Server validation failed. Please check item availability.');
+    const errorMessage =
+      String(data?.error || '').trim() || 'Server validation failed. Please check item availability.';
 
-    // If Express memory didn't know about a newly added Firestore/local product or delivery area,
+    // If Express memory was stale or lacked live Firestore catalog/pincode/stock/availability updates,
     // verify against live Firestore catalog before rejecting.
-    if (
-      errorMessage.includes('does not exist in our catalog') ||
-      errorMessage.includes('currently unavailable for delivery to pincode')
-    ) {
-      const catalogResult = await validateCartAgainstCatalog(items, pincode, couponCode);
-      if (catalogResult.valid) {
-        return catalogResult;
-      }
-      return invalidResponse(catalogResult.error || errorMessage);
+    const catalogResult = await validateCartAgainstCatalog(items, pincode, couponCode);
+    if (catalogResult.valid) {
+      return catalogResult;
     }
-
-    return invalidResponse(errorMessage);
+    return invalidResponse(catalogResult.error || errorMessage);
   } catch (err: any) {
     console.warn('Backend server validation network issue, verifying against catalog:', err);
     return await validateCartAgainstCatalog(items, pincode, couponCode);

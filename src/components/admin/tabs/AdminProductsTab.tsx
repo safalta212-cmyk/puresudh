@@ -50,6 +50,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
   // Inline stock edit modal / popup
   const [quickStockProduct, setQuickStockProduct] = useState<Product | null>(null);
   const [quickStockValue, setQuickStockValue] = useState<number>(0);
+  const [savingStock, setSavingStock] = useState(false);
 
   // In-app Delete Confirmation Modal state (prevents iframe sandbox window.confirm failure)
   const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -150,25 +151,36 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
       availability: isNowActive && (product.stockQuantity ?? product.stock ?? 0) > 0,
       updatedAt: new Date().toISOString(),
     };
-    await handleSave(updated);
-    showToast(`Product "${product.name}" is now ${newStatus}`, 'info');
+    try {
+      await handleSave(updated);
+      showToast(`Product "${product.name}" is now ${newStatus}`, 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update product status', 'error');
+    }
   };
 
   const handleSaveQuickStock = async () => {
     if (!quickStockProduct) return;
-    const qty = Number(quickStockValue);
-    const updated: Product = {
-      ...quickStockProduct,
-      stockQuantity: qty,
-      stock: qty,
-      isAvailable: qty > 0,
-      availability: qty > 0,
-      inStock: qty > 0,
-      updatedAt: new Date().toISOString(),
-    };
-    await handleSave(updated);
-    showToast(`Stock updated to ${quickStockValue} for "${quickStockProduct.name}"`, 'success');
-    setQuickStockProduct(null);
+    setSavingStock(true);
+    try {
+      const qty = Number(quickStockValue);
+      const updated: Product = {
+        ...quickStockProduct,
+        stockQuantity: qty,
+        stock: qty,
+        isAvailable: qty > 0,
+        availability: qty > 0,
+        inStock: qty > 0,
+        updatedAt: new Date().toISOString(),
+      };
+      await handleSave(updated);
+      showToast(`Stock updated to ${quickStockValue} for "${quickStockProduct.name}"`, 'success');
+      setQuickStockProduct(null);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update product stock', 'error');
+    } finally {
+      setSavingStock(false);
+    }
   };
 
   return (
@@ -604,15 +616,17 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setQuickStockProduct(null)}
-                className="px-3.5 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
+                disabled={savingStock}
+                className="px-3.5 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveQuickStock}
-                className="px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-lg shadow-xs"
+                disabled={savingStock}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-50 rounded-lg shadow-xs"
               >
-                Save Stock
+                {savingStock ? 'Saving...' : 'Save Stock'}
               </button>
             </div>
           </div>

@@ -782,10 +782,139 @@
         "timestamp": { "type": "string" }
       },
       "required": ["auditId", "actorId", "actorType", "action", "entityType", "entityId", "timestamp"]
+    },
+    "AdvertisingAttribution": {
+      "title": "AdvertisingAttribution",
+      "description": "Immutable attribution record linking validated ad clicks to customer orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "campaignId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "productId": { "type": "string" },
+        "clickId": { "type": "string" },
+        "attributedRevenue": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderId", "campaignId", "vendorId", "productId"]
+    },
+    "VendorApplication": {
+      "title": "VendorApplication",
+      "description": "Seller onboarding application submitted by prospective marketplace vendors",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "shopName": { "type": "string" },
+        "contactName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fssaiLicense": { "type": "string" },
+        "gstNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["userId", "shopName", "contactName", "phone", "email", "status", "submittedAt"]
+    },
+    "MediaRegistry": {
+      "title": "MediaRegistry",
+      "description": "Uploaded Firebase Storage asset audit record and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "thumbnailStoragePath": { "type": "string" },
+        "fileName": { "type": "string" },
+        "size": { "type": "integer" },
+        "originalSize": { "type": "integer" },
+        "savingsPercentage": { "type": "number" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "contentType": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "preset": { "type": "string" },
+        "entityId": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedByEmail": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "archived", "deleted"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "downloadUrl", "storagePath", "fileName", "size", "contentType", "uploadedAt", "preset", "uploadedBy", "status", "createdAt"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Explicit super-admin identity registry entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Store operations and support staff roster record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" },
+        "permissions": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "inactive", "suspended"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "email", "role", "status"]
+    },
+    "HomepageConfig": {
+      "title": "HomepageConfig",
+      "description": "CMS layout sections, hero config, and featured merchandising configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sections": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "BroadcastNotification": {
+      "title": "BroadcastNotification",
+      "description": "Platform-wide promotional or operational announcement broadcast",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetSegment": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "message"]
+    },
+    "ReportRecord": {
+      "title": "ReportRecord",
+      "description": "Persisted admin analytics and operational export snapshot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "period": { "type": "string" },
+        "generatedAt": { "type": "string" }
+      },
+      "required": ["id", "type", "generatedAt"]
     }
   },
   "firestore": {
     "users": { "schema": "User", "description": "User profiles and role metadata" },
+    "admins": { "schema": "AdminRole", "description": "Explicit admin identity registry" },
+    "staff": { "schema": "StaffMember", "description": "Operations and support staff roster" },
     "addresses": { "schema": "Address", "description": "Customer delivery addresses linked by userId" },
     "categories": { "schema": "Category", "description": "Catalog taxonomy and categories" },
     "products": { "schema": "Product", "description": "Catalog products with standardized fields" },
@@ -805,7 +934,14 @@
     "banners": { "schema": "Banner", "description": "Hero and promotional banners" },
     "offers": { "schema": "Offer", "description": "Seasonal campaigns and offers" },
     "notifications": { "schema": "Notification", "description": "In-app user notifications" },
+    "broadcastNotifications": { "schema": "BroadcastNotification", "description": "Broadcast notifications for customers" },
     "siteSettings": { "schema": "SiteSettings", "description": "Global store operational settings" },
+    "settings": { "schema": "SiteSettings", "description": "Operational store settings document store" },
+    "homepageConfig": { "schema": "HomepageConfig", "description": "Homepage CMS section configuration" },
+    "homepage": { "schema": "HomepageConfig", "description": "Homepage layout document store" },
+    "reports": { "schema": "ReportRecord", "description": "Generated operational and financial report records" },
+    "mediaRegistry": { "schema": "MediaRegistry", "description": "Uploaded storage asset tracking registry" },
+    "vendorApplications": { "schema": "VendorApplication", "description": "Prospective seller onboarding applications" },
     "vendors": { "schema": "Vendor", "description": "Marketplace registered merchants" },
     "vendorUsers": { "schema": "VendorUser", "description": "Merchant accounts and roles" },
     "vendorProfiles": { "schema": "VendorProfile", "description": "Merchant business profiles and certifications" },
@@ -824,6 +960,7 @@
     "advertisingTransactions": { "schema": "AdvertisingTransaction", "description": "Immutable ledger of advertising wallet transactions and balance changes" },
     "advertisingClicks": { "schema": "AdvertisingClick", "description": "Click tracking and validation records for advertising campaigns" },
     "advertisingInvalidClicks": { "schema": "AdvertisingInvalidClick", "description": "Invalid click fraud detection and rejection records" },
-    "advertisingAuditLogs": { "schema": "AdvertisingAuditLog", "description": "Security and administrative audit trail for vendor advertising" }
+    "advertisingAuditLogs": { "schema": "AdvertisingAuditLog", "description": "Security and administrative audit trail for vendor advertising" },
+    "advertisingAttributions": { "schema": "AdvertisingAttribution", "description": "Immutable conversion attribution records linking ad clicks to orders" }
   }
 }
