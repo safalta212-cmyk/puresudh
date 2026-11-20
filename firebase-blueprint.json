@@ -182,10 +182,45 @@
         "deliverySlotId": { "type": "string" },
         "estimatedDeliveryTime": { "type": "string" },
         "vendorId": { "type": "string" },
+        "assignedDeliveryId": { "type": "string" },
+        "assignedDeliveryName": { "type": "string" },
+        "assignedDeliveryPhone": { "type": "string" },
+        "assignedAt": { "type": "string" },
+        "trackingActive": { "type": "boolean" },
+        "destinationCoordinates": { "type": "object" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["orderNumber", "customerId", "total", "status"]
+    },
+    "DeliveryTracking": {
+      "title": "DeliveryTracking",
+      "description": "Live ephemeral GPS tracking session per active order (no indefinite location history)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "deliveryPersonId": { "type": "string" },
+        "deliveryPersonName": { "type": "string" },
+        "deliveryPersonPhone": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "trackingStatus": { "type": "string" },
+        "riderLocation": { "type": "object" },
+        "customerLocation": { "type": "object" },
+        "customerSharingEnabled": { "type": "boolean" },
+        "destinationLocation": { "type": "object" },
+        "hubLocation": { "type": "object" },
+        "routeSummary": { "type": "object" },
+        "startedAt": { "type": "string" },
+        "lastUpdatedAt": { "type": "string" },
+        "stoppedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["orderId", "customerId", "deliveryPersonId", "isActive", "lastUpdatedAt"]
     },
     "OrderItem": {
       "title": "OrderItem",
@@ -966,6 +1001,7 @@
     "advertisingClicks": { "schema": "AdvertisingClick", "description": "Click tracking and validation records for advertising campaigns" },
     "advertisingInvalidClicks": { "schema": "AdvertisingInvalidClick", "description": "Invalid click fraud detection and rejection records" },
     "advertisingAuditLogs": { "schema": "AdvertisingAuditLog", "description": "Security and administrative audit trail for vendor advertising" },
-    "advertisingAttributions": { "schema": "AdvertisingAttribution", "description": "Immutable conversion attribution records linking ad clicks to orders" }
+    "advertisingAttributions": { "schema": "AdvertisingAttribution", "description": "Immutable conversion attribution records linking ad clicks to orders" },
+    "deliveryTracking": { "schema": "DeliveryTracking", "description": "Active order live GPS tracking sessions between assigned delivery personnel, customers, and dispatch hub" }
   }
 }

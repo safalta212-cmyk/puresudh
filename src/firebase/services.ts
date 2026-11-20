@@ -11,6 +11,7 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, auth, assertFirestoreWriteSuccess, OperationType, stripUndefinedFields } from './config';
+import { stopDeliveryTrackingSession } from '../services/gpsTrackingService';
 import {
   Product,
   Category,
@@ -907,15 +908,25 @@ export async function updateOrderStatus(
         }
       }
     }
+    const norm = String(newStatus).trim().toUpperCase();
+    const isTerminal = norm === 'DELIVERED' || norm === 'CANCELLED' || norm === 'REFUNDED';
     await updateDoc(docRef, {
       status: newStatus,
+      ...(isTerminal ? { trackingActive: false } : {}),
       updatedAt: now,
       statusHistory: updatedHistory,
     });
   }, OperationType.UPDATE, `orders/${orderId}`);
 
+  if (['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(String(newStatus).trim().toUpperCase())) {
+    await stopDeliveryTrackingSession(orderId, newStatus).catch(() => {});
+  }
+
   if (order) {
     order.status = newStatus;
+    if (['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(String(newStatus).trim().toUpperCase())) {
+      order.trackingActive = false;
+    }
     order.updatedAt = now;
     order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);
@@ -1294,13 +1305,16 @@ export async function processOrderRefund(
     await updateDoc(docRef, {
       status: 'REFUNDED',
       paymentStatus: 'Refunded',
+      trackingActive: false,
       updatedAt: now,
       statusHistory: updatedHistory,
     });
   }, OperationType.UPDATE, `orders/${orderId}`);
+  await stopDeliveryTrackingSession(orderId, 'REFUNDED').catch(() => {});
   if (order) {
     order.status = 'REFUNDED';
     order.paymentStatus = 'Refunded';
+    order.trackingActive = false;
     order.updatedAt = now;
     order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);
@@ -1333,12 +1347,15 @@ export async function processOrderCancellation(
     }
     await updateDoc(docRef, {
       status: 'CANCELLED',
+      trackingActive: false,
       updatedAt: now,
       statusHistory: updatedHistory,
     });
   }, OperationType.UPDATE, `orders/${orderId}`);
+  await stopDeliveryTrackingSession(orderId, 'CANCELLED').catch(() => {});
   if (order) {
     order.status = 'CANCELLED';
+    order.trackingActive = false;
     order.updatedAt = now;
     order.statusHistory = updatedHistory;
     setLocal(STORAGE_KEYS.ORDERS, all);

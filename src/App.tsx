@@ -37,9 +37,11 @@ import { AdminDashboard, AdminTab } from './components/admin/AdminDashboard';
 import { VendorDashboard } from './components/vendor/VendorDashboard';
 import { VendorRegisterPage } from './components/vendor/VendorRegisterPage';
 import { StaffDashboard } from './components/staff/StaffDashboard';
+import { DeliveryDashboard } from './components/delivery/DeliveryDashboard';
 import { CustomerLoginPage } from './components/auth/CustomerLoginPage';
 import { AdminLoginPage } from './components/auth/AdminLoginPage';
 import { StaffLoginPage } from './components/auth/StaffLoginPage';
+import { DeliveryLoginPage } from './components/auth/DeliveryLoginPage';
 import { VendorLoginPage } from './components/auth/VendorLoginPage';
 import { AnnouncementBar } from './components/ui';
 import { BRAND } from './constants';
@@ -140,7 +142,7 @@ const AppContent: React.FC = () => {
       if (homeCfg) setHomepageConfig(homeCfg);
 
       // Orders are fetched based on permissions
-      if (role === 'admin' && user?.uid) {
+      if ((role === 'admin' || role === 'staff') && user?.uid) {
         const allOrds = await fetchAllOrders();
         if (Array.isArray(allOrds)) setOrders(allOrds);
       } else if (user?.uid) {
@@ -179,6 +181,7 @@ const AppContent: React.FC = () => {
       'reviews',
       'admin',
       'staff',
+      'delivery',
       'vendor',
     ]);
 
@@ -203,6 +206,7 @@ const AppContent: React.FC = () => {
         'reviews',
         'admin',
         'staff',
+        'delivery',
         'vendor',
       ]);
       const path = window.location.pathname;
@@ -212,6 +216,7 @@ const AppContent: React.FC = () => {
         path.startsWith('/wishlist') ||
         path.startsWith('/admin') ||
         path.startsWith('/staff') ||
+        path.startsWith('/delivery') ||
         (path.startsWith('/vendor') && !path.startsWith('/vendor-register'));
 
       if (protectedViews.has(currentView) || isProtectedPath) {
@@ -239,6 +244,7 @@ const AppContent: React.FC = () => {
           const redirectMap: Record<string, string> = {
             admin: '/admin',
             staff: '/staff',
+            delivery: '/delivery',
             vendor: '/vendor',
             customer: '/account',
           };
@@ -255,6 +261,7 @@ const AppContent: React.FC = () => {
           const redirectMap: Record<string, string> = {
             admin: '/admin',
             staff: '/staff',
+            delivery: '/delivery',
             vendor: '/vendor',
             customer: '/account',
           };
@@ -329,6 +336,19 @@ const AppContent: React.FC = () => {
           }
         }
         setCurrentView('staff-login');
+        return;
+      }
+
+      if (path === '/delivery/login' || path === '/delivery-login') {
+        if (user && (user.role === 'delivery' || user.role === 'staff' || user.role === 'admin')) {
+          handleNavigateView('/delivery');
+          return;
+        } else if (user) {
+          showToast('Access Denied: Not authorized for the Delivery Rider portal. Redirected to your dashboard.', 'error');
+          handleNavigateView('/account');
+          return;
+        }
+        setCurrentView('delivery-login');
         return;
       }
 
@@ -417,6 +437,8 @@ const AppContent: React.FC = () => {
           customers: 'customers',
           coupons: 'coupons',
           offers: 'offers',
+          'live-tracking': 'live_tracking',
+          live_tracking: 'live_tracking',
           delivery: 'delivery_areas',
           'delivery-areas': 'delivery_areas',
           delivery_areas: 'delivery_areas',
@@ -437,6 +459,18 @@ const AppContent: React.FC = () => {
         } else {
           setAdminInitialTab('dashboard');
         }
+      } else if (path.startsWith('/delivery')) {
+        if (!user) {
+          setCurrentView('delivery-login');
+          return;
+        }
+        if (user.role !== 'delivery' && user.role !== 'staff' && user.role !== 'admin') {
+          showToast('Access Denied: Delivery rider credentials required. Redirected to your dashboard.', 'error');
+          handleNavigateView('/account');
+          return;
+        }
+        if (isCancelled) return;
+        setCurrentView('delivery');
       } else if (path.startsWith('/staff')) {
         if (!user) {
           setCurrentView('home');
@@ -696,6 +730,12 @@ const AppContent: React.FC = () => {
         description: 'Authorized operational desk sign in for packing and delivery staff.',
         canonicalUrl: '/staff/login',
       });
+    } else if (currentView === 'delivery-login') {
+      updateSEO({
+        title: 'Delivery Partner GPS Sign In | PURE SUDH',
+        description: 'Authorized delivery partner sign in for assigned order routes and live GPS sharing.',
+        canonicalUrl: '/delivery/login',
+      });
     } else if (currentView === 'vendor-login') {
       updateSEO({
         title: 'Vendor Partner Hub Sign In | PURE SUDH',
@@ -721,6 +761,7 @@ const AppContent: React.FC = () => {
         const redirectMap: Record<string, string> = {
           admin: '/admin',
           staff: '/staff',
+          delivery: '/delivery',
           vendor: '/vendor',
           customer: '/account',
         };
@@ -735,6 +776,7 @@ const AppContent: React.FC = () => {
         const redirectMap: Record<string, string> = {
           admin: '/admin',
           staff: '/staff',
+          delivery: '/delivery',
           vendor: '/vendor',
           customer: '/account',
         };
@@ -755,6 +797,17 @@ const AppContent: React.FC = () => {
       }
       setCurrentView('admin-login');
       try { window.history.pushState(null, '', '/admin/login'); } catch {}
+    } else if (view === 'delivery-login' || view === '/delivery/login') {
+      if (activeUser && (activeUser.role === 'delivery' || activeUser.role === 'staff' || activeUser.role === 'admin')) {
+        handleNavigateView('/delivery', activeUser);
+        return;
+      } else if (activeUser) {
+        showToast('Access Denied: Not authorized for the Delivery Rider portal. Redirected to your dashboard.', 'error');
+        handleNavigateView(activeUser.role === 'customer' ? '/account' : `/${activeUser.role}`, activeUser);
+        return;
+      }
+      setCurrentView('delivery-login');
+      try { window.history.pushState(null, '', '/delivery/login'); } catch {}
     } else if (view === 'staff-login' || view === '/staff/login') {
       if (activeUser && (activeUser.role === 'staff' || activeUser.role === 'admin')) {
         handleNavigateView('/staff', activeUser);
@@ -804,6 +857,8 @@ const AppContent: React.FC = () => {
         customers: 'customers',
         coupons: 'coupons',
         offers: 'offers',
+        'live-tracking': 'live_tracking',
+        live_tracking: 'live_tracking',
         delivery: 'delivery_areas',
         'delivery-areas': 'delivery_areas',
         delivery_areas: 'delivery_areas',
@@ -825,6 +880,18 @@ const AppContent: React.FC = () => {
         setAdminInitialTab('dashboard');
       }
       try { window.history.pushState(null, '', view.startsWith('/') ? view : `/${view}`); } catch {}
+    } else if (view === 'delivery' || view.startsWith('/delivery')) {
+      if (!activeUser) {
+        handleNavigateView('/delivery/login');
+        return;
+      }
+      if (activeUser.role !== 'delivery' && activeUser.role !== 'staff' && activeUser.role !== 'admin') {
+        showToast('Access Denied: Delivery rider credentials required. Redirected to your dashboard.', 'error');
+        handleNavigateView('/account', activeUser);
+        return;
+      }
+      setCurrentView('delivery');
+      try { window.history.pushState(null, '', '/delivery'); } catch {}
     } else if (view === 'staff' || view.startsWith('/staff')) {
       if (!activeUser) {
         handleNavigateView('/staff/login');
@@ -997,6 +1064,15 @@ const AppContent: React.FC = () => {
     );
   }
 
+  if (currentView === 'delivery-login') {
+    return (
+      <DeliveryLoginPage
+        onBackToStore={() => handleNavigateView('home')}
+        onNavigateDashboard={(profile) => handleNavigateView('delivery', profile)}
+      />
+    );
+  }
+
   if (currentView === 'vendor-login') {
     return (
       <VendorLoginPage
@@ -1049,6 +1125,11 @@ const AppContent: React.FC = () => {
         }}
       />
     );
+  }
+
+  // If Delivery Rider View is selected, show Delivery GPS Hub
+  if (currentView === 'delivery' && user && (role === 'delivery' || role === 'staff' || role === 'admin')) {
+    return <DeliveryDashboard onBackToStore={() => handleNavigateView('home')} />;
   }
 
   // If Staff Operations Desk View is selected, show Staff Portal (strictly gated on authenticated staff/admin)

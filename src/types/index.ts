@@ -288,7 +288,7 @@ export interface OrderStatusHistory {
   previousStatus?: OrderStatus;
   note?: string;
   updatedBy: string;
-  updatedByRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'system';
+  updatedByRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' | 'system';
   timestamp: string;
 }
 
@@ -339,7 +339,65 @@ export interface Order {
     timestamp: string;
     note?: string;
   }[];
+  assignedDeliveryId?: string;
+  assignedDeliveryName?: string;
+  assignedDeliveryPhone?: string;
+  assignedAt?: string;
+  trackingActive?: boolean;
+  destinationCoordinates?: GeoPointData;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface GeoPointData {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  heading?: number | null;
+  speed?: number | null;
+  timestamp: string;
+}
+
+export type GpsTrackingStatus =
+  | 'idle'
+  | 'requesting_permission'
+  | 'active'
+  | 'stale'
+  | 'stopped'
+  | 'permission_denied'
+  | 'gps_disabled'
+  | 'network_error'
+  | 'completed';
+
+export interface RouteSummaryData {
+  distanceMeters?: number;
+  distanceText?: string;
+  durationSeconds?: number;
+  durationText?: string;
+  computedAt?: string;
+}
+
+export interface LiveTrackingSession {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerId: string;
+  customerName?: string;
+  deliveryPersonId: string;
+  deliveryPersonName?: string;
+  deliveryPersonPhone?: string;
+  orderStatus: OrderStatus;
+  isActive: boolean;
+  trackingStatus: GpsTrackingStatus;
+  riderLocation?: GeoPointData | null;
+  customerLocation?: GeoPointData | null;
+  customerSharingEnabled?: boolean;
+  destinationLocation?: GeoPointData | null;
+  hubLocation?: GeoPointData | null;
+  routeSummary?: RouteSummaryData | null;
+  startedAt?: string;
+  lastUpdatedAt: string;
+  stoppedAt?: string;
   updatedAt: string;
 }
 
@@ -779,7 +837,7 @@ export interface StaffMember {
   name: string;
   email: string;
   phone?: string;
-  role: 'admin' | 'manager' | 'staff' | 'delivery_lead' | 'catalog_manager';
+  role: 'admin' | 'manager' | 'staff' | 'delivery' | 'delivery_lead' | 'catalog_manager';
   department: string;
   permissions: string[];
   active: boolean;

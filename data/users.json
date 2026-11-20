@@ -94,5 +94,14 @@
     "role": "customer",
     "createdAt": "2026-10-05T15:29:37.022Z",
     "addresses": []
+  },
+  {
+    "id": "usr-delivery-master",
+    "email": "delivery@email.com",
+    "passwordHash": "b1732b04d9136bbd7e968627730336b0ba483a689fa39ddc0c60a0e180c62125",
+    "name": "PureSudh Fleet Rider",
+    "phone": "+91 94310 12804",
+    "role": "delivery",
+    "createdAt": "2026-01-01T00:00:00.000Z"
   }
 ]

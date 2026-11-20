@@ -342,7 +342,7 @@ export async function registerVendor(
 export async function loginWithEmail(
   email: string,
   pass: string,
-  targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
+  targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
 ): Promise<{ profile: UserProfile; authorized: boolean; reason?: string }> {
   let cred;
   try {
@@ -383,11 +383,12 @@ export async function loginWithEmail(
  */
 export function verifyRoleAccess(
   userRole: UserRole,
-  targetPortal: 'customer' | 'admin' | 'staff' | 'vendor'
+  targetPortal: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
 ): boolean {
   if (userRole === 'admin') return true; // Admins have full access to all portals
   if (targetPortal === 'customer') return true; // Any authenticated user can access customer views
   if (targetPortal === 'staff') return userRole === 'staff' || userRole === 'delivery';
+  if (targetPortal === 'delivery') return userRole === 'delivery' || userRole === 'staff';
   if (targetPortal === 'vendor') return userRole === 'vendor';
   return false;
 }
@@ -397,7 +398,7 @@ export function verifyRoleAccess(
  */
 export async function sendPasswordReset(
   email: string,
-  targetPortal: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer'
+  targetPortal: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer'
 ): Promise<{ success: boolean; message: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail) {

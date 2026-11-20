@@ -23,12 +23,19 @@ import {
 import { Order, OrderStatus, normalizeOrderStatus } from '../../../types';
 import { notificationService } from '../../../services/notifications/notificationService';
 import { formatFirestorePermissionMessage } from '../../../firebase/config';
+import {
+  DeliveryRiderOption,
+  assignDeliveryRiderToOrder,
+  fetchDeliveryPersonnel,
+  isOrderTerminal,
+} from '../../../services/gpsTrackingService';
 
 interface AdminOrdersTabProps {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => Promise<void>;
   onProcessRefund: (orderId: string, refundRef: string, reason: string) => Promise<void>;
   onProcessCancel?: (orderId: string, reason: string) => Promise<void>;
+  onOrderAssigned?: (order: Order) => void;
   initialSelectedOrder?: Order | null;
   initialSearchQuery?: string;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -39,6 +46,7 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
   onUpdateOrderStatus,
   onProcessRefund,
   onProcessCancel,
+  onOrderAssigned,
   initialSelectedOrder,
   initialSearchQuery,
   showToast,
@@ -79,6 +87,38 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
   const [selectedNewStatus, setSelectedNewStatus] = useState<OrderStatus | ''>('');
   const [statusNote, setStatusNote] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Delivery rider assignment state
+  const [deliveryRiders, setDeliveryRiders] = useState<DeliveryRiderOption[]>([]);
+  const [selectedRiderUid, setSelectedRiderUid] = useState<string>('');
+  const [isAssigningRider, setIsAssigningRider] = useState(false);
+
+  useEffect(() => {
+    fetchDeliveryPersonnel()
+      .then((list) => setDeliveryRiders(list))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setSelectedRiderUid(selectedOrder?.assignedDeliveryId || '');
+  }, [selectedOrder?.id, selectedOrder?.assignedDeliveryId]);
+
+  const handleAssignDeliveryRider = async () => {
+    if (!selectedOrder || !selectedRiderUid) return;
+    const rider = deliveryRiders.find((r) => r.uid === selectedRiderUid);
+    if (!rider) return;
+    setIsAssigningRider(true);
+    try {
+      const updated = await assignDeliveryRiderToOrder(selectedOrder, rider);
+      setSelectedOrder(updated);
+      onOrderAssigned?.(updated);
+      showToast(`Assigned ${rider.name} to Order #${selectedOrder.orderNumber}`, 'success');
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to assign delivery partner'), 'error');
+    } finally {
+      setIsAssigningRider(false);
+    }
+  };
 
   // Cancellation prompt
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -624,6 +664,49 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
                   {isUpdating ? 'Updating...' : 'Update'}
                 </button>
               </div>
+            </div>
+
+            {/* Delivery Rider Assignment */}
+            <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200/80 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-emerald-700" />
+                  Delivery Partner Assignment
+                </span>
+                {selectedOrder.assignedDeliveryName && (
+                  <span className="text-[11px] font-semibold text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-emerald-200">
+                    Assigned: {selectedOrder.assignedDeliveryName}
+                  </span>
+                )}
+              </div>
+              {!isOrderTerminal(selectedOrder.status) ? (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedRiderUid}
+                    onChange={(e) => setSelectedRiderUid(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-xs bg-white rounded-lg border border-emerald-300 font-semibold text-stone-800 focus:outline-none"
+                  >
+                    <option value="">-- Select Delivery Partner --</option>
+                    {deliveryRiders.map((rider) => (
+                      <option key={rider.uid} value={rider.uid}>
+                        {rider.name} ({rider.email || rider.role})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAssignDeliveryRider}
+                    disabled={!selectedRiderUid || isAssigningRider}
+                    className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 rounded-lg shadow-xs cursor-pointer"
+                  >
+                    {isAssigningRider ? 'Assigning...' : 'Assign Rider'}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-500">
+                  Order is {selectedOrder.status}. Rider reassignment is locked.
+                </p>
+              )}
             </div>
 
             {/* Customer & Address Details */}

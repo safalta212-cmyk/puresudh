@@ -62,6 +62,9 @@ export const COLLECTIONS = {
   ADVERTISING_CLICKS: 'advertisingClicks',
   ADVERTISING_INVALID_CLICKS: 'advertisingInvalidClicks',
   ADVERTISING_AUDIT_LOGS: 'advertisingAuditLogs',
+  // Live GPS Delivery Tracking collection
+  DELIVERY_TRACKING: 'deliveryTracking',
+  STAFF: 'staff',
 } as const;
 
 export const USER_ROLES = {
@@ -79,10 +82,14 @@ export const ROUTES = {
   CHECKOUT: '/checkout',
   ORDER_TRACKING: '/orders/:id',
   ACCOUNT: '/account',
+  // Delivery personnel routes
+  DELIVERY: '/delivery',
+  DELIVERY_LOGIN: '/delivery/login',
   // Admin routes
   ADMIN: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   ADMIN_ORDERS: '/admin/orders',
+  ADMIN_LIVE_TRACKING: '/admin/live-tracking',
   ADMIN_VENDORS: '/admin/vendors',
   ADMIN_SETTINGS: '/admin/settings',
   // Vendor marketplace routes

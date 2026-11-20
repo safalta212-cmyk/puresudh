@@ -183,6 +183,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     admin: 'bg-rose-100 text-rose-900 border-rose-200',
     manager: 'bg-purple-100 text-purple-900 border-purple-200',
     catalog_manager: 'bg-amber-100 text-amber-900 border-amber-200',
+    delivery: 'bg-emerald-100 text-emerald-900 border-emerald-200',
     delivery_lead: 'bg-blue-100 text-blue-900 border-blue-200',
     staff: 'bg-stone-100 text-stone-800 border-stone-200',
   };
@@ -406,6 +407,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                   <option value="admin">Administrator (Full Access)</option>
                   <option value="manager">Store Manager (Operations & Orders)</option>
                   <option value="catalog_manager">Catalog Manager (Products & Prices)</option>
+                  <option value="delivery">Delivery Rider (Fleet GPS & Assigned Orders)</option>
                   <option value="delivery_lead">Delivery Lead (Dispatch & Routes)</option>
                   <option value="staff">Staff (Orders processing)</option>
                 </select>

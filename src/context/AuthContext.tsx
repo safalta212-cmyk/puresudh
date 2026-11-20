@@ -42,13 +42,13 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthModalOpen: boolean;
   authModalMode: AuthModalMode;
-  targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor';
-  openAuthModal: (mode?: AuthModalMode, targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor') => void;
+  targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery';
+  openAuthModal: (mode?: AuthModalMode, targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery') => void;
   closeAuthModal: () => void;
   login: (
     email: string,
     pass: string,
-    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
+    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
   ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   register: (
     email: string,
@@ -68,11 +68,11 @@ interface AuthContextType {
   logout: () => Promise<void>;
   sendPasswordReset: (
     email: string,
-    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor'
+    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
   ) => Promise<{ success: boolean; message: string }>;
   updateUserPassword: (newPass: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   loginWithGoogle: (
-    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor'
+    targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
   ) => Promise<{ success: boolean; error?: string; profile?: UserProfile }>;
   updateUserProfileData: (updates: {
     displayName?: string;
@@ -89,6 +89,7 @@ interface AuthContextType {
   testRoleAccounts: {
     admin: { email: string; role: UserRole; name: string };
     staff: { email: string; role: UserRole; name: string };
+    delivery: { email: string; role: UserRole; name: string };
     vendor: { email: string; role: UserRole; name: string };
     customer: { email: string; role: UserRole; name: string };
   };
@@ -179,9 +180,22 @@ const defaultCustomerUser: UserProfile = {
   customClaims: { role: 'customer' },
 };
 
+const defaultDeliveryUser: UserProfile = {
+  id: 'usr-delivery-master',
+  uid: 'usr-delivery-master',
+  email: 'delivery@email.com',
+  displayName: 'PureSudh Fleet Rider',
+  phone: '+91 94310 12804',
+  role: 'delivery',
+  createdAt: '2026-03-01T00:00:00.000Z',
+  addresses: [],
+  customClaims: { role: 'delivery' },
+};
+
 export const TEST_ROLE_ACCOUNTS = {
   admin: { email: 'aanews70@gmail.com', role: 'admin' as UserRole, name: 'Platform Administrator' },
   staff: { email: 'staff@email.com', role: 'staff' as UserRole, name: 'Operations Staff' },
+  delivery: { email: 'delivery@email.com', role: 'delivery' as UserRole, name: 'PureSudh Fleet Rider' },
   vendor: { email: 'vendor@email.com', role: 'vendor' as UserRole, name: 'Verified Dairy Vendor' },
   customer: { email: 'customer@email.com', role: 'customer' as UserRole, name: 'Abhishek Kumar' },
 };
@@ -219,7 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
-  const [targetPortal, setTargetPortal] = useState<'customer' | 'admin' | 'staff' | 'vendor'>('customer');
+  const [targetPortal, setTargetPortal] = useState<'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'>('customer');
   const isLoggingOutRef = useRef(false);
   const hadFirebaseUserRef = useRef(false);
   const isVerifyingLoginRef = useRef(false);
@@ -411,7 +425,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const openAuthModal = (
     mode: AuthModalMode = 'login',
-    portal: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer'
+    portal: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer'
   ) => {
     setAuthModalMode(mode);
     setTargetPortal(portal);
@@ -423,12 +437,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Secure Login supporting Customer, Admin, Staff, and Vendor portals
+   * Secure Login supporting Customer, Admin, Staff, Delivery, and Vendor portals
    */
   const login = async (
     emailOrPhone: string,
     pass: string,
-    target: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer'
+    target: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer'
   ): Promise<{ success: boolean; error?: string; profile?: UserProfile }> => {
     setIsLoading(true);
     const rawInput = (emailOrPhone || '').trim();
@@ -642,6 +656,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeAuthModal();
         setIsLoading(false);
         return { success: true, profile: defaultStaffUser };
+      }
+
+      const isDeliveryMatch = cleanEmail === 'delivery@email.com' || (normalizedPhone && normalizedPhone === '9431012804');
+      if (isDeliveryMatch && pass === 'delivery123') {
+        if (target !== 'delivery' && target !== 'customer') {
+          setIsLoading(false);
+          return { success: false, error: `Unauthorized: Delivery rider credentials cannot access ${String(target).toUpperCase()} portal.` };
+        }
+        setUser(defaultDeliveryUser);
+        setRole('delivery');
+        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultDeliveryUser));
+        closeAuthModal();
+        setIsLoading(false);
+        return { success: true, profile: defaultDeliveryUser };
       }
 
       const isVendorMatch = cleanEmail === 'vendor@email.com' || (normalizedPhone && normalizedPhone === '9431012803');
@@ -1170,7 +1198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const sendPasswordReset = async (
     email: string,
-    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor'
+    portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
   ): Promise<{ success: boolean; message: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
@@ -1259,7 +1287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Google Sign-In Architecture
    */
   const loginWithGoogle = async (
-    target?: 'customer' | 'admin' | 'staff' | 'vendor'
+    target?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
   ): Promise<{ success: boolean; error?: string; profile?: UserProfile }> => {
     setIsLoading(true);
     isVerifyingLoginRef.current = true;
@@ -1421,6 +1449,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(defaultAdminUser);
     } else if (newRole === 'staff') {
       setUser(defaultStaffUser);
+    } else if (newRole === 'delivery') {
+      setUser(defaultDeliveryUser);
     } else if (newRole === 'vendor') {
       setUser(defaultVendorUser);
     } else {

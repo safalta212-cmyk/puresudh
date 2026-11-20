@@ -28,6 +28,7 @@ import {
   Coins,
   Megaphone,
   BarChart3,
+  Navigation,
 } from 'lucide-react';
 import {
   Product,
@@ -91,6 +92,7 @@ import { AdminSettingsTab } from './tabs/AdminSettingsTab';
 import { AdminReportsTab } from './tabs/AdminReportsTab';
 import { AdminAdvertisingWalletsTab } from './tabs/AdminAdvertisingWalletsTab';
 import { AdminAdvertisingCampaignsTab } from './tabs/AdminAdvertisingCampaignsTab';
+import { AdminLiveTrackingTab } from './tabs/AdminLiveTrackingTab';
 import { VendorAdvertisingSuite } from '../vendor/tabs/VendorAdvertisingSuite';
 import { useAuth } from '../../context/AuthContext';
 
@@ -105,6 +107,7 @@ export type AdminTab =
   | 'products'
   | 'categories'
   | 'orders'
+  | 'live_tracking'
   | 'customers'
   | 'coupons'
   | 'offers'
@@ -478,6 +481,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       group: 'Fulfillment & Logistics',
       items: [
         {
+          id: 'live_tracking' as AdminTab,
+          label: 'Live Delivery Tracking',
+          icon: Navigation,
+          badge: null,
+        },
+        {
           id: 'delivery_areas' as AdminTab,
           label: 'Delivery Areas',
           icon: MapPin,
@@ -778,11 +787,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onUpdateOrderStatus={handleUpdateOrderStatus}
               onProcessRefund={handleProcessRefund}
               onProcessCancel={handleProcessCancel}
+              onOrderAssigned={() => onRefreshData()}
               initialSearchQuery={orderInitialSearch}
               initialSelectedOrder={preselectedOrder}
               showToast={showToast}
             />
           )}
+
+          {/* Section 4B: Live Delivery Fleet Tracking */}
+          {activeTab === 'live_tracking' && <AdminLiveTrackingTab />}
 
           {/* Section 5: Customers Directory */}
           {activeTab === 'customers' && (

@@ -2564,7 +2564,7 @@ export interface ServerStoredUser {
   passwordHash: string;
   name: string;
   phone: string;
-  role: 'customer' | 'admin' | 'staff' | 'vendor';
+  role: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery';
   createdAt: string;
   addresses?: any[];
   vendorDetails?: any;
@@ -2602,6 +2602,15 @@ const INITIAL_DEMO_USERS: ServerStoredUser[] = [
     name: 'Fulfillment Supervisor',
     phone: '+91 94310 12802',
     role: 'staff',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'usr-delivery-master',
+    email: 'delivery@email.com',
+    passwordHash: hashPassword('delivery123'),
+    name: 'PureSudh Fleet Rider',
+    phone: '+91 94310 12804',
+    role: 'delivery',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
@@ -2679,6 +2688,17 @@ function loadStoredUsers(): ServerStoredUser[] {
           changed = true;
         }
 
+        // Backfill any newly added baseline demo/role accounts (e.g. usr-delivery-master)
+        for (const seedUser of INITIAL_DEMO_USERS.slice(1)) {
+          const exists = cleaned.some(
+            (u: ServerStoredUser) => (u.email || '').toLowerCase() === seedUser.email.toLowerCase()
+          );
+          if (!exists) {
+            cleaned.push(seedUser);
+            changed = true;
+          }
+        }
+
         if (changed) {
           saveStoredUsers(cleaned);
         }
@@ -2708,9 +2728,10 @@ function saveStoredUsers(users: ServerStoredUser[]): void {
 }
 
 // Known authoritative role map
-const KNOWN_ROLES: Record<string, { role: 'customer' | 'admin' | 'staff' | 'vendor'; name: string }> = {
+const KNOWN_ROLES: Record<string, { role: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'; name: string }> = {
   [VALID_ADMIN_EMAIL]: { role: 'admin', name: 'Platform Administrator' },
   'staff@email.com': { role: 'staff', name: 'Fulfillment Supervisor' },
+  'delivery@email.com': { role: 'delivery', name: 'PureSudh Fleet Rider' },
   'vendor@email.com': { role: 'vendor', name: 'Patna Artisan Kitchens' },
   'customer@email.com': { role: 'customer', name: 'Aarav Sharma' },
 };
@@ -3035,6 +3056,7 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
     const hashed = hashPassword(password);
     const isDemoPassMatch =
       (user.email.toLowerCase() === 'staff@email.com' && password === 'staff123')
+      || (user.email.toLowerCase() === 'delivery@email.com' && password === 'delivery123')
       || (user.email.toLowerCase() === 'vendor@email.com' && password === 'vendor123')
       || (user.email.toLowerCase() === 'customer@email.com' && password === 'cust123');
 
@@ -3056,10 +3078,17 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
         redirectUrl: '/customer/login',
       });
     }
-    if (portal === 'staff' && user.role !== 'staff' && user.role !== 'admin') {
+    if (portal === 'staff' && user.role !== 'staff' && user.role !== 'delivery' && user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         error: `Access Denied: This account (${user.email}) is not authorized for Staff Operations Desk.`,
+        redirectUrl: '/customer/login',
+      });
+    }
+    if (portal === 'delivery' && user.role !== 'delivery' && user.role !== 'staff' && user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: `Access Denied: This account (${user.email}) is not authorized for the Delivery Rider Portal.`,
         redirectUrl: '/customer/login',
       });
     }
@@ -3116,11 +3145,13 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
     }
 
     // Determine authoritative role
-    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' = 'customer';
+    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer';
     if (KNOWN_ROLES[cleanEmail]) {
       resolvedRole = KNOWN_ROLES[cleanEmail].role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';
+    } else if (cleanEmail.startsWith('delivery')) {
+      resolvedRole = 'delivery';
     } else if (cleanEmail.startsWith('staff')) {
       resolvedRole = 'staff';
     } else if (cleanEmail.startsWith('vendor')) {
@@ -3137,11 +3168,20 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
       });
     }
 
-    if (portal === 'staff' && resolvedRole !== 'staff' && resolvedRole !== 'admin') {
+    if (portal === 'staff' && resolvedRole !== 'staff' && resolvedRole !== 'delivery' && resolvedRole !== 'admin') {
       return res.status(403).json({
         success: false,
         authorized: false,
         error: `Access Denied: This account (${cleanEmail}) is not authorized for Staff Operations Desk. Please use Customer Sign In.`,
+        redirectUrl: '/customer/login',
+      });
+    }
+
+    if (portal === 'delivery' && resolvedRole !== 'delivery' && resolvedRole !== 'staff' && resolvedRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        error: `Access Denied: This account (${cleanEmail}) is not authorized for the Delivery Rider Hub. Please use Customer Sign In.`,
         redirectUrl: '/customer/login',
       });
     }
@@ -3159,6 +3199,7 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
     const dashboardMap: Record<string, string> = {
       admin: '/admin',
       staff: '/staff',
+      delivery: '/delivery',
       vendor: '/vendor',
       customer: '/account',
     };
@@ -3243,11 +3284,19 @@ apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) =
       });
     }
 
-    if (portal === 'staff' && resolvedRole !== 'staff' && resolvedRole !== 'admin') {
+    if (portal === 'staff' && resolvedRole !== 'staff' && resolvedRole !== 'delivery' && resolvedRole !== 'admin') {
       return res.status(403).json({
         success: false,
         exists: true,
         error: `Access Denied: This email (${cleanEmail}) is not registered as a Staff account.`,
+      });
+    }
+
+    if (portal === 'delivery' && resolvedRole !== 'delivery' && resolvedRole !== 'staff' && resolvedRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        exists: true,
+        error: `Access Denied: This email (${cleanEmail}) is not registered as a Delivery Partner account.`,
       });
     }
 
@@ -3281,11 +3330,13 @@ apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
     const cleanEmail = (email || '').trim().toLowerCase();
 
     // Determine authoritative role
-    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' = (role as any) || 'customer';
+    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = (role as any) || 'customer';
     if (cleanEmail && KNOWN_ROLES[cleanEmail]) {
       resolvedRole = KNOWN_ROLES[cleanEmail].role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';
+    } else if (cleanEmail.startsWith('delivery')) {
+      resolvedRole = 'delivery';
     } else if (cleanEmail.startsWith('staff')) {
       resolvedRole = 'staff';
     } else if (cleanEmail.startsWith('vendor')) {
@@ -3295,6 +3346,7 @@ apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
     const dashboardMap: Record<string, string> = {
       admin: '/admin',
       staff: '/staff',
+      delivery: '/delivery',
       vendor: '/vendor',
       customer: '/account',
     };
@@ -3305,7 +3357,9 @@ apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
     if (target === 'admin') {
       isAuthorized = resolvedRole === 'admin';
     } else if (target === 'staff') {
-      isAuthorized = resolvedRole === 'staff' || resolvedRole === 'admin';
+      isAuthorized = resolvedRole === 'staff' || resolvedRole === 'delivery' || resolvedRole === 'admin';
+    } else if (target === 'delivery') {
+      isAuthorized = resolvedRole === 'delivery' || resolvedRole === 'staff' || resolvedRole === 'admin';
     } else if (target === 'vendor') {
       isAuthorized = resolvedRole === 'vendor' || resolvedRole === 'admin';
     } else {
@@ -4159,4 +4213,40 @@ apiRouter.get('/advertising/reports', (req: Request, res: Response) => {
     return res.status(500).json({ success: false, error: err.message || 'Failed to generate advertising report' });
   }
 });
+
+/**
+ * GET /api/maps/geocode
+ * Server-side geocoding proxy using server environment key (never exposes server keys to client).
+ */
+apiRouter.get('/maps/geocode', async (req: Request, res: Response) => {
+  try {
+    const address = String(req.query.address || '').trim();
+    if (!address || address.length > 300) {
+      return res.status(400).json({ success: false, error: 'Valid address query is required.' });
+    }
+    const serverKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+    if (!serverKey || serverKey === 'MY_GOOGLE_MAPS_API_KEY') {
+      return res.status(404).json({ success: false, error: 'Server geocoding key unavailable.' });
+    }
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(serverKey)}`;
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ success: false, error: 'Geocoding upstream error.' });
+    }
+    const data: any = await upstream.json();
+    const loc = data?.results?.[0]?.geometry?.location;
+    if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+      return res.json({
+        success: true,
+        lat: loc.lat,
+        lng: loc.lng,
+        formattedAddress: data.results[0].formatted_address,
+      });
+    }
+    return res.status(404).json({ success: false, error: 'Address coordinates not found.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Geocoding failed.' });
+  }
+});
+
 

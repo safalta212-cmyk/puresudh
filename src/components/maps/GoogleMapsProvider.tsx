@@ -85,7 +85,7 @@ export const GoogleMapsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   return (
     <APIProvider
       apiKey={apiKey}
-      libraries={['places', 'marker', 'geometry']}
+      libraries={['places', 'marker', 'geometry', 'routes']}
     >
       {content}
     </APIProvider>

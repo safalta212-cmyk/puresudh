@@ -18,12 +18,17 @@ import {
   Store,
   Layers,
 } from 'lucide-react';
-import { Order, OrderStatus } from '../../types';
-import { fetchOrderById, fetchAllOrders, updateOrderStatus } from '../../firebase/services';
+import { LiveTrackingSession, Order, OrderStatus } from '../../types';
+import { fetchOrderById, fetchAllOrders, fetchUserOrders } from '../../firebase/services';
 import { useAuth } from '../../context/AuthContext';
 import { OrderTrackingMap } from '../maps/OrderTrackingMap';
 import { CancelOrderModal } from '../checkout/CancelOrderModal';
 import { fetchServerOrder } from '../../services/paymentService';
+import {
+  isOrderTerminal,
+  subscribeToOrderDocument,
+  subscribeToOrderTracking,
+} from '../../services/gpsTrackingService';
 
 interface TrackOrderPageProps {
   initialOrderId?: string;
@@ -43,9 +48,10 @@ export const TrackOrderPage: React.FC<TrackOrderPageProps> = ({
   initialOrderId,
   onBackToShop,
 }) => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [searchInput, setSearchInput] = useState(initialOrderId || '');
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [trackingSession, setTrackingSession] = useState<LiveTrackingSession | null>(null);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [matchingOrders, setMatchingOrders] = useState<Order[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -57,19 +63,56 @@ export const TrackOrderPage: React.FC<TrackOrderPageProps> = ({
     if (initialOrderId) {
       loadOrder(initialOrderId);
     }
-  }, [initialOrderId]);
+  }, [initialOrderId, user?.uid, role]);
+
+  // Real-time Firestore onSnapshot listeners for selected order & live GPS tracking
+  useEffect(() => {
+    if (!currentOrder?.id) {
+      setTrackingSession(null);
+      return;
+    }
+
+    const unsubOrder = subscribeToOrderDocument(
+      currentOrder.id,
+      (updatedOrder) => {
+        if (updatedOrder) {
+          setCurrentOrder((prev) =>
+            prev && prev.id === updatedOrder.id ? { ...prev, ...updatedOrder } : updatedOrder
+          );
+        }
+      },
+      () => {}
+    );
+
+    const terminal = isOrderTerminal(currentOrder.status);
+    let unsubTracking = () => {};
+    if (!terminal) {
+      unsubTracking = subscribeToOrderTracking(
+        currentOrder.id,
+        (session) => setTrackingSession(session),
+        () => {}
+      );
+    } else {
+      setTrackingSession(null);
+    }
+
+    return () => {
+      unsubOrder();
+      unsubTracking();
+    };
+  }, [currentOrder?.id, currentOrder?.status]);
 
   const loadRecentOrders = async () => {
     try {
-      const all = await fetchAllOrders();
-      setAllOrders(all);
-      if (!initialOrderId && all.length > 0) {
-        if (user) {
-          const userOrder = all.find((o) => o.customerId === user.uid || o.customerPhone === user.phone);
-          setCurrentOrder(userOrder || all[0]);
-        } else {
-          setCurrentOrder(all[0]);
-        }
+      let loaded: Order[] = [];
+      if (role === 'admin' || role === 'staff') {
+        loaded = await fetchAllOrders();
+      } else if (user?.uid) {
+        loaded = await fetchUserOrders(user.uid);
+      }
+      setAllOrders(loaded);
+      if (!initialOrderId && loaded.length > 0) {
+        setCurrentOrder(loaded[0]);
       }
     } catch (e) {
       console.warn('Orders load error:', e);
@@ -150,10 +193,6 @@ export const TrackOrderPage: React.FC<TrackOrderPageProps> = ({
     currentOrder?.status === 'CANCELLED' ||
     currentOrder?.status === 'Refunded' ||
     currentOrder?.status === 'REFUNDED';
-
-
-  // Simulated OTP for delivery
-  const deliveryOtp = currentOrder ? (Math.abs(parseInt(currentOrder.id.replace(/\D/g, '') || '4829', 10)) % 9000 + 1000) : '4829';
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8 w-full max-w-full overflow-hidden">
@@ -465,53 +504,7 @@ export const TrackOrderPage: React.FC<TrackOrderPageProps> = ({
           {/* Interactive Google Maps Live Delivery Tracking */}
           {!isCancelled && (
             <div className="space-y-2">
-              <OrderTrackingMap order={currentOrder} />
-            </div>
-          )}
-
-          {/* Delivery Partner / Rider Card (when confirmed/preparing/out for delivery) */}
-          {!isCancelled && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                    <Truck className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-stone-900 text-sm">
-                        Satyam Kumar • Pure Sudh Fleet Rider
-                      </h4>
-                      <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-full">
-                        Assigned
-                      </span>
-                    </div>
-                    <p className="text-xs text-stone-500">
-                      Vehicle: Hero Electric Scooter (BR-01-ET-4820)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Delivery OTP Security Badge */}
-                <div className="flex items-center gap-3 self-start sm:self-auto">
-                  <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 text-center">
-                    <span className="block text-[9px] uppercase font-bold text-stone-400">
-                      Delivery OTP
-                    </span>
-                    <span className="font-mono font-bold text-sm text-stone-900 tracking-wider">
-                      {deliveryOtp}
-                    </span>
-                  </div>
-
-                  <a
-                    href="tel:+919876543210"
-                    className="p-2.5 rounded-xl bg-white hover:bg-stone-100 border border-stone-200 text-stone-700 transition"
-                    title="Call Rider"
-                  >
-                    <Phone className="w-4 h-4 text-emerald-700" />
-                  </a>
-                </div>
-              </div>
+              <OrderTrackingMap order={currentOrder} trackingSession={trackingSession} />
             </div>
           )}
 

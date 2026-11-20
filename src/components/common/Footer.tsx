@@ -396,7 +396,19 @@ export const Footer: React.FC<FooterProps> = ({
             <span className="text-stone-600 hidden sm:inline">•</span>
             <span className="text-stone-500 text-[11px] hidden sm:inline">Authorized internal access</span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <a
+              id="footer-delivery-login-link"
+              href="/delivery/login"
+              onClick={(e) => {
+                e.preventDefault();
+                handlePageClick('/delivery/login');
+              }}
+              className="py-1.5 px-3 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-800/80 active:bg-stone-800 transition-colors text-xs font-medium inline-flex items-center gap-1.5 min-h-[36px]"
+            >
+              <span>Delivery Login</span>
+            </a>
+            <span className="text-stone-700 select-none">•</span>
             <a
               id="footer-staff-login-link"
               href="/staff/login"

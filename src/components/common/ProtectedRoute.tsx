@@ -6,7 +6,7 @@ import { UserRole } from '../../types';
 interface ProtectedRouteProps {
   allowedRoles: UserRole[];
   portalName: string;
-  targetPortal: 'admin' | 'staff' | 'vendor' | 'customer';
+  targetPortal: 'admin' | 'staff' | 'vendor' | 'customer' | 'delivery';
   children: React.ReactNode;
   onBackToStore?: () => void;
   onNavigate?: (view: string) => void;
@@ -47,7 +47,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         if (contentType.includes('application/json')) {
           const data = await response.json();
           if (isMounted && !data.authorized) {
-            const redirectUrl = data.redirectUrl || (role === 'vendor' ? '/vendor' : role === 'staff' ? '/staff' : '/account');
+            const redirectUrl = data.redirectUrl || (role === 'vendor' ? '/vendor' : role === 'staff' ? '/staff' : role === 'delivery' ? '/delivery' : '/account');
             setAuthoritativeRedirectUrl(redirectUrl);
             setRedirectCountdown(3); // 3 second countdown before automatic redirect
           }
@@ -102,6 +102,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         ? '/admin/login'
         : targetPortal === 'staff'
         ? '/staff/login'
+        : targetPortal === 'delivery'
+        ? '/delivery/login'
         : targetPortal === 'vendor'
         ? '/vendor/login'
         : '/customer/login';
@@ -163,6 +165,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         ? 'Vendor Partner Hub'
         : role === 'staff'
         ? 'Staff Operations Desk'
+        : role === 'delivery'
+        ? 'Delivery Rider Hub'
         : 'Admin Dashboard';
 
     return (

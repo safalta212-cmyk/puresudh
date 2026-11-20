@@ -58,6 +58,25 @@ service cloud.firestore {
       );
     }
 
+    // Delivery Personnel Role Check (identity-verified via claims, staff roster, or user doc)
+    function isDeliveryPersonnel() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('role', '') == 'delivery' ||
+        request.auth.token.get('delivery', false) == true ||
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['delivery', 'staff', 'admin'])
+      );
+    }
+
+    function isValidLatLng(loc) {
+      return loc is map &&
+        loc.lat is number && loc.lng is number &&
+        loc.lat >= -90 && loc.lat <= 90 &&
+        loc.lng >= -180 && loc.lng <= 180;
+    }
+
     // Vendor Role Check (Identity-verified, never trusted from client)
     function isVendor() {
       return isSignedIn() && (
@@ -249,15 +268,17 @@ service cloud.firestore {
       allow delete: if isOwner(wishlistId) || (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
     }
 
-    // Orders: Multi-party lifecycle with strict Customer & Vendor isolation
+    // Orders: Multi-party lifecycle with strict Customer, Vendor, Delivery Rider & Staff/Admin isolation
     match /orders/{orderId} {
-      // Customer can read only own orders; Vendor can read only if assigned; Staff/Admin full access
+      // Customer can read only own orders; Vendor if assigned; Delivery Rider if assignedDeliveryId matches; Staff/Admin full access
       allow get: if (isSignedIn() && existing().customerId == request.auth.uid) ||
                     (isVendor() && existing().get('vendorId', '') == request.auth.uid) ||
+                    (isDeliveryPersonnel() && existing().get('assignedDeliveryId', '') == request.auth.uid) ||
                     isStaff() || isAdmin();
                     
       allow list: if (isSignedIn() && resource.data.customerId == request.auth.uid) ||
                      (isVendor() && resource.data.get('vendorId', '') == request.auth.uid) ||
+                     (isDeliveryPersonnel() && resource.data.get('assignedDeliveryId', '') == request.auth.uid) ||
                      isStaff() || isAdmin();
 
       // Customer can create valid order only through approved workflow
@@ -270,7 +291,7 @@ service cloud.firestore {
         incoming().customerName is string && incoming().customerName.size() <= 100 &&
         incoming().customerPhone is string && incoming().customerPhone.size() >= 10 && incoming().customerPhone.size() <= 15;
 
-      // Customer can only cancel their own order while still in pre-dispatch state
+      // Customer can only cancel pre-dispatch; Assigned Delivery Rider can only progress assigned active delivery; Staff/Admin full update
       allow update: if (
         isSignedIn() &&
         existing().customerId == request.auth.uid &&
@@ -280,6 +301,16 @@ service cloud.firestore {
         incoming().status == 'CANCELLED' &&
         existing().status in ['PLACED', 'Order Placed', 'CONFIRMED'] &&
         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'notes', 'statusHistory'])
+      ) || (
+        isDeliveryPersonnel() &&
+        existing().get('assignedDeliveryId', '') == request.auth.uid &&
+        incoming().customerId == existing().customerId &&
+        incoming().total == existing().total &&
+        incoming().subtotal == existing().subtotal &&
+        incoming().get('assignedDeliveryId', '') == existing().get('assignedDeliveryId', '') &&
+        existing().status in ['PACKED', 'Packed', 'OUT_FOR_DELIVERY', 'Out for Delivery'] &&
+        incoming().status in ['OUT_FOR_DELIVERY', 'Out for Delivery', 'DELIVERED', 'Delivered'] &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'statusHistory', 'trackingActive'])
       ) || isStaff() || isAdmin();
 
       allow delete: if isAdmin();
@@ -768,6 +799,82 @@ service cloud.firestore {
       // Reporting metadata: Cloud Functions / Server / Admin creation only
       allow create: if isAdmin();
       allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // LIVE GPS DELIVERY TRACKING (Strict Customer, Assigned Rider & Admin Isolation)
+    // =========================================================================
+    match /deliveryTracking/{orderId} {
+      // Customer can view ONLY their own order tracking; Assigned Rider can view ONLY their assigned order; Admin/Staff allowed
+      allow get: if isValidId(orderId) && (
+        isAdmin() ||
+        isStaff() ||
+        (isSignedIn() && existing().customerId == request.auth.uid && existing().orderId == orderId) ||
+        (isDeliveryPersonnel() && existing().deliveryPersonId == request.auth.uid)
+      );
+
+      // Admin list query MUST enforce isActive == true so completed/unrelated customer locations are never exposed
+      allow list: if (isAdmin() && resource.data.isActive == true) ||
+        (isSignedIn() && resource.data.customerId == request.auth.uid) ||
+        (isDeliveryPersonnel() && resource.data.deliveryPersonId == request.auth.uid);
+
+      // Creation allowed for Admin/Staff or Assigned Delivery Rider verified against authoritative orders/{orderId}
+      allow create: if isValidId(orderId) && (
+        isAdmin() ||
+        isStaff() ||
+        (isDeliveryPersonnel() &&
+         incoming().orderId == orderId &&
+         incoming().deliveryPersonId == request.auth.uid &&
+         exists(/databases/$(database)/documents/orders/$(orderId)) &&
+         get(/databases/$(database)/documents/orders/$(orderId)).data.get('assignedDeliveryId', '') == request.auth.uid &&
+         get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == incoming().customerId)
+      );
+
+      // Updates:
+      // 1) Admin / Staff
+      // 2) Assigned Delivery Rider while order is not terminal (cannot forge customerLocation except scrubbing to null on delivery completion)
+      // 3) Customer Owner ONLY to share/revoke their voluntary customerLocation while delivery is active
+      allow update: if isValidId(orderId) && (
+        isAdmin() ||
+        isStaff() ||
+        (
+          isDeliveryPersonnel() &&
+          existing().deliveryPersonId == request.auth.uid &&
+          incoming().orderId == existing().orderId &&
+          incoming().customerId == existing().customerId &&
+          incoming().deliveryPersonId == existing().deliveryPersonId &&
+          !(existing().orderStatus in ['DELIVERED', 'Delivered', 'CANCELLED', 'Cancelled', 'REFUNDED', 'Refunded']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'riderLocation', 'trackingStatus', 'isActive', 'orderStatus',
+            'routeSummary', 'lastUpdatedAt', 'stoppedAt', 'updatedAt',
+            'customerLocation', 'customerSharingEnabled'
+          ]) &&
+          (
+            incoming().get('riderLocation', null) == null ||
+            isValidLatLng(incoming().riderLocation)
+          ) &&
+          (
+            (incoming().orderStatus in ['DELIVERED', 'Delivered'] &&
+             incoming().isActive == false &&
+             incoming().get('customerLocation', null) == null &&
+             incoming().get('customerSharingEnabled', false) == false) ||
+            (
+              incoming().get('customerLocation', null) == existing().get('customerLocation', null) &&
+              incoming().get('customerSharingEnabled', false) == existing().get('customerSharingEnabled', false)
+            )
+          )
+        ) ||
+        (
+          isSignedIn() &&
+          existing().customerId == request.auth.uid &&
+          existing().isActive == true &&
+          !(existing().orderStatus in ['DELIVERED', 'Delivered', 'CANCELLED', 'Cancelled', 'REFUNDED', 'Refunded']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['customerLocation', 'customerSharingEnabled', 'updatedAt']) &&
+          (incoming().get('customerLocation', null) == null || isValidLatLng(incoming().customerLocation))
+        )
+      );
+
+      allow delete: if isAdmin();
     }
   }
 }

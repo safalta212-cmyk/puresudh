@@ -233,7 +233,7 @@ export const AccountOrdersTab: React.FC<AccountOrdersTabProps> = ({
                       className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1 shadow-xs cursor-pointer"
                     >
                       <Truck className="w-3.5 h-3.5" />
-                      Track Live
+                      Track My Order
                     </button>
 
                     {isDelivered && onWriteReview && order.items && order.items.length > 0 && (
