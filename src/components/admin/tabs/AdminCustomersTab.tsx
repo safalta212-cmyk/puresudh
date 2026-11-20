@@ -19,6 +19,7 @@ import { CustomerSummary, Order } from '../../../types';
 import { fetchCustomers, updateCustomerStatus } from '../../../firebase/services';
 import { auditAndPurgeTemporaryAccounts } from '../../../services/accountAuditService';
 import { isTemporaryEmail, isTemporaryOrFakePhone } from '../../../validation';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminCustomersTabProps {
   orders: Order[];
@@ -72,7 +73,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
       }
       await loadCustomerData();
     } catch (err: any) {
-      showToast(`Error auditing accounts: ${err.message || 'Audit failed'}`, 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Audit failed'), 'error');
     } finally {
       setIsPurging(false);
     }
@@ -98,7 +99,7 @@ export const AdminCustomersTab: React.FC<AdminCustomersTabProps> = ({
       }
       showToast(`Customer status updated to ${status}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update customer status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update customer status'), 'error');
     } finally {
       setIsUpdatingStatus(false);
     }

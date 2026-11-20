@@ -26,7 +26,7 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import { db, auth } from '../firebase/config';
+import { db, auth, stripUndefinedFields } from '../firebase/config';
 import { COLLECTIONS } from '../constants';
 import {
   AdvertisingCampaign,
@@ -111,11 +111,11 @@ export async function createAdvertisingCampaign(
   campaignData: Omit<AdvertisingCampaign, 'createdAt' | 'updatedAt'>
 ): Promise<AdvertisingCampaign> {
   const now = new Date().toISOString();
-  const campaign: AdvertisingCampaign = {
+  const campaign: AdvertisingCampaign = stripUndefinedFields({
     ...campaignData,
     createdAt: now,
     updatedAt: now,
-  };
+  });
 
   try {
     if (db && auth.currentUser) {
@@ -143,10 +143,10 @@ export async function updateAdvertisingCampaign(
   updates: Partial<Omit<AdvertisingCampaign, 'campaignId' | 'vendorId' | 'createdAt'>>
 ): Promise<void> {
   const now = new Date().toISOString();
-  const payload = {
+  const payload = stripUndefinedFields({
     ...updates,
     updatedAt: now,
-  };
+  });
 
   try {
     if (db && auth.currentUser) {
@@ -254,10 +254,10 @@ export async function getVendorAdvertisingTransactions(vendorId: string): Promis
 export async function recordAdvertisingTransaction(
   transactionData: Omit<AdvertisingTransaction, 'createdAt'>
 ): Promise<AdvertisingTransaction> {
-  const transaction: AdvertisingTransaction = {
+  const transaction: AdvertisingTransaction = stripUndefinedFields({
     ...transactionData,
     createdAt: new Date().toISOString(),
-  };
+  });
 
   try {
     if (db && auth.currentUser) {
@@ -282,10 +282,10 @@ export async function recordAdvertisingTransaction(
 export async function recordAdvertisingClick(
   clickData: Omit<AdvertisingClick, 'createdAt'>
 ): Promise<AdvertisingClick> {
-  const click: AdvertisingClick = {
+  const click: AdvertisingClick = stripUndefinedFields({
     ...clickData,
     createdAt: new Date().toISOString(),
-  };
+  });
 
   try {
     if (db && auth.currentUser) {
@@ -310,10 +310,10 @@ export async function recordAdvertisingClick(
 export async function recordAdvertisingInvalidClick(
   invalidClickData: Omit<AdvertisingInvalidClick, 'createdAt'>
 ): Promise<AdvertisingInvalidClick> {
-  const invalidClick: AdvertisingInvalidClick = {
+  const invalidClick: AdvertisingInvalidClick = stripUndefinedFields({
     ...invalidClickData,
     createdAt: new Date().toISOString(),
-  };
+  });
 
   try {
     if (db && auth.currentUser) {
@@ -338,10 +338,10 @@ export async function recordAdvertisingInvalidClick(
 export async function logAdvertisingAudit(
   auditData: Omit<AdvertisingAuditLog, 'timestamp'>
 ): Promise<AdvertisingAuditLog> {
-  const auditLog: AdvertisingAuditLog = {
+  const auditLog: AdvertisingAuditLog = stripUndefinedFields({
     ...auditData,
     timestamp: new Date().toISOString(),
-  };
+  });
 
   try {
     if (db && auth.currentUser) {

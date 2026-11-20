@@ -28,6 +28,7 @@ import {
   sendBroadcastNotification,
 } from '../../../firebase/services';
 import { notificationService } from '../../../services/notifications';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminNotificationsTabProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -190,7 +191,7 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
         'success'
       );
     } catch (err: any) {
-      showToast(err.message || 'Failed to dispatch notification', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to dispatch notification'), 'error');
     } finally {
       setSending(false);
     }

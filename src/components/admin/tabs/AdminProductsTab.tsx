@@ -16,6 +16,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { Product, Category } from '../../../types';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminProductsTabProps {
   products: Product[];
@@ -66,7 +67,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
       setProductToDelete(null);
     } catch (err) {
       console.error('Delete error:', err);
-      showToast('Failed to delete product', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to delete product'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -155,7 +156,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
       await handleSave(updated);
       showToast(`Product "${product.name}" is now ${newStatus}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update product status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update product status'), 'error');
     }
   };
 
@@ -177,7 +178,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
       showToast(`Stock updated to ${quickStockValue} for "${quickStockProduct.name}"`, 'success');
       setQuickStockProduct(null);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update product stock', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update product stock'), 'error');
     } finally {
       setSavingStock(false);
     }

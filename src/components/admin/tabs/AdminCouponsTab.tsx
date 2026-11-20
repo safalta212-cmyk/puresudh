@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Coupon, Category, Product } from '../../../types';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminCouponsTabProps {
   coupons: Coupon[];
@@ -229,7 +230,7 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
       showToast(`Coupon "${couponToSave.code}" saved successfully!`, 'success');
       setIsModalOpen(false);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save coupon', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save coupon'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -241,7 +242,7 @@ export const AdminCouponsTab: React.FC<AdminCouponsTabProps> = ({
     try {
       await onToggleCouponStatus(coupon.id, !coupon.active);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update coupon status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update coupon status'), 'error');
     } finally {
       setTogglingId(null);
     }

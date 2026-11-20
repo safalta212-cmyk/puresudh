@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, CheckCircle2 } from 'lucide-react';
 import { DeliverySlot } from '../../types';
+import { formatFirestorePermissionMessage } from '../../firebase/config';
 
 interface DeliverySlotModalProps {
   isOpen: boolean;
@@ -77,7 +78,7 @@ export const DeliverySlotModal: React.FC<DeliverySlotModalProps> = ({
       await onSave(slotData);
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Failed to save delivery slot');
+      setError(formatFirestorePermissionMessage(err, 'Failed to save delivery slot'));
     } finally {
       setIsSaving(false);
     }

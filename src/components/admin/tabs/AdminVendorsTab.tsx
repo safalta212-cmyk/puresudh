@@ -64,6 +64,7 @@ import {
 import { resolveEffectiveCommissionRate } from '../../../utils/commissionEngine';
 import { formatCurrency, formatDate } from '../../../utilities';
 import { useToast } from '../../../context/ToastContext';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminVendorsTabProps {
   products: Product[];
@@ -159,7 +160,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       setFinancialLedger(ledger);
       setFinancialReports(reports);
     } catch (err: any) {
-      showToast('Error loading marketplace financial data', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error loading marketplace financial data'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +197,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       showToast(`Vendor status updated to ${newStatus}`, 'success');
       loadMarketplaceData();
     } catch (err: any) {
-      showToast('Failed to update status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update status'), 'error');
     }
   };
 
@@ -211,7 +212,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       setSelectedVendorForModal(null);
       loadMarketplaceData();
     } catch (err: any) {
-      showToast('Failed to update verification', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update verification'), 'error');
     }
   };
 
@@ -221,7 +222,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
       showToast(`Commission updated to ${commissionEditValue}%`, 'success');
       loadMarketplaceData();
     } catch (err: any) {
-      showToast('Failed to update commission', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update commission'), 'error');
     }
   };
 
@@ -237,7 +238,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to update global commission', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Error updating commission', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error updating commission'), 'error');
     }
   };
 
@@ -257,7 +258,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to update category commission', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Error updating category commission', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error updating category commission'), 'error');
     }
   };
 
@@ -277,7 +278,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to update product commission', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Error updating product commission', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error updating product commission'), 'error');
     }
   };
 
@@ -298,7 +299,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to update provider status', 'error');
       }
     } catch (err: any) {
-      showToast('Failed to update provider status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update provider status'), 'error');
     }
   };
 
@@ -330,7 +331,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to disburse payout', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Error processing disbursement', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error processing disbursement'), 'error');
     } finally {
       setIsProcessingDisburse(false);
     }
@@ -362,7 +363,7 @@ export const AdminVendorsTab: React.FC<AdminVendorsTabProps> = ({
         showToast(res.error || 'Failed to apply adjustment', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Error creating adjustment', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Error creating adjustment'), 'error');
     } finally {
       setIsSubmittingAdj(false);
     }

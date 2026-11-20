@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Product, Category, OfferBanner, Offer, HomepageConfig } from '../../../types';
 import { fetchHomepageConfig, saveHomepageConfig } from '../../../firebase/services';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminHomepageTabProps {
   products: Product[];
@@ -134,8 +135,8 @@ export const AdminHomepageTab: React.FC<AdminHomepageTabProps> = ({
         updatedAt: new Date().toISOString(),
       });
       showToast('Homepage layout configuration saved successfully!', 'success');
-    } catch (err) {
-      showToast('Failed to save homepage settings', 'error');
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save homepage settings'), 'error');
     } finally {
       setSaving(false);
     }

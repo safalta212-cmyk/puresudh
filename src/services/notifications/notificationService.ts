@@ -1,5 +1,5 @@
 import { doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { db, stripUndefinedFields } from '../../firebase/config';
 import { Order, Notification as AppNotification } from '../../types';
 import {
   INotificationProvider,
@@ -128,7 +128,7 @@ class NotificationService {
     const notifId = payload.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const userId = payload.recipient.userId || 'all';
 
-    const inAppItem: AppNotification = {
+    const inAppItem: AppNotification = stripUndefinedFields({
       id: notifId,
       userId,
       title: payload.title,
@@ -141,7 +141,7 @@ class NotificationService {
       orderId: payload.orderId,
       metadata: payload.metadata,
       createdAt: new Date().toISOString(),
-    };
+    });
 
     // Update local cache
     const current = getLocalNotifications();

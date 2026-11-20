@@ -26,6 +26,7 @@ import {
 } from '../../firebase/storageService';
 import { MediaUploader } from '../common/MediaUploader';
 import { useToast } from '../../context/ToastContext';
+import { formatFirestorePermissionMessage } from '../../firebase/config';
 
 export const MediaStorageManager: React.FC = () => {
   const { showToast } = useToast();
@@ -72,7 +73,7 @@ export const MediaStorageManager: React.FC = () => {
       }
       showToast('Media deleted successfully from storage.', 'success');
     } catch (err) {
-      showToast(`Delete failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Delete failed'), 'error');
     } finally {
       setIsDeletingId(null);
     }

@@ -14,7 +14,7 @@ import {
   browserLocalPersistence,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { auth, db } from '../firebase/config';
+import { auth, db, stripUndefinedFields } from '../firebase/config';
 import { UserProfile, UserRole, Address } from '../types';
 import { COLLECTIONS } from '../constants';
 import {
@@ -354,7 +354,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch {}
           }
           const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
-          await setDoc(userRef, newProfile, { merge: true });
+          await setDoc(userRef, stripUndefinedFields(newProfile), { merge: true });
           if (effRole === 'admin' && !hasAdminDoc) {
             await setDoc(
               doc(db, 'admins', fbUser.uid),
@@ -974,7 +974,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (auth.currentUser) {
         try {
-          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), registeredProfile, { merge: true });
+          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), stripUndefinedFields(registeredProfile), { merge: true });
         } catch (fsErr) {
           console.warn('Failed saving customer profile document in Firestore:', fsErr);
         }
@@ -1120,7 +1120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (auth.currentUser) {
         try {
-          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), vendorProfile, { merge: true });
+          await setDoc(doc(db, COLLECTIONS.USERS, auth.currentUser.uid), stripUndefinedFields(vendorProfile), { merge: true });
           await setDoc(doc(db, 'vendorApplications', auth.currentUser.uid), {
             userId: auth.currentUser.uid,
             shopName: shopName.trim(),

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus, normalizeOrderStatus } from '../../../types';
 import { notificationService } from '../../../services/notifications/notificationService';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminOrdersTabProps {
   orders: Order[];
@@ -184,7 +185,7 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
       setSelectedNewStatus('');
       setStatusNote('');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update order status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update order status'), 'error');
     } finally {
       setIsUpdating(false);
     }
@@ -220,7 +221,7 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
         ],
       });
     } catch (err: any) {
-      showToast(err?.message || 'Failed to cancel order', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to cancel order'), 'error');
     } finally {
       setIsUpdating(false);
     }
@@ -254,7 +255,7 @@ export const AdminOrdersTab: React.FC<AdminOrdersTabProps> = ({
         ],
       });
     } catch (err: any) {
-      showToast(err?.message || 'Failed to process refund', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to process refund'), 'error');
     } finally {
       setIsUpdating(false);
     }

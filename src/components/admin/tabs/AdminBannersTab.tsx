@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { OfferBanner } from '../../../types';
 import { MediaUploader } from '../../common/MediaUploader';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminBannersTabProps {
   banners: OfferBanner[];
@@ -102,7 +103,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
       showToast(`Banner "${bannerToSave.title}" saved!`, 'success');
       setIsModalOpen(false);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save banner', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save banner'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -114,7 +115,7 @@ export const AdminBannersTab: React.FC<AdminBannersTabProps> = ({
       await onSaveBanner({ ...banner, active: !banner.active });
       showToast(`Banner "${banner.title}" is now ${!banner.active ? 'Active' : 'Disabled'}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update banner status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update banner status'), 'error');
     } finally {
       setTogglingId(null);
     }

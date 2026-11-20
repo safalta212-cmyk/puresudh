@@ -11,7 +11,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, auth, assertFirestoreWriteSuccess, OperationType } from '../firebase/config';
+import { db, auth, assertFirestoreWriteSuccess, OperationType, stripUndefinedFields } from '../firebase/config';
 import {
   Vendor,
   VendorStatus,
@@ -248,7 +248,7 @@ export async function registerNewVendor(data: {
 
     // Write to Firestore if connected
     try {
-      await setDoc(doc(db, COLLECTIONS.VENDORS, vendorId), newVendor);
+      await setDoc(doc(db, COLLECTIONS.VENDORS, vendorId), stripUndefinedFields(newVendor));
     } catch (e) {
       console.warn('Firestore setDoc vendor warning:', e);
     }
@@ -278,10 +278,10 @@ export async function updateVendorProfile(
       setLocal(STORAGE_KEYS.VENDORS, vendors);
 
       try {
-        await updateDoc(doc(db, COLLECTIONS.VENDORS, vendorId), {
+        await updateDoc(doc(db, COLLECTIONS.VENDORS, vendorId), stripUndefinedFields({
           ...allowedUpdates,
           updatedAt: new Date().toISOString(),
-        });
+        }));
       } catch (e) {
         console.warn('Firestore updateVendorProfile warning:', e);
       }
@@ -458,6 +458,8 @@ export async function saveVendorProductItem(
     updatedAt: new Date().toISOString(),
   };
 
+  const sanitizedProduct = stripUndefinedFields(completeProduct);
+
   // Update local storage products
   const allProds = getLocal<Product[]>('pure_sudh_products', []);
   const idx = allProds.findIndex((p) => p.id === productId);
@@ -466,20 +468,20 @@ export async function saveVendorProductItem(
     if (allProds[idx].vendorId && allProds[idx].vendorId !== vendorId) {
       throw new Error('Access denied: Cannot modify another vendor’s product.');
     }
-    allProds[idx] = completeProduct;
+    allProds[idx] = sanitizedProduct;
   } else {
-    allProds.unshift(completeProduct);
+    allProds.unshift(sanitizedProduct);
   }
   setLocal('pure_sudh_products', allProds);
 
   // Firestore update
   try {
-    await setDoc(doc(db, COLLECTIONS.PRODUCTS, productId), completeProduct);
+    await setDoc(doc(db, COLLECTIONS.PRODUCTS, productId), sanitizedProduct);
   } catch (e) {
     console.warn('Firestore saveVendorProductItem warning:', e);
   }
 
-  return completeProduct;
+  return sanitizedProduct;
 }
 
 export async function deleteVendorProductItem(
@@ -772,17 +774,18 @@ export async function fetchVendorBankAccounts(vendorId: string): Promise<VendorB
 export async function saveVendorBankAccount(
   account: VendorBankAccount
 ): Promise<void> {
+  const cleanAccount = stripUndefinedFields(account);
   const all = getLocal<VendorBankAccount[]>(STORAGE_KEYS.BANK_ACCOUNTS, []);
-  const idx = all.findIndex((a) => a.id === account.id);
+  const idx = all.findIndex((a) => a.id === cleanAccount.id);
   if (idx >= 0) {
-    all[idx] = account;
+    all[idx] = cleanAccount;
   } else {
-    all.push(account);
+    all.push(cleanAccount);
   }
   setLocal(STORAGE_KEYS.BANK_ACCOUNTS, all);
 
   try {
-    await setDoc(doc(db, COLLECTIONS.VENDOR_BANK_ACCOUNTS, account.id), account);
+    await setDoc(doc(db, COLLECTIONS.VENDOR_BANK_ACCOUNTS, cleanAccount.id), cleanAccount);
   } catch (e) {
     console.warn('Firestore saveVendorBankAccount warning:', e);
   }
@@ -837,12 +840,13 @@ export async function markVendorNotificationRead(
 export async function sendVendorNotification(
   notif: VendorNotification
 ): Promise<void> {
+  const cleanNotif = stripUndefinedFields(notif);
   const all = getLocal<VendorNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
-  all.unshift(notif);
+  all.unshift(cleanNotif);
   setLocal(STORAGE_KEYS.NOTIFICATIONS, all);
 
   try {
-    await setDoc(doc(db, COLLECTIONS.VENDOR_NOTIFICATIONS, notif.id), notif);
+    await setDoc(doc(db, COLLECTIONS.VENDOR_NOTIFICATIONS, cleanNotif.id), cleanNotif);
   } catch (e) {
     console.warn('Firestore sendVendorNotification warning:', e);
   }

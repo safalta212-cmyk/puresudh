@@ -28,7 +28,7 @@ import {
   IdTokenResult,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, resolvedFirebaseConfig } from '../firebase/config';
+import { auth, db, resolvedFirebaseConfig, stripUndefinedFields } from '../firebase/config';
 import { UserProfile, UserRole, Address } from '../types';
 import { COLLECTIONS } from '../constants';
 
@@ -226,7 +226,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     };
 
     try {
-      await setDoc(userDocRef, newProfile, { merge: true });
+      await setDoc(userDocRef, stripUndefinedFields(newProfile), { merge: true });
     } catch (writeErr) {
       console.warn('Could not initialize user profile in Firestore:', writeErr);
     }
@@ -273,7 +273,7 @@ export async function registerCustomer(
   };
 
   try {
-    await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), profile);
+    await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), stripUndefinedFields(profile));
   } catch (err) {
     console.warn('Failed saving customer profile document in Firestore:', err);
   }
@@ -316,7 +316,7 @@ export async function registerVendor(
   };
 
   try {
-    await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), profile);
+    await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), stripUndefinedFields(profile));
     // Also record vendor application for admin auditing
     await setDoc(doc(db, 'vendorApplications', cred.user.uid), {
       userId: cred.user.uid,

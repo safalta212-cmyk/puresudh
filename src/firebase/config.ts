@@ -148,5 +148,23 @@ export function formatFirestorePermissionMessage(error: unknown, fallback: strin
   return raw || fallback;
 }
 
+export function stripUndefinedFields<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedFields(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (val !== undefined) {
+        cleaned[key] = stripUndefinedFields(val);
+      }
+    }
+    return cleaned as T;
+  }
+  return value;
+}
+
 export { app, auth, db, storage, functions };
 

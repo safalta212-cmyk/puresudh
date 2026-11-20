@@ -68,6 +68,7 @@ import {
   deleteBanner,
   saveSiteSettings,
 } from '../../firebase/services';
+import { formatFirestorePermissionMessage } from '../../firebase/config';
 import { normalizeOrderStatus } from '../../types';
 
 // Modular Tabs
@@ -243,9 +244,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onRefreshData();
       }
       showToast(`Product "${productName}" removed successfully`, 'info');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete product:', err);
-      showToast('Failed to delete product', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to delete product'), 'error');
     }
   };
 
@@ -316,7 +317,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onRefreshData();
       showToast(`Coupon is now ${active ? 'Active' : 'Inactive'}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update coupon status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update coupon status'), 'error');
       throw err;
     }
   };
@@ -966,7 +967,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     await confirmDialog.onConfirm();
                     setConfirmDialog(null);
                   } catch (err: any) {
-                    showToast(err?.message || 'Action failed. Please try again.', 'error');
+                    showToast(formatFirestorePermissionMessage(err, 'Action failed. Please try again.'), 'error');
                   } finally {
                     setIsConfirmLoading(false);
                   }

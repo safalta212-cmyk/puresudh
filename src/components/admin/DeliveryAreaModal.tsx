@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, MapPin, Zap, Truck } from 'lucide-react';
 import { DeliveryArea } from '../../types';
+import { formatFirestorePermissionMessage } from '../../firebase/config';
 
 interface DeliveryAreaModalProps {
   isOpen: boolean;
@@ -112,7 +113,7 @@ export const DeliveryAreaModal: React.FC<DeliveryAreaModalProps> = ({
       await onSave(areaData);
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Failed to save delivery area configuration');
+      setError(formatFirestorePermissionMessage(err, 'Failed to save delivery area configuration'));
     } finally {
       setIsSaving(false);
     }

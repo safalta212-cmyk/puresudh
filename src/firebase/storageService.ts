@@ -22,7 +22,7 @@ import {
   limit,
   serverTimestamp,
 } from 'firebase/firestore';
-import { storage, db, auth } from './config';
+import { storage, db, auth, stripUndefinedFields } from './config';
 import {
   MEDIA_PRESETS,
   validateMediaFile,
@@ -285,7 +285,7 @@ export async function uploadMedia(options: UploadMediaOptions): Promise<UploadRe
     pathParams.userId ||
     '';
 
-  const result: UploadResult = {
+  const result: UploadResult = stripUndefinedFields({
     downloadUrl,
     thumbnailUrl,
     storagePath: mainStoragePath,
@@ -298,12 +298,12 @@ export async function uploadMedia(options: UploadMediaOptions): Promise<UploadRe
     height: optResult.height,
     contentType: optResult.optimizedFile.type || 'image/webp',
     uploadedAt: nowIso,
-  };
+  });
 
   // 7. Track in Firestore Media Registry for audit & unused image garbage collection
   try {
     const registryDocId = safeName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    await setDoc(doc(db, 'mediaRegistry', registryDocId), {
+    await setDoc(doc(db, 'mediaRegistry', registryDocId), stripUndefinedFields({
       id: registryDocId,
       ...result,
       preset,
@@ -313,7 +313,7 @@ export async function uploadMedia(options: UploadMediaOptions): Promise<UploadRe
       status: 'active',
       createdAt: nowIso,
       updatedAt: serverTimestamp(),
-    });
+    }));
   } catch (registryErr) {
     console.warn('Media registry logging non-fatal note:', registryErr);
   }

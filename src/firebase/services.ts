@@ -10,7 +10,7 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import { db, auth, assertFirestoreWriteSuccess, OperationType } from './config';
+import { db, auth, assertFirestoreWriteSuccess, OperationType, stripUndefinedFields } from './config';
 import {
   Product,
   Category,
@@ -183,13 +183,13 @@ export async function initializeDatabase(): Promise<void> {
       // If already authenticated with write rights, sync catalog
       if (auth.currentUser) {
         Promise.allSettled([
-          ...initialProducts.map((p) => setDoc(doc(db, 'products', p.id), p, { merge: true })),
-          ...initialCategories.map((c) => setDoc(doc(db, 'categories', c.id), c, { merge: true })),
-          ...initialDeliveryAreas.map((a) => setDoc(doc(db, 'deliveryAreas', a.id), a, { merge: true })),
-          ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), cp, { merge: true })),
-          ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), b, { merge: true })),
-          ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), o, { merge: true })),
-          setDoc(doc(db, 'settings', 'site_settings'), initialSiteSettings, { merge: true }),
+          ...initialProducts.map((p) => setDoc(doc(db, 'products', p.id), stripUndefinedFields(p), { merge: true })),
+          ...initialCategories.map((c) => setDoc(doc(db, 'categories', c.id), stripUndefinedFields(c), { merge: true })),
+          ...initialDeliveryAreas.map((a) => setDoc(doc(db, 'deliveryAreas', a.id), stripUndefinedFields(a), { merge: true })),
+          ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), stripUndefinedFields(cp), { merge: true })),
+          ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), stripUndefinedFields(b), { merge: true })),
+          ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), stripUndefinedFields(o), { merge: true })),
+          setDoc(doc(db, 'settings', 'site_settings'), stripUndefinedFields(initialSiteSettings), { merge: true }),
         ]).catch(() => {});
       }
     }
@@ -256,9 +256,10 @@ export async function fetchProducts(forceRefresh: boolean = false): Promise<Prod
 
 export async function saveProduct(product: Product): Promise<void> {
   serviceCache.products.timestamp = 0;
+  const cleanProduct = stripUndefinedFields(product);
 
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'products', product.id), product, { merge: true }),
+    () => setDoc(doc(db, 'products', product.id), cleanProduct, { merge: true }),
     OperationType.WRITE,
     `products/${product.id}`
   );
@@ -271,9 +272,9 @@ export async function saveProduct(product: Product): Promise<void> {
   const all = getLocal<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
   const index = all.findIndex((p) => p.id === product.id);
   if (index >= 0) {
-    all[index] = product;
+    all[index] = cleanProduct;
   } else {
-    all.unshift(product);
+    all.unshift(cleanProduct);
   }
   setLocal(STORAGE_KEYS.PRODUCTS, all);
 }
@@ -326,17 +327,18 @@ export async function fetchCategories(forceRefresh: boolean = false): Promise<Ca
 
 export async function saveCategory(category: Category): Promise<void> {
   serviceCache.categories.timestamp = 0;
+  const cleanCategory = stripUndefinedFields(category);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'categories', category.id), category, { merge: true }),
+    () => setDoc(doc(db, 'categories', category.id), cleanCategory, { merge: true }),
     OperationType.WRITE,
     `categories/${category.id}`
   );
   const all = getLocal<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
   const idx = all.findIndex((c) => c.id === category.id);
   if (idx >= 0) {
-    all[idx] = category;
+    all[idx] = cleanCategory;
   } else {
-    all.push(category);
+    all.push(cleanCategory);
   }
   setLocal(STORAGE_KEYS.CATEGORIES, all);
 }
@@ -378,17 +380,18 @@ export async function fetchDeliveryAreas(forceRefresh: boolean = false): Promise
 
 export async function saveDeliveryArea(area: DeliveryArea): Promise<void> {
   serviceCache.deliveryAreas.timestamp = 0;
+  const cleanArea = stripUndefinedFields(area);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'deliveryAreas', area.id), area, { merge: true }),
+    () => setDoc(doc(db, 'deliveryAreas', area.id), cleanArea, { merge: true }),
     OperationType.WRITE,
     `deliveryAreas/${area.id}`
   );
   const all = getLocal<DeliveryArea[]>(STORAGE_KEYS.DELIVERY_AREAS, initialDeliveryAreas);
   const idx = all.findIndex((a) => a.id === area.id);
   if (idx >= 0) {
-    all[idx] = area;
+    all[idx] = cleanArea;
   } else {
-    all.push(area);
+    all.push(cleanArea);
   }
   setLocal(STORAGE_KEYS.DELIVERY_AREAS, all);
 }
@@ -440,17 +443,18 @@ export async function fetchDeliverySlots(vendorId?: string, forceRefresh: boolea
 
 export async function saveDeliverySlot(slot: DeliverySlot): Promise<void> {
   serviceCache.deliverySlots.timestamp = 0;
+  const cleanSlot = stripUndefinedFields(slot);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'deliverySlots', slot.id), slot, { merge: true }),
+    () => setDoc(doc(db, 'deliverySlots', slot.id), cleanSlot, { merge: true }),
     OperationType.WRITE,
     `deliverySlots/${slot.id}`
   );
   const all = getLocal<DeliverySlot[]>(STORAGE_KEYS.DELIVERY_SLOTS, initialDeliverySlots);
   const idx = all.findIndex((s) => s.id === slot.id);
   if (idx >= 0) {
-    all[idx] = slot;
+    all[idx] = cleanSlot;
   } else {
-    all.push(slot);
+    all.push(cleanSlot);
   }
   setLocal(STORAGE_KEYS.DELIVERY_SLOTS, all);
 }
@@ -531,17 +535,18 @@ export async function fetchCoupons(forceRefresh: boolean = false): Promise<Coupo
 
 export async function saveCoupon(coupon: Coupon): Promise<void> {
   serviceCache.coupons.timestamp = 0;
+  const cleanCoupon = stripUndefinedFields(coupon);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'coupons', coupon.id), coupon, { merge: true }),
+    () => setDoc(doc(db, 'coupons', coupon.id), cleanCoupon, { merge: true }),
     OperationType.WRITE,
     `coupons/${coupon.id}`
   );
   const all = getLocal<Coupon[]>(STORAGE_KEYS.COUPONS, initialCoupons);
   const idx = all.findIndex((c) => c.id === coupon.id);
   if (idx >= 0) {
-    all[idx] = coupon;
+    all[idx] = cleanCoupon;
   } else {
-    all.push(coupon);
+    all.push(cleanCoupon);
   }
   setLocal(STORAGE_KEYS.COUPONS, all);
 }
@@ -600,17 +605,18 @@ export const fetchOfferBanners = fetchBanners;
 
 export async function saveBanner(banner: Banner): Promise<void> {
   serviceCache.banners.timestamp = 0;
+  const cleanBanner = stripUndefinedFields(banner);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'banners', banner.id), banner, { merge: true }),
+    () => setDoc(doc(db, 'banners', banner.id), cleanBanner, { merge: true }),
     OperationType.WRITE,
     `banners/${banner.id}`
   );
   const all = getLocal<Banner[]>(STORAGE_KEYS.BANNERS, initialBanners);
   const idx = all.findIndex((b) => b.id === banner.id);
   if (idx >= 0) {
-    all[idx] = banner;
+    all[idx] = cleanBanner;
   } else {
-    all.push(banner);
+    all.push(cleanBanner);
   }
   setLocal(STORAGE_KEYS.BANNERS, all);
 }
@@ -656,17 +662,18 @@ export async function fetchOffers(forceRefresh: boolean = false): Promise<Offer[
 
 export async function saveOffer(offer: Offer): Promise<void> {
   serviceCache.offers.timestamp = 0;
+  const cleanOffer = stripUndefinedFields(offer);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'offers', offer.id), offer, { merge: true }),
+    () => setDoc(doc(db, 'offers', offer.id), cleanOffer, { merge: true }),
     OperationType.WRITE,
     `offers/${offer.id}`
   );
   const all = getLocal<Offer[]>(STORAGE_KEYS.OFFERS, initialOffers);
   const idx = all.findIndex((o) => o.id === offer.id);
   if (idx >= 0) {
-    all[idx] = offer;
+    all[idx] = cleanOffer;
   } else {
-    all.push(offer);
+    all.push(cleanOffer);
   }
   setLocal(STORAGE_KEYS.OFFERS, all);
 }
@@ -723,12 +730,13 @@ export async function fetchSiteSettings(forceRefresh: boolean = false): Promise<
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   serviceCache.settings.timestamp = 0;
+  const cleanSettings = stripUndefinedFields(settings);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'settings', 'site_settings'), settings, { merge: true }),
+    () => setDoc(doc(db, 'settings', 'site_settings'), cleanSettings, { merge: true }),
     OperationType.WRITE,
     'settings/site_settings'
   );
-  setLocal(STORAGE_KEYS.SETTINGS, settings);
+  setLocal(STORAGE_KEYS.SETTINGS, cleanSettings);
 }
 
 /* ================= ORDERS ================= */
@@ -805,8 +813,9 @@ export async function fetchOrderById(orderIdOrPhone: string): Promise<Order | nu
 }
 
 export async function createOrder(order: Order): Promise<Order> {
+  const cleanOrder = stripUndefinedFields(order);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'orders', order.id), order),
+    () => setDoc(doc(db, 'orders', order.id), cleanOrder),
     OperationType.CREATE,
     `orders/${order.id}`
   );
@@ -905,13 +914,14 @@ export async function fetchAllReviews(): Promise<Review[]> {
 }
 
 export async function addProductReview(review: Review): Promise<void> {
+  const cleanReview = stripUndefinedFields(review);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'reviews', review.id), review),
+    () => setDoc(doc(db, 'reviews', review.id), cleanReview),
     OperationType.CREATE,
     `reviews/${review.id}`
   );
   const all = getLocal<Review[]>(STORAGE_KEYS.REVIEWS, []);
-  all.unshift(review);
+  all.unshift(cleanReview);
   setLocal(STORAGE_KEYS.REVIEWS, all);
 }
 
@@ -926,17 +936,18 @@ export async function deleteProductReview(reviewId: string): Promise<void> {
 }
 
 export async function updateProductReview(review: Review): Promise<void> {
+  const cleanReview = stripUndefinedFields(review);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'reviews', review.id), review, { merge: true }),
+    () => setDoc(doc(db, 'reviews', review.id), cleanReview, { merge: true }),
     OperationType.UPDATE,
     `reviews/${review.id}`
   );
   const all = getLocal<Review[]>(STORAGE_KEYS.REVIEWS, []);
   const idx = all.findIndex((r) => r.id === review.id);
   if (idx >= 0) {
-    all[idx] = review;
+    all[idx] = cleanReview;
   } else {
-    all.unshift(review);
+    all.unshift(cleanReview);
   }
   setLocal(STORAGE_KEYS.REVIEWS, all);
 }
@@ -974,13 +985,14 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  const cleanProfile = stripUndefinedFields(profile);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'users', profile.uid), profile, { merge: true }),
+    () => setDoc(doc(db, 'users', profile.uid), cleanProfile, { merge: true }),
     OperationType.WRITE,
     `users/${profile.uid}`
   );
   const profiles = getLocal<Record<string, UserProfile>>('pure_sudh_user_profiles', {});
-  profiles[profile.uid] = profile;
+  profiles[profile.uid] = cleanProfile;
   setLocal('pure_sudh_user_profiles', profiles);
 }
 
@@ -1056,17 +1068,18 @@ export async function fetchStaffMembers(): Promise<StaffMember[]> {
 }
 
 export async function saveStaffMember(staff: StaffMember): Promise<void> {
+  const cleanStaff = stripUndefinedFields(staff);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'staff', staff.id), staff, { merge: true }),
+    () => setDoc(doc(db, 'staff', staff.id), cleanStaff, { merge: true }),
     OperationType.WRITE,
     `staff/${staff.id}`
   );
   const all = getLocal<StaffMember[]>('pure_sudh_admin_staff', []);
   const idx = all.findIndex((s) => s.id === staff.id);
   if (idx >= 0) {
-    all[idx] = staff;
+    all[idx] = cleanStaff;
   } else {
-    all.unshift(staff);
+    all.unshift(cleanStaff);
   }
   setLocal('pure_sudh_admin_staff', all);
 }
@@ -1123,7 +1136,7 @@ export async function fetchHomepageConfig(): Promise<HomepageConfig> {
 }
 
 export async function saveHomepageConfig(config: HomepageConfig): Promise<void> {
-  const updated = { ...config, updatedAt: new Date().toISOString() };
+  const updated = stripUndefinedFields({ ...config, updatedAt: new Date().toISOString() });
   await executeFirestoreWrite(
     () => setDoc(doc(db, 'homepageConfig', 'main'), updated, { merge: true }),
     OperationType.WRITE,
@@ -1176,15 +1189,16 @@ export async function sendBroadcastNotification(
       sentAt: new Date().toISOString(),
     };
   }
+  const cleanNotif = stripUndefinedFields(newNotif);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'broadcastNotifications', newNotif.id), newNotif),
+    () => setDoc(doc(db, 'broadcastNotifications', newNotif.id), cleanNotif),
     OperationType.CREATE,
     `broadcastNotifications/${newNotif.id}`
   );
   const all = getLocal<BroadcastNotification[]>('pure_sudh_broadcast_notifs', []);
-  all.unshift(newNotif);
+  all.unshift(cleanNotif);
   setLocal('pure_sudh_broadcast_notifs', all);
-  return newNotif;
+  return cleanNotif;
 }
 
 /* ================= REVIEWS MODERATION ================= */

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Category, Product } from '../../../types';
 import { MediaUploader } from '../../common/MediaUploader';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminCategoriesTabProps {
   categories: Category[];
@@ -114,7 +115,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       showToast(`Category "${categoryToSave.name}" saved successfully!`, 'success');
       setIsModalOpen(false);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save category', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save category'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -131,7 +132,7 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       await onSaveCategory(updated);
       showToast(`Category "${cat.name}" is now ${updated.active ? 'Active' : 'Hidden'}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update category status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update category status'), 'error');
     } finally {
       setTogglingId(null);
     }

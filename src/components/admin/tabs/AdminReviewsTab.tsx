@@ -16,6 +16,7 @@ import {
   updateReviewModerationStatus,
   deleteReview,
 } from '../../../firebase/services';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminReviewsTabProps {
   products: Product[];
@@ -40,7 +41,7 @@ export const AdminReviewsTab: React.FC<AdminReviewsTabProps> = ({
       setReviews(data);
     } catch (err) {
       console.error('Error loading reviews:', err);
-      showToast('Failed to load customer reviews', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to load customer reviews'), 'error');
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export const AdminReviewsTab: React.FC<AdminReviewsTabProps> = ({
       );
       showToast(`Review marked as ${status}`, 'success');
     } catch (err) {
-      showToast('Failed to update review status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update review status'), 'error');
     }
   };
 
@@ -72,7 +73,7 @@ export const AdminReviewsTab: React.FC<AdminReviewsTabProps> = ({
       setReviews((prev) => prev.filter((r) => r.id !== reviewToDelete.id));
       showToast('Review removed from database', 'info');
     } catch (err) {
-      showToast('Failed to delete review', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to delete review'), 'error');
     } finally {
       setReviewToDelete(null);
     }

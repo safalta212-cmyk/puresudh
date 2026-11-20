@@ -20,6 +20,7 @@ import {
   toggleStaffStatus,
 } from '../../../firebase/services';
 import { isTemporaryEmail } from '../../../validation';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminStaffTabProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -143,7 +144,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
       setIsModalOpen(false);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save staff member', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save staff member'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +160,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       );
       showToast(`Staff member "${s.name}" is now ${!s.active ? 'Active' : 'Inactive'}`, 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update staff status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to update staff status'), 'error');
     } finally {
       setTogglingId(null);
     }
@@ -172,7 +173,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       setStaffList((prev) => prev.filter((item) => item.id !== staffToDelete.id));
       showToast(`Staff member "${staffToDelete.name}" removed`, 'info');
     } catch (err) {
-      showToast('Failed to delete staff member', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to delete staff member'), 'error');
     } finally {
       setStaffToDelete(null);
     }

@@ -11,6 +11,7 @@ import {
 import { Product, Category } from '../../types';
 import { MediaUploader } from '../common/MediaUploader';
 import { ProductDescriptionRenderer } from '../common/ProductDescriptionRenderer';
+import { formatFirestorePermissionMessage } from '../../firebase/config';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -152,8 +153,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       await onSave(productToSave);
       showToast(`Product "${productToSave.name}" saved!`, 'success');
       onClose();
-    } catch (err) {
-      showToast('Failed to save product', 'error');
+    } catch (err: any) {
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save product'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -493,9 +494,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                         try {
                           await onDelete(product.id, product.name);
                           onClose();
-                        } catch (e) {
+                        } catch (e: any) {
                           console.error('Delete error in modal:', e);
-                          showToast('Failed to delete product', 'error');
+                          showToast(formatFirestorePermissionMessage(e, 'Failed to delete product'), 'error');
                         } finally {
                           setDeleting(false);
                         }

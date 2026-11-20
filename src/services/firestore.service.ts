@@ -15,7 +15,7 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db, stripUndefinedFields } from '../firebase/config';
 import {
   Product,
   Category,
@@ -94,17 +94,18 @@ export async function getProductById(id: string): Promise<Product | null> {
 }
 
 export async function saveProduct(product: Product): Promise<void> {
+  const cleanProduct = stripUndefinedFields(product);
   const all = getLocal<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-  const idx = all.findIndex((p) => p.id === product.id);
+  const idx = all.findIndex((p) => p.id === cleanProduct.id);
   if (idx >= 0) {
-    all[idx] = product;
+    all[idx] = cleanProduct;
   } else {
-    all.unshift(product);
+    all.unshift(cleanProduct);
   }
   setLocal(STORAGE_KEYS.PRODUCTS, all);
 
   try {
-    await setDoc(doc(db, COLLECTIONS.PRODUCTS, product.id), product, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.PRODUCTS, cleanProduct.id), cleanProduct, { merge: true });
   } catch (err) {
     console.warn('Firestore saveProduct error:', err);
   }
@@ -141,19 +142,20 @@ export async function getCategories(): Promise<Category[]> {
 /* ================= ORDERS ================= */
 
 export async function createOrder(order: Order): Promise<Order> {
+  const cleanOrder = stripUndefinedFields(order);
   // Update local cache immediately
   const localOrders = getLocal<Order[]>(STORAGE_KEYS.ORDERS, []);
-  localOrders.unshift(order);
+  localOrders.unshift(cleanOrder);
   setLocal(STORAGE_KEYS.ORDERS, localOrders);
 
   try {
-    const docRef = doc(db, COLLECTIONS.ORDERS, order.id);
-    await setDoc(docRef, order);
+    const docRef = doc(db, COLLECTIONS.ORDERS, cleanOrder.id);
+    await setDoc(docRef, cleanOrder);
   } catch (err) {
     console.warn('Order persisted locally, firestore sync note:', err);
   }
 
-  return order;
+  return cleanOrder;
 }
 
 export async function getCustomerOrders(customerId: string): Promise<Order[]> {
@@ -254,17 +256,18 @@ export async function getVendorById(id: string): Promise<Vendor | null> {
 }
 
 export async function saveVendor(vendor: Vendor): Promise<void> {
+  const cleanVendor = stripUndefinedFields(vendor);
   const all = getLocal<Vendor[]>(STORAGE_KEYS.VENDORS, INITIAL_MARKETPLACE_VENDORS);
-  const idx = all.findIndex((v) => v.id === vendor.id);
+  const idx = all.findIndex((v) => v.id === cleanVendor.id);
   if (idx >= 0) {
-    all[idx] = vendor;
+    all[idx] = cleanVendor;
   } else {
-    all.push(vendor);
+    all.push(cleanVendor);
   }
   setLocal(STORAGE_KEYS.VENDORS, all);
 
   try {
-    await setDoc(doc(db, COLLECTIONS.VENDORS, vendor.id), vendor, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.VENDORS, cleanVendor.id), cleanVendor, { merge: true });
   } catch (err) {
     console.warn('Firestore saveVendor error:', err);
   }
@@ -340,7 +343,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 
 export async function updateSiteSettings(settings: Partial<SiteSettings>): Promise<void> {
   const current = getLocal<SiteSettings>(STORAGE_KEYS.SETTINGS, initialSiteSettings);
-  const updated = { ...current, ...settings };
+  const updated = stripUndefinedFields({ ...current, ...settings });
   setLocal(STORAGE_KEYS.SETTINGS, updated);
 
   try {

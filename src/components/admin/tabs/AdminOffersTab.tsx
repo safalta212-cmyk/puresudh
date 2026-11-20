@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Offer, OfferType, Category, Product } from '../../../types';
 import { MediaUploader } from '../../common/MediaUploader';
+import { formatFirestorePermissionMessage } from '../../../firebase/config';
 
 interface AdminOffersTabProps {
   offers: Offer[];
@@ -171,7 +172,7 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
       showToast(`Offer "${offerToSave.title}" saved successfully!`, 'success');
       setIsModalOpen(false);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save offer', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to save offer'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -183,7 +184,7 @@ export const AdminOffersTab: React.FC<AdminOffersTabProps> = ({
     try {
       await onToggleOfferStatus(offer.id, !offer.active);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to toggle offer status', 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Failed to toggle offer status'), 'error');
     } finally {
       setTogglingId(null);
     }

@@ -20,7 +20,7 @@ import {
   isProductionEnvironment,
   SeedResult,
 } from '../../firebase/seedTooling';
-import { testConnection, resolvedFirebaseConfig, resolvedFirestoreDatabaseId } from '../../firebase/config';
+import { testConnection, resolvedFirebaseConfig, resolvedFirestoreDatabaseId, formatFirestorePermissionMessage } from '../../firebase/config';
 import { useToast } from '../../context/ToastContext';
 import { runDirtyDozenSecuritySuite, DIRTY_DOZEN_TEST_CASES } from '../../firebase/firestore.rules.test';
 
@@ -94,7 +94,7 @@ export const DatabaseArchitecturePanel: React.FC<{ onDataRefreshed?: () => void 
         showToast(res.message, 'error');
       }
     } catch (err: any) {
-      showToast(`Error: ${err.message || 'Seeding failed'}`, 'error');
+      showToast(formatFirestorePermissionMessage(err, 'Seeding failed'), 'error');
     } finally {
       setIsSeeding(false);
     }
