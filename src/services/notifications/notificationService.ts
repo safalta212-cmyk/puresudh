@@ -1,5 +1,5 @@
-import { doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db, stripUndefinedFields } from '../../firebase/config';
+import { doc, setDoc, updateDoc, collection, query, where, getDocs, onSnapshot, limit } from 'firebase/firestore';
+import { auth, db, stripUndefinedFields } from '../../firebase/config';
 import { Order, Notification as AppNotification } from '../../types';
 import {
   INotificationProvider,
@@ -148,11 +148,14 @@ class NotificationService {
     current.unshift(inAppItem);
     saveLocalNotifications(current);
 
-    // Persist to Firestore
-    try {
-      await setDoc(doc(db, 'notifications', notifId), inAppItem, { merge: true });
-    } catch (e) {
-      console.warn('Firestore notification write fallback:', e);
+    // Persist to Firestore only when a matching authenticated Firebase user exists
+    // (broadcast 'all' promos belong in broadcastNotifications written by admins)
+    if (auth.currentUser && userId === auth.currentUser.uid) {
+      try {
+        await setDoc(doc(db, 'notifications', notifId), inAppItem, { merge: true });
+      } catch (e) {
+        console.warn('Firestore notification write fallback:', e);
+      }
     }
   }
 
@@ -356,16 +359,17 @@ class NotificationService {
 
   async getUserNotifications(userId?: string): Promise<AppNotification[]> {
     const local = getLocalNotifications();
+    if (!auth.currentUser || !userId || auth.currentUser.uid !== userId) {
+      return local;
+    }
     try {
       const colRef = collection(db, 'notifications');
-      let q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
-      if (userId) {
-        // Query for this user or broadcast 'all'
-        q = query(colRef, where('userId', 'in', [userId, 'all']), limit(50));
-      }
+      const q = query(colRef, where('userId', '==', userId), limit(50));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        const fetched = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
+        const fetched = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() } as AppNotification))
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         saveLocalNotifications(fetched);
         return fetched;
       }
@@ -382,8 +386,12 @@ class NotificationService {
       item.read = true;
       saveLocalNotifications(list);
     }
+    if (!auth.currentUser) return;
     try {
-      await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+      await updateDoc(doc(db, 'notifications', notificationId), {
+        read: true,
+        updatedAt: new Date().toISOString(),
+      });
     } catch (e) {
       console.warn('Firestore markAsRead error:', e);
     }
@@ -419,17 +427,19 @@ export function listenToCustomerNotifications(
   notificationService.getUserNotifications(userId).then(callback);
 
   // Avoid unnecessary persistent listeners if user is not genuinely signed in
-  if (!userId || userId === 'cust-demo-user') {
+  if (!userId || userId === 'cust-demo-user' || !auth.currentUser || auth.currentUser.uid !== userId) {
     return () => {};
   }
 
   try {
     const colRef = collection(db, 'notifications');
-    const q = query(colRef, where('userId', 'in', [userId, 'all']), limit(20));
+    const q = query(colRef, where('userId', '==', userId), limit(20));
     return onSnapshot(
       q,
       (snap) => {
-        const notifs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
+        const notifs = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as AppNotification))
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         if (notifs.length > 0) callback(notifs);
       },
       (err) => {

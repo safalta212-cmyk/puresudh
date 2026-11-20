@@ -390,9 +390,14 @@
         "title": { "type": "string" },
         "message": { "type": "string" },
         "type": { "type": "string", "enum": ["order", "promo", "account", "system"] },
+        "category": { "type": "string" },
+        "channels": { "type": "array" },
         "read": { "type": "boolean" },
         "link": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "orderId": { "type": "string" },
+        "metadata": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
       "required": ["userId", "title", "message", "read"]
     },

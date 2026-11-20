@@ -270,7 +270,7 @@ service cloud.firestore {
         incoming().customerName is string && incoming().customerName.size() <= 100 &&
         incoming().customerPhone is string && incoming().customerPhone.size() >= 10 && incoming().customerPhone.size() <= 15;
 
-      // Customer can only cancel their own order while still in PLACED state
+      // Customer can only cancel their own order while still in pre-dispatch state
       allow update: if (
         isSignedIn() &&
         existing().customerId == request.auth.uid &&
@@ -278,7 +278,7 @@ service cloud.firestore {
         incoming().total == existing().total &&
         incoming().subtotal == existing().subtotal &&
         incoming().status == 'CANCELLED' &&
-        existing().status in ['PLACED', 'Order Placed'] &&
+        existing().status in ['PLACED', 'Order Placed', 'CONFIRMED'] &&
         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'notes', 'statusHistory'])
       ) || isStaff() || isAdmin();
 
@@ -404,15 +404,29 @@ service cloud.firestore {
 
     // Notifications: User notification center
     match /notifications/{notificationId} {
-      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isStaff() || isAdmin();
+      allow get: if isValidId(notificationId) && ((isSignedIn() && existing().userId == request.auth.uid) || isStaff() || isAdmin());
       allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isStaff() || isAdmin();
       
-      allow update: if (
+      allow create: if isValidId(notificationId) && (
+        isAdmin() || isStaff() || (
+          isSignedIn() &&
+          incoming().userId == request.auth.uid &&
+          incoming().read == false &&
+          incoming().type in ['order', 'system'] &&
+          incoming().category in ['order_confirmation', 'payment_status', 'cancellation'] &&
+          incoming().title is string && incoming().title.size() > 0 && incoming().title.size() <= 200 &&
+          incoming().message is string && incoming().message.size() > 0 && incoming().message.size() <= 1000 &&
+          (!('link' in incoming()) || (incoming().link is string && incoming().link.size() <= 300))
+        )
+      );
+
+      allow update: if isValidId(notificationId) && ((
         isSignedIn() && existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId &&
         incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
-      ) || isAdmin();
+      ) || isAdmin());
       
-      allow create, delete: if isAdmin() || isStaff();
+      allow delete: if isValidId(notificationId) && (isAdmin() || isStaff());
     }
 
     // Site Settings: Store configurations

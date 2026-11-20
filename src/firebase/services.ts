@@ -180,17 +180,33 @@ export async function initializeDatabase(): Promise<void> {
       setLocal(STORAGE_KEYS.SETTINGS, initialSiteSettings);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
 
-      // If already authenticated with write rights, sync catalog
+      // Only seed catalog documents to Firestore when an authenticated Admin is active
       if (auth.currentUser) {
-        Promise.allSettled([
-          ...initialProducts.map((p) => setDoc(doc(db, 'products', p.id), stripUndefinedFields(p), { merge: true })),
-          ...initialCategories.map((c) => setDoc(doc(db, 'categories', c.id), stripUndefinedFields(c), { merge: true })),
-          ...initialDeliveryAreas.map((a) => setDoc(doc(db, 'deliveryAreas', a.id), stripUndefinedFields(a), { merge: true })),
-          ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), stripUndefinedFields(cp), { merge: true })),
-          ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), stripUndefinedFields(b), { merge: true })),
-          ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), stripUndefinedFields(o), { merge: true })),
-          setDoc(doc(db, 'settings', 'site_settings'), stripUndefinedFields(initialSiteSettings), { merge: true }),
-        ]).catch(() => {});
+        const emailLower = (auth.currentUser.email || '').toLowerCase();
+        const isVerifiedOwnerAdmin =
+          emailLower === 'aanews70@gmail.com' && auth.currentUser.emailVerified === true;
+
+        let isFirestoreAdmin = isVerifiedOwnerAdmin;
+        if (!isFirestoreAdmin) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            isFirestoreAdmin = userSnap.exists() && userSnap.data()?.role === 'admin';
+          } catch {
+            isFirestoreAdmin = false;
+          }
+        }
+
+        if (isFirestoreAdmin) {
+          Promise.allSettled([
+            ...initialProducts.map((p) => setDoc(doc(db, 'products', p.id), stripUndefinedFields(p), { merge: true })),
+            ...initialCategories.map((c) => setDoc(doc(db, 'categories', c.id), stripUndefinedFields(c), { merge: true })),
+            ...initialDeliveryAreas.map((a) => setDoc(doc(db, 'deliveryAreas', a.id), stripUndefinedFields(a), { merge: true })),
+            ...initialCoupons.map((cp) => setDoc(doc(db, 'coupons', cp.id), stripUndefinedFields(cp), { merge: true })),
+            ...initialBanners.map((b) => setDoc(doc(db, 'banners', b.id), stripUndefinedFields(b), { merge: true })),
+            ...initialOffers.map((o) => setDoc(doc(db, 'offers', o.id), stripUndefinedFields(o), { merge: true })),
+            setDoc(doc(db, 'settings', 'site_settings'), stripUndefinedFields(initialSiteSettings), { merge: true }),
+          ]).catch(() => {});
+        }
       }
     }
   } catch (err) {
@@ -813,20 +829,36 @@ export async function fetchOrderById(orderIdOrPhone: string): Promise<Order | nu
 }
 
 export async function createOrder(order: Order): Promise<Order> {
-  const cleanOrder = stripUndefinedFields(order);
+  const rawDigits = String(order.customerPhone || '').replace(/\D/g, '').slice(-10);
+  const normalizedPhone =
+    rawDigits.length === 10
+      ? `+91 ${rawDigits}`
+      : String(order.customerPhone || '+91 9000000000').trim().slice(0, 15);
+
+  const sanitizedOrder: Order = {
+    ...order,
+    orderNumber: String(order.orderNumber || order.id).slice(0, 50),
+    customerName: String(order.customerName || 'Customer').slice(0, 100),
+    customerPhone: normalizedPhone.length >= 10 ? normalizedPhone : '+91 9000000000',
+  };
+
+  const cleanOrder = stripUndefinedFields(sanitizedOrder);
   await executeFirestoreWrite(
-    () => setDoc(doc(db, 'orders', order.id), cleanOrder),
+    () => setDoc(doc(db, 'orders', sanitizedOrder.id), cleanOrder),
     OperationType.CREATE,
-    `orders/${order.id}`
+    `orders/${sanitizedOrder.id}`
   );
 
   const all = getLocal<Order[]>(STORAGE_KEYS.ORDERS, []);
-  all.unshift(order);
+  all.unshift(sanitizedOrder);
   setLocal(STORAGE_KEYS.ORDERS, all);
 
-  // Deduct inventory stock for ordered items
+  // Update local inventory cache for immediate UI responsiveness.
+  // Authoritative product stock deduction runs server-side (/api/orders/create) or via Admin/Vendor tools;
+  // customers do not write directly to the products collection.
   try {
     const products = getLocal<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
+    let updatedLocalStock = false;
     for (const item of order.items || []) {
       const prod = products.find((p) => p.id === item.productId);
       if (prod) {
@@ -834,14 +866,18 @@ export async function createOrder(order: Order): Promise<Order> {
         if (prod.stockQuantity === 0) {
           prod.availability = false;
         }
-        await saveProduct(prod);
+        updatedLocalStock = true;
       }
     }
+    if (updatedLocalStock) {
+      setLocal(STORAGE_KEYS.PRODUCTS, products);
+      invalidateServiceCache('products');
+    }
   } catch (e) {
-    console.warn('Inventory deduction error:', e);
+    console.warn('Local inventory cache update note:', e);
   }
 
-  return order;
+  return sanitizedOrder;
 }
 
 export async function updateOrderStatus(
