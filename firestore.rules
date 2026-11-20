@@ -308,7 +308,13 @@ service cloud.firestore {
         incoming().total == existing().total &&
         incoming().subtotal == existing().subtotal &&
         incoming().get('assignedDeliveryId', '') == existing().get('assignedDeliveryId', '') &&
-        existing().status in ['PACKED', 'Packed', 'OUT_FOR_DELIVERY', 'Out for Delivery'] &&
+        existing().status in [
+          'PLACED', 'Order Placed',
+          'CONFIRMED', 'Confirmed',
+          'PREPARING', 'Preparing',
+          'PACKED', 'Packed',
+          'OUT_FOR_DELIVERY', 'Out for Delivery'
+        ] &&
         incoming().status in ['OUT_FOR_DELIVERY', 'Out for Delivery', 'DELIVERED', 'Delivered'] &&
         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'statusHistory', 'trackingActive'])
       ) || isStaff() || isAdmin();

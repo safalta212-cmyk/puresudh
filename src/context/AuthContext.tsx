@@ -437,6 +437,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Ensure a previously signed-in Firebase account (e.g. a customer session like as@gmail.com)
+   * is never left attached to Firestore writes when switching into a different portal or demo session.
+   */
+  const clearMismatchedFirebaseSession = async (expectedEmail?: string | null) => {
+    try {
+      const currentFbEmail = auth.currentUser?.email?.trim().toLowerCase() || '';
+      const nextEmail = expectedEmail ? expectedEmail.trim().toLowerCase() : '';
+      if (auth.currentUser && (!nextEmail || currentFbEmail !== nextEmail)) {
+        isLoggingOutRef.current = true;
+        hadFirebaseUserRef.current = false;
+        await signOut(auth).catch(() => {});
+      }
+    } finally {
+      isLoggingOutRef.current = false;
+    }
+  };
+
+  /**
    * Secure Login supporting Customer, Admin, Staff, Delivery, and Vendor portals
    */
   const login = async (
@@ -629,6 +647,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   createdAt: data.profile.createdAt || new Date().toISOString(),
                   addresses: Array.isArray(data.profile.addresses) ? data.profile.addresses : [],
                 };
+                await clearMismatchedFirebaseSession(loadedProfile.email);
                 setUser(loadedProfile);
                 setRole('admin');
                 localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
@@ -650,6 +669,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Check quick non-admin test accounts ONLY with exact valid password verification
       const isStaffMatch = cleanEmail === 'staff@email.com' || (normalizedPhone && normalizedPhone === '9431012802');
       if (isStaffMatch && pass === 'staff123') {
+        await clearMismatchedFirebaseSession(defaultStaffUser.email);
         setUser(defaultStaffUser);
         setRole('staff');
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultStaffUser));
@@ -664,6 +684,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
           return { success: false, error: `Unauthorized: Delivery rider credentials cannot access ${String(target).toUpperCase()} portal.` };
         }
+        await clearMismatchedFirebaseSession(defaultDeliveryUser.email);
         setUser(defaultDeliveryUser);
         setRole('delivery');
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultDeliveryUser));
@@ -678,6 +699,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
           return { success: false, error: `Unauthorized: Vendor credentials cannot access ${target.toUpperCase()} portal.` };
         }
+        await clearMismatchedFirebaseSession(defaultVendorUser.email);
         setUser(defaultVendorUser);
         setRole('vendor');
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultVendorUser));
@@ -695,6 +717,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             error: `Access Denied: Customer account is not authorized to access ${target.toUpperCase()} portal. Privileged role required.`,
           };
         }
+        await clearMismatchedFirebaseSession(defaultCustomerUser.email);
         setUser(defaultCustomerUser);
         setRole('customer');
         localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultCustomerUser));
@@ -733,6 +756,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               vendorDetails: data.profile.vendorDetails,
             };
 
+            await clearMismatchedFirebaseSession(loadedProfile.email);
             setUser(loadedProfile);
             setRole(loadedProfile.role);
             localStorage.setItem('pure_sudh_active_user', JSON.stringify(loadedProfile));
@@ -810,6 +834,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }),
             }).catch(() => {});
 
+            await clearMismatchedFirebaseSession(localProfile.email);
             setUser(localProfile);
             setRole(localProfile.role);
             localStorage.setItem('pure_sudh_active_user', JSON.stringify(localProfile));

@@ -18,6 +18,7 @@ import { FloatingWhatsApp } from './components/common/FloatingWhatsApp';
 import { PincodeModal } from './components/common/PincodeModal';
 import { AuthModal } from './components/common/AuthModal';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 import { ProductDetailsModal } from './components/product/ProductDetailsModal';
 import { CartDrawer } from './components/cart/CartDrawer';
@@ -1328,18 +1329,20 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <DeliveryProvider>
-          <CartProvider>
-            <WishlistProvider>
-              <GoogleMapsProvider>
-                <AppContent />
-              </GoogleMapsProvider>
-            </WishlistProvider>
-          </CartProvider>
-        </DeliveryProvider>
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <DeliveryProvider>
+            <CartProvider>
+              <WishlistProvider>
+                <GoogleMapsProvider>
+                  <AppContent />
+                </GoogleMapsProvider>
+              </WishlistProvider>
+            </CartProvider>
+          </DeliveryProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

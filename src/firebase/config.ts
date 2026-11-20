@@ -133,8 +133,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 export function assertFirestoreWriteSuccess(error: unknown, operationType: OperationType, path: string | null): void {
-  handleFirestoreError(error, operationType, path);
   if (auth.currentUser) {
+    handleFirestoreError(error, operationType, path);
     throw error instanceof Error ? error : new Error(String(error));
   }
   console.warn(`Firestore write (${operationType} ${path || ''}) offline warning:`, error);
