@@ -74,11 +74,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     []
   );
 
-  const refreshAreas = useCallback(async () => {
+  const refreshAreas = useCallback(async (forceRefresh: boolean = false) => {
     try {
       const [areas, slots] = await Promise.all([
-        fetchDeliveryAreas(),
-        fetchDeliverySlots(selectedVendorId),
+        fetchDeliveryAreas(forceRefresh),
+        fetchDeliverySlots(selectedVendorId, forceRefresh),
       ]);
       setAllAreas(areas);
       setAllSlots(slots);
@@ -90,6 +90,14 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     refreshAreas();
+  }, [refreshAreas]);
+
+  useEffect(() => {
+    const handleConfigChanged = () => {
+      refreshAreas(true);
+    };
+    window.addEventListener('pure_sudh_delivery_config_changed', handleConfigChanged);
+    return () => window.removeEventListener('pure_sudh_delivery_config_changed', handleConfigChanged);
   }, [refreshAreas]);
 
   const validatePincode = async (
@@ -114,15 +122,38 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let deliverable = false;
 
     try {
-      // Execute authoritative Cloud Function / API validation
+      // Execute authoritative API validation
       const result = await validateDeliveryAvailability(cleanPin, {
         vendorId: vendorId ?? selectedVendorId,
       });
       deliverable = result.isDeliverable;
       setIsDeliverable(result.isDeliverable);
 
-      if (result.isDeliverable && allAreas.length > 0) {
-        applyDeliveryAreaMatch(cleanPin, allAreas, vendorId ?? selectedVendorId);
+      if (result.isDeliverable) {
+        const matched = allAreas.length > 0 ? matchDeliveryArea(cleanPin, allAreas, vendorId ?? selectedVendorId) : null;
+        if (matched) {
+          setDeliveryArea(matched);
+        } else {
+          // Construct authoritative DeliveryArea from server response and trigger area refresh
+          setDeliveryArea({
+            id: `area-${cleanPin}`,
+            pincode: cleanPin,
+            pincodes: [cleanPin],
+            areaName: result.areaName || `Zone ${cleanPin}`,
+            city: result.city || 'Patna',
+            state: result.state || 'Bihar',
+            isDeliverable: true,
+            active: true,
+            deliveryCharge: result.deliveryCharge,
+            minimumOrder: result.minimumOrder,
+            freeDeliveryAbove: result.freeDeliveryThreshold,
+            freeDeliveryThreshold: result.freeDeliveryThreshold,
+            fastDeliveryAvailable: result.fastDeliveryAvailable,
+            estimatedDeliveryTime: result.estimatedDeliveryTime,
+            vendorId: result.vendorId,
+          });
+          refreshAreas(true);
+        }
       } else {
         setDeliveryArea(null);
       }

@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Map,
+  Map as GoogleMap,
   AdvancedMarker,
   Pin,
   InfoWindow,
@@ -15,11 +15,10 @@ import {
   Zap,
   CheckCircle2,
   AlertCircle,
-  Phone,
-  ExternalLink,
 } from 'lucide-react';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { useDelivery } from '../../context/DeliveryContext';
+import { formatDeliveryETA, matchDeliveryArea } from '../../utils/deliveryRules';
 
 export interface HubLocation {
   id: string;
@@ -88,23 +87,97 @@ export const PURE_SUDH_HUBS: HubLocation[] = [
 const DEFAULT_CENTER = { lat: 25.612, lng: 85.125 }; // Patna Center
 const DEFAULT_ZOOM = 12;
 
+const MapCameraController: React.FC<{
+  target: { lat: number; lng: number } | null;
+  zoom?: number;
+}> = ({ target, zoom }) => {
+  const map = useMap();
+  const prevTargetRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!map || !target) return;
+    const key = `${target.lat.toFixed(5)},${target.lng.toFixed(5)},${zoom || ''}`;
+    if (prevTargetRef.current === key) return;
+    prevTargetRef.current = key;
+    map.panTo(target);
+    if (typeof zoom === 'number') {
+      map.setZoom(zoom);
+    }
+  }, [map, target, zoom]);
+
+  return null;
+};
+
+interface DetectedLocationDetails {
+  lat: number;
+  lng: number;
+  addressLine?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+}
+
 export const StoreDeliveryCoverageMap: React.FC<{
   onSelectPincode?: (pincode: string) => void;
   className?: string;
 }> = ({ onSelectPincode, className = '' }) => {
   const { hasKey } = useGoogleMaps();
-  const { setPincode, pincode: activePincode } = useDelivery();
-  const [selectedHub, setSelectedHub] = useState<HubLocation | null>(PURE_SUDH_HUBS[0]);
-  const [userMarker, setUserMarker] = useState<{ lat: number; lng: number } | null>(null);
-  const [locatingUser, setLocatingUser] = useState(false);
-  const [userLocationStatus, setUserLocationStatus] = useState<string | null>(null);
+  const {
+    setPincode,
+    pincode: activePincode,
+    allAreas,
+    isDeliverable,
+    estimatedDeliveryTime,
+  } = useDelivery();
 
-  // Approximate distance calculation in km
+  // Merge hub locations with live Admin-configured delivery areas
+  const activeHubs = useMemo<HubLocation[]>(() => {
+    return PURE_SUDH_HUBS.map((hub) => {
+      const matched = matchDeliveryArea(hub.pincode, allAreas || []);
+      if (!matched) {
+        // Keep base hubs active unless explicitly suspended in allAreas
+        const explicitlyDisabled = (allAreas || []).some(
+          (a) =>
+            (a.pincode === hub.pincode || a.pincodes?.includes(hub.pincode)) &&
+            (a.active === false || a.isDeliverable === false)
+        );
+        return { ...hub, active: !explicitlyDisabled };
+      }
+      const { etaText } = formatDeliveryETA(matched, hub.eta);
+      return {
+        ...hub,
+        eta: etaText,
+        fastDelivery: Boolean(matched.fastDeliveryAvailable ?? hub.fastDelivery),
+        radiusMeters: matched.radiusKm ? Math.round(matched.radiusKm * 1000) : hub.radiusMeters,
+        active: matched.active !== false && matched.isDeliverable !== false,
+      };
+    }).filter((h) => h.active);
+  }, [allAreas]);
+
+  const [selectedHub, setSelectedHub] = useState<HubLocation | null>(null);
+  const [userMarker, setUserMarker] = useState<{ lat: number; lng: number } | null>(null);
+  const [detectedDetails, setDetectedDetails] = useState<DetectedLocationDetails | null>(null);
+  const [locatingUser, setLocatingUser] = useState(false);
+  const [resolvingPin, setResolvingPin] = useState(false);
+  const [userLocationStatus, setUserLocationStatus] = useState<string | null>(null);
+  const [cameraTarget, setCameraTarget] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Sync selected hub with active pincode or first active hub
+  useEffect(() => {
+    const matchedHub = activeHubs.find((h) => h.pincode === activePincode);
+    if (matchedHub) {
+      setSelectedHub(matchedHub);
+      setCameraTarget(matchedHub.position);
+    } else if (!selectedHub && activeHubs.length > 0) {
+      setSelectedHub(activeHubs[0]);
+    }
+  }, [activePincode, activeHubs]);
+
   const getDistanceKm = (
     pos1: { lat: number; lng: number },
     pos2: { lat: number; lng: number }
   ) => {
-    const R = 6371; // Earth's radius in km
+    const R = 6371;
     const dLat = ((pos2.lat - pos1.lat) * Math.PI) / 180;
     const dLng = ((pos2.lng - pos1.lng) * Math.PI) / 180;
     const a =
@@ -118,11 +191,11 @@ export const StoreDeliveryCoverageMap: React.FC<{
   };
 
   const closestHub = useMemo(() => {
-    if (!userMarker) return null;
+    if (!userMarker || activeHubs.length === 0) return null;
     let minDistance = Infinity;
     let nearest: HubLocation | null = null;
 
-    PURE_SUDH_HUBS.forEach((hub) => {
+    activeHubs.forEach((hub) => {
       const dist = getDistanceKm(userMarker, hub.position);
       if (dist < minDistance) {
         minDistance = dist;
@@ -131,16 +204,68 @@ export const StoreDeliveryCoverageMap: React.FC<{
     });
 
     return { hub: nearest, distanceKm: minDistance };
-  }, [userMarker]);
+  }, [userMarker, activeHubs]);
 
   const isUserWithinDeliveryRadius = useMemo(() => {
     if (!closestHub || !closestHub.hub) return false;
     return closestHub.distanceKm <= closestHub.hub.radiusMeters / 1000;
   }, [closestHub]);
 
+  const detectedMatchedArea = useMemo(() => {
+    if (!detectedDetails?.pincode) return null;
+    return matchDeliveryArea(detectedDetails.pincode, allAreas || []);
+  }, [detectedDetails?.pincode, allAreas]);
+
+  const resolveCoordinatesViaProxy = async (coords: { lat: number; lng: number }) => {
+    setResolvingPin(true);
+    try {
+      const res = await fetch(
+        `/api/maps/reverse-geocode?lat=${encodeURIComponent(coords.lat)}&lng=${encodeURIComponent(coords.lng)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success) {
+          setDetectedDetails({
+            lat: coords.lat,
+            lng: coords.lng,
+            addressLine: data.addressLine || data.formattedAddress,
+            city: data.city,
+            state: data.state,
+            pincode: data.pincode || undefined,
+          });
+          if (data.pincode) {
+            const areaMatch = matchDeliveryArea(String(data.pincode), allAreas || []);
+            setUserLocationStatus(
+              areaMatch
+                ? `Detected PIN ${data.pincode}: Delivery Available`
+                : `Detected PIN ${data.pincode}: Currently outside express zones`
+            );
+          } else {
+            setUserLocationStatus('Location pinned. Check your nearest active Patna hub.');
+          }
+          setResolvingPin(false);
+          return;
+        }
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+    setResolvingPin(false);
+  };
+
+  const handleSelectHub = (hub: HubLocation) => {
+    setSelectedHub(hub);
+    setCameraTarget(hub.position);
+  };
+
+  const handleApplyPincode = (pin: string) => {
+    setPincode(pin);
+    if (onSelectPincode) onSelectPincode(pin);
+  };
+
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
-      setUserLocationStatus('Geolocation is not supported by your browser');
+      setUserLocationStatus('Geolocation is not supported by your browser.');
       return;
     }
 
@@ -151,13 +276,18 @@ export const StoreDeliveryCoverageMap: React.FC<{
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserMarker(coords);
+        setCameraTarget(coords);
         setLocatingUser(false);
-        setUserLocationStatus('Location detected! See your nearest PureSudh hub.');
+        setUserLocationStatus('Location detected! Checking zone eligibility...');
+        resolveCoordinatesViaProxy(coords);
       },
       (err) => {
-        console.warn('Geolocation failed:', err);
         setLocatingUser(false);
-        setUserLocationStatus('Unable to retrieve location. You can click on the map to place a pin.');
+        if (err.code === 1) {
+          setUserLocationStatus('Location permission denied. Allow browser location or click the map to pin.');
+        } else {
+          setUserLocationStatus('Unable to retrieve GPS fix. Click anywhere on the map to place a pin.');
+        }
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
@@ -170,7 +300,9 @@ export const StoreDeliveryCoverageMap: React.FC<{
         lng: e.detail.latLng.lng,
       };
       setUserMarker(coords);
-      setUserLocationStatus('Destination pin placed.');
+      setCameraTarget(coords);
+      setUserLocationStatus('Checking pinned coordinates...');
+      resolveCoordinatesViaProxy(coords);
     }
   };
 
@@ -190,7 +322,7 @@ export const StoreDeliveryCoverageMap: React.FC<{
               </span>
             </h4>
             <p className="text-xs text-stone-400">
-              Interactive store hubs, express dispatch radii, and doorstep deliverability
+              Interactive store hubs, active dispatch radii, and doorstep deliverability
             </p>
           </div>
         </div>
@@ -209,7 +341,7 @@ export const StoreDeliveryCoverageMap: React.FC<{
       {/* Map Area */}
       <div className="relative w-full h-[320px] sm:h-[400px] bg-stone-100">
         {hasKey ? (
-          <Map
+          <GoogleMap
             defaultCenter={DEFAULT_CENTER}
             defaultZoom={DEFAULT_ZOOM}
             mapId="DEMO_MAP_ID"
@@ -220,19 +352,21 @@ export const StoreDeliveryCoverageMap: React.FC<{
             disableDefaultUI={false}
             {...({ internalUsageAttributionIds: ['gmp_mcp_codeassist_v1_aistudio'] } as any)}
           >
+            <MapCameraController target={cameraTarget} />
+
             {/* PureSudh Hub Markers */}
-            {PURE_SUDH_HUBS.map((hub) => (
+            {activeHubs.map((hub) => (
               <AdvancedMarker
                 key={hub.id}
                 position={hub.position}
                 title={hub.name}
-                onClick={() => setSelectedHub(hub)}
+                onClick={() => handleSelectHub(hub)}
               >
                 <Pin
-                  background="#b45309"
+                  background={selectedHub?.id === hub.id ? '#d97706' : '#b45309'}
                   glyphColor="#ffffff"
                   borderColor="#78350f"
-                  scale={1.1}
+                  scale={selectedHub?.id === hub.id ? 1.2 : 1.05}
                 />
               </AdvancedMarker>
             ))}
@@ -271,45 +405,43 @@ export const StoreDeliveryCoverageMap: React.FC<{
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setPincode(selectedHub.pincode);
-                      if (onSelectPincode) onSelectPincode(selectedHub.pincode);
-                    }}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1 px-2 rounded-lg transition"
+                    onClick={() => handleApplyPincode(selectedHub.pincode)}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1 px-2 rounded-lg transition cursor-pointer"
                   >
                     Select PIN {selectedHub.pincode}
                   </button>
                 </div>
               </InfoWindow>
             )}
-          </Map>
+          </GoogleMap>
         ) : (
           /* High-fidelity Fallback when API Key is pending */
           <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-radial from-stone-50 to-stone-100 text-center relative overflow-hidden">
             <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#d97706_1px,transparent_1px)] [background-size:16px_16px]" />
-            
+
             <div className="relative z-10 max-w-md mx-auto space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto shadow-sm">
                 <MapPin className="w-6 h-6" />
               </div>
               <h5 className="font-bold text-stone-800 text-base">Google Maps Coverage Preview</h5>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Connect your Google Maps Platform API key in the environment or settings to activate live street tiles, interactive geocoding, and real-time transit directions.
+                Select one of our active Patna dispatch hubs below to check delivery fees and configured ETA for your neighborhood.
               </p>
-              
+
               <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-stone-200 text-xs text-stone-700 text-left space-y-1.5 shadow-2xs">
                 <div className="font-semibold text-stone-800 flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Active PureSudh Hubs in Patna:
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  {PURE_SUDH_HUBS.map((h) => (
+                  {activeHubs.map((h) => (
                     <div
                       key={h.id}
-                      onClick={() => {
-                        setPincode(h.pincode);
-                        if (onSelectPincode) onSelectPincode(h.pincode);
-                      }}
-                      className="p-1.5 rounded-lg bg-stone-50 hover:bg-amber-50 hover:border-amber-200 border border-stone-200 cursor-pointer transition"
+                      onClick={() => handleApplyPincode(h.pincode)}
+                      className={`p-1.5 rounded-lg border cursor-pointer transition ${
+                        activePincode === h.pincode
+                          ? 'bg-amber-50 border-amber-400'
+                          : 'bg-stone-50 hover:bg-amber-50 hover:border-amber-200 border-stone-200'
+                      }`}
                     >
                       <strong className="block text-stone-900 truncate">{h.name.split(' ')[0]} Hub</strong>
                       <span className="text-stone-500">PIN {h.pincode} • {h.eta}</span>
@@ -327,20 +459,20 @@ export const StoreDeliveryCoverageMap: React.FC<{
             <div className="font-bold text-stone-800 mb-1 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-amber-600" /> Service Hubs
             </div>
-            <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-              {PURE_SUDH_HUBS.map((hub) => (
+            <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+              {activeHubs.map((hub) => (
                 <button
                   key={hub.id}
                   type="button"
-                  onClick={() => setSelectedHub(hub)}
-                  className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition flex items-center justify-between ${
+                  onClick={() => handleSelectHub(hub)}
+                  className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition flex items-center justify-between cursor-pointer ${
                     selectedHub?.id === hub.id
                       ? 'bg-amber-100 text-amber-900 font-bold'
                       : 'text-stone-600 hover:bg-stone-100'
                   }`}
                 >
                   <span className="truncate">{hub.name.split(' ')[0]}</span>
-                  <span className="text-[10px] text-stone-400 font-mono ml-1">{hub.pincode}</span>
+                  <span className="text-[10px] text-stone-500 font-mono ml-1">{hub.pincode}</span>
                 </button>
               ))}
             </div>
@@ -351,33 +483,53 @@ export const StoreDeliveryCoverageMap: React.FC<{
         {userMarker && closestHub?.hub && (
           <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:max-w-xs z-10 bg-white/95 backdrop-blur-md p-3 rounded-xl border border-stone-200 shadow-lg text-xs animate-in fade-in slide-in-from-bottom-2">
             <div className="flex items-start gap-2">
-              {isUserWithinDeliveryRadius ? (
+              {detectedMatchedArea || isUserWithinDeliveryRadius ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               ) : (
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               )}
-              <div>
-                <strong className={isUserWithinDeliveryRadius ? 'text-emerald-900 font-bold' : 'text-amber-900 font-bold'}>
-                  {isUserWithinDeliveryRadius
-                    ? 'Within Express Delivery Zone!'
-                    : 'Near Coverage Boundary'}
+              <div className="min-w-0 flex-1">
+                <strong
+                  className={
+                    detectedMatchedArea || isUserWithinDeliveryRadius
+                      ? 'text-emerald-900 font-bold block'
+                      : 'text-amber-900 font-bold block'
+                  }
+                >
+                  {resolvingPin
+                    ? 'Resolving address...'
+                    : detectedMatchedArea
+                    ? `Delivery Available (${detectedDetails?.pincode})`
+                    : isUserWithinDeliveryRadius
+                    ? 'Within Local Hub Radius!'
+                    : 'Outside Local Hub Coverage'}
                 </strong>
+                {detectedDetails?.addressLine && (
+                  <p className="text-[11px] text-stone-700 truncate mt-0.5">
+                    {detectedDetails.addressLine}
+                  </p>
+                )}
                 <p className="text-[11px] text-stone-600 mt-0.5">
                   Approx. <strong>{closestHub.distanceKm} km</strong> from {closestHub.hub.name.split(' ')[0]} Hub.
                 </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (closestHub?.hub) {
-                        setPincode(closestHub.hub.pincode);
-                        if (onSelectPincode) onSelectPincode(closestHub.hub.pincode);
-                      }
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg transition"
-                  >
-                    Use Nearest PIN ({closestHub.hub.pincode})
-                  </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {detectedMatchedArea && detectedDetails?.pincode ? (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPincode(detectedDetails.pincode!)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg transition cursor-pointer"
+                    >
+                      Use Detected PIN ({detectedDetails.pincode})
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => closestHub?.hub && handleApplyPincode(closestHub.hub.pincode)}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg transition cursor-pointer"
+                    >
+                      Use Nearest Hub PIN ({closestHub.hub.pincode})
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -389,7 +541,10 @@ export const StoreDeliveryCoverageMap: React.FC<{
       <div className="p-3 bg-stone-50 border-t border-stone-200 text-xs text-stone-600 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 text-emerald-700 font-semibold">
-            <Zap className="w-3.5 h-3.5 fill-emerald-600" /> 30-Min Express Hubs
+            <Zap className="w-3.5 h-3.5 fill-emerald-600" />
+            {isDeliverable && estimatedDeliveryTime
+              ? `Active Zone ETA: ${estimatedDeliveryTime}`
+              : 'Live Patna Hub Network'}
           </span>
           <span className="text-stone-300">•</span>
           <span className="text-stone-500">Insulated Temperature-Controlled Vans & Bikes</span>

@@ -395,6 +395,14 @@ export async function fetchDeliveryAreas(forceRefresh: boolean = false): Promise
   return local;
 }
 
+function notifyDeliveryConfigChanged(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pure_sudh_delivery_config_changed'));
+    }
+  } catch {}
+}
+
 export async function saveDeliveryArea(area: DeliveryArea): Promise<void> {
   serviceCache.deliveryAreas.timestamp = 0;
   const cleanArea = stripUndefinedFields(area);
@@ -411,6 +419,7 @@ export async function saveDeliveryArea(area: DeliveryArea): Promise<void> {
     all.push(cleanArea);
   }
   setLocal(STORAGE_KEYS.DELIVERY_AREAS, all);
+  notifyDeliveryConfigChanged();
 }
 
 export async function deleteDeliveryArea(id: string): Promise<void> {
@@ -422,6 +431,7 @@ export async function deleteDeliveryArea(id: string): Promise<void> {
   );
   const all = getLocal<DeliveryArea[]>(STORAGE_KEYS.DELIVERY_AREAS, initialDeliveryAreas).filter((a) => a.id !== id);
   setLocal(STORAGE_KEYS.DELIVERY_AREAS, all);
+  notifyDeliveryConfigChanged();
 }
 
 /* ================= DELIVERY SLOTS ================= */
@@ -474,6 +484,7 @@ export async function saveDeliverySlot(slot: DeliverySlot): Promise<void> {
     all.push(cleanSlot);
   }
   setLocal(STORAGE_KEYS.DELIVERY_SLOTS, all);
+  notifyDeliveryConfigChanged();
 }
 
 export async function deleteDeliverySlot(id: string): Promise<void> {
@@ -485,6 +496,7 @@ export async function deleteDeliverySlot(id: string): Promise<void> {
   );
   const all = getLocal<DeliverySlot[]>(STORAGE_KEYS.DELIVERY_SLOTS, initialDeliverySlots).filter((s) => s.id !== id);
   setLocal(STORAGE_KEYS.DELIVERY_SLOTS, all);
+  notifyDeliveryConfigChanged();
 }
 
 /**
@@ -1163,7 +1175,7 @@ export const initialHomepageConfig: HomepageConfig = {
   featuredProductIds: ['prod-thekua-traditional', 'prod-fresh-paneer', 'prod-pure-ghee', 'prod-claypot-dahi'],
   bestsellerProductIds: ['prod-pure-ghee', 'prod-thekua-traditional', 'prod-fresh-paneer', 'prod-peda-authentic'],
   activeOfferIds: ['ofr-1', 'ofr-2', 'ofr-3'],
-  announcementText: '⚡ Pure Food • Pure Quality • Pure Trust - 30-Min Fast Delivery Across Patna!',
+  announcementText: '⚡ Pure Food • Pure Quality • Pure Trust - Fast Fresh Delivery Across Patna!',
   updatedAt: new Date().toISOString(),
 };
 

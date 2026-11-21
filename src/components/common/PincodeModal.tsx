@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, X, CheckCircle2, AlertCircle, Clock, Truck, Zap, Map as MapIcon } from 'lucide-react';
 import { useDelivery } from '../../context/DeliveryContext';
+import { formatDeliveryETA } from '../../utils/deliveryRules';
 import { StoreDeliveryCoverageMap } from '../maps/StoreDeliveryCoverageMap';
 
 export const PincodeModal: React.FC = () => {
@@ -14,6 +15,7 @@ export const PincodeModal: React.FC = () => {
     estimatedDeliveryTime,
     deliveryArea,
     allAreas,
+    isLoading,
     isPincodeModalOpen,
     setPincodeModalOpen,
     setPincode,
@@ -23,6 +25,13 @@ export const PincodeModal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [showMap, setShowMap] = useState(false);
+
+  useEffect(() => {
+    if (isPincodeModalOpen && pincode) {
+      setInputCode(pincode);
+      setErrorMsg('');
+    }
+  }, [isPincodeModalOpen, pincode]);
 
   if (!isPincodeModalOpen) return null;
 
@@ -131,7 +140,11 @@ export const PincodeModal: React.FC = () => {
             If eligible: 'Fast Delivery Available'
             Do not hardcode 30-minute delivery. 30-minute delivery must only be displayed when configured delivery rules confirm it. Otherwise display configured ETA."
         */}
-        {isDeliverable && deliveryArea ? (
+        {(isChecking || isLoading) ? (
+          <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 font-semibold">
+            Checking delivery availability for PIN <span className="font-mono font-bold">{inputCode || pincode}</span>...
+          </div>
+        ) : isDeliverable && deliveryArea && inputCode === pincode ? (
           <div className="mt-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-200">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 text-emerald-900 font-bold text-base">
@@ -170,7 +183,7 @@ export const PincodeModal: React.FC = () => {
               </p>
             )}
           </div>
-        ) : inputCode.length === 6 && !isDeliverable ? (
+        ) : inputCode.length === 6 && inputCode === pincode && !isDeliverable ? (
           <div className="mt-4 p-4 bg-rose-50 rounded-2xl border border-rose-200">
             <div className="flex items-center gap-2 text-rose-900 font-bold text-base">
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
@@ -193,7 +206,7 @@ export const PincodeModal: React.FC = () => {
               .filter((a) => a.active !== false && a.isDeliverable !== false)
               .slice(0, 6)
               .map((area) => {
-                const is30 = area.estimatedTimeMinutes === 30 || area.estimatedDeliveryTime?.includes('30');
+                const { etaText, is30MinDelivery: is30 } = formatDeliveryETA(area);
                 return (
                   <button
                     key={area.id}
@@ -218,7 +231,7 @@ export const PincodeModal: React.FC = () => {
                       {(area.areaName || 'Serviceable Zone').split('/')[0]}
                     </div>
                     <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
-                      {is30 ? '30-minute delivery' : (area.estimatedDeliveryTime || `${area.estimatedTimeMinutes} mins ETA`)}
+                      {is30 ? etaText : `${etaText} ETA`}
                     </div>
                   </button>
                 );

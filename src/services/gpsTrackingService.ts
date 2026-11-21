@@ -44,11 +44,12 @@ export interface DeliveryRiderOption {
 
 const PINCODE_COORDS_MAP: Record<string, { lat: number; lng: number }> = {
   '800001': { lat: 25.6127, lng: 85.1376 }, // Fraser Road / Dakbunglow
-  '800003': { lat: 25.6144, lng: 85.0486 }, // Bailey Road / Danapur
+  '800003': { lat: 25.6142, lng: 85.1610 }, // Rajendra Nagar / Kadamkuan
   '800013': { lat: 25.6207, lng: 85.1147 }, // Patliputra / Boring Road
   '800014': { lat: 25.6178, lng: 85.1024 }, // Bailey Road / Sheikhpura
-  '800016': { lat: 25.6188, lng: 85.1258 }, // Rajendra Nagar
+  '800016': { lat: 25.6188, lng: 85.1258 }, // Rajendra Nagar West
   '800020': { lat: 25.5941, lng: 85.1554 }, // Kankarbagh
+  '801503': { lat: 25.6144, lng: 85.0486 }, // Bailey Road West / Saguna More
   '201301': { lat: 28.5706, lng: 77.3261 }, // Noida Sector 18
   '201309': { lat: 28.6279, lng: 77.3649 }, // Noida Sector 62
   '110001': { lat: 28.6315, lng: 77.2167 }, // Connaught Place

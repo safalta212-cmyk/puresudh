@@ -97,7 +97,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Form State: Delivery & Notes
   const [deliveryType, setDeliveryType] = useState<'express' | 'scheduled'>('express');
-  const [selectedSlotId, setSelectedSlotId] = useState<string>('slot-morning');
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('slot-morning-express');
   const [deliveryInstruction, setDeliveryInstruction] = useState<string>('');
   const [specialNotes, setSpecialNotes] = useState<string>('');
 

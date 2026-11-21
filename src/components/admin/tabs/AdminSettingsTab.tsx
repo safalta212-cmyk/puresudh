@@ -223,7 +223,7 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 type="text"
                 value={formData.announcementText ?? ''}
                 onChange={(e) => setFormData({ ...formData, announcementText: e.target.value })}
-                placeholder="⚡ Pure Food • Pure Quality • Pure Trust - 30-Min Fast Delivery!"
+                placeholder="⚡ Pure Food • Pure Quality • Pure Trust - Fast Local Delivery!"
                 className="w-full px-3 py-2 bg-stone-50 rounded-lg border border-stone-300 focus:outline-none focus:border-amber-600"
               />
             </div>

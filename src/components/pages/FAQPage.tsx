@@ -30,7 +30,7 @@ const FAQS: FAQItem[] = [
     category: 'Delivery',
     question: 'What happens if my PIN code is not deliverable?',
     answer:
-      'If your 6-digit pincode is currently outside our 30-minute hyper-local delivery radius, you will be notified at checkout. We are rapidly expanding new hubs across Tier-1 and Tier-2 neighborhoods.',
+      'If your 6-digit pincode is currently outside our active local delivery zones, you will be notified at checkout. We are rapidly expanding new hubs across Tier-1 and Tier-2 neighborhoods.',
   },
   {
     category: 'Purity & Ingredients',

@@ -413,7 +413,7 @@ apiRouter.get('/health', (_req: Request, res: Response) => {
 });
 
 // Secure Cloud Function Validation for Delivery Availability (POST)
-apiRouter.post('/delivery/validate', (req: Request, res: Response) => {
+apiRouter.post('/delivery/validate', async (req: Request, res: Response) => {
   const pincode = String(req.body?.pincode || '').trim();
   const cartSubtotal = Number(req.body?.cartSubtotal || 0);
   const vendorId = req.body?.vendorId ? String(req.body.vendorId).trim() : undefined;
@@ -425,6 +425,8 @@ apiRouter.post('/delivery/validate', (req: Request, res: Response) => {
       error: 'Pincode is required for delivery validation',
     });
   }
+
+  await hydrateCatalogIfNeeded([], pincode, undefined, true);
 
   const result = evaluateDeliveryEligibility(
     pincode,
@@ -438,7 +440,7 @@ apiRouter.post('/delivery/validate', (req: Request, res: Response) => {
 });
 
 // Location-Aware Delivery Check (GET)
-apiRouter.get('/delivery/check', (req: Request, res: Response) => {
+apiRouter.get('/delivery/check', async (req: Request, res: Response) => {
   const pincode = String(req.query.pincode || '').trim();
   const subtotal = Number(req.query.cartSubtotal || 0);
   const vendorId = req.query.vendorId ? String(req.query.vendorId).trim() : undefined;
@@ -446,6 +448,8 @@ apiRouter.get('/delivery/check', (req: Request, res: Response) => {
   if (!pincode) {
     return res.status(400).json({ error: 'Pincode is required' });
   }
+
+  await hydrateCatalogIfNeeded([], pincode, undefined, true);
 
   const result = evaluateDeliveryEligibility(
     pincode,
@@ -459,7 +463,8 @@ apiRouter.get('/delivery/check', (req: Request, res: Response) => {
 });
 
 // Delivery Areas management endpoints (syncs server cache with admin operations)
-apiRouter.get('/delivery/areas', (req: Request, res: Response) => {
+apiRouter.get('/delivery/areas', async (req: Request, res: Response) => {
+  await hydrateCatalogIfNeeded([], undefined, undefined, true);
   const vendorId = req.query.vendorId as string | undefined;
   if (vendorId && vendorId !== 'all') {
     return res.json(serverAreas.filter((a) => !a.vendorId || a.vendorId === 'all' || a.vendorId === vendorId));
@@ -473,23 +478,27 @@ apiRouter.post('/delivery/areas', requireRole(['admin']), (req: Request, res: Re
     return res.status(400).json({ error: 'Valid DeliveryArea data with id, pincode, and areaName required' });
   }
 
+  const normalized = normalizeServerArea(area) as DeliveryArea;
   const idx = serverAreas.findIndex((a) => a.id === area.id);
   if (idx >= 0) {
-    serverAreas[idx] = area;
+    serverAreas[idx] = normalized;
   } else {
-    serverAreas.push(area);
+    serverAreas.push(normalized);
   }
-  return res.json({ success: true, area });
+  lastAreasSync = Date.now();
+  return res.json({ success: true, area: normalized });
 });
 
 apiRouter.delete('/delivery/areas/:id', requireRole(['admin']), (req: Request, res: Response) => {
   const id = req.params.id;
   serverAreas = serverAreas.filter((a) => a.id !== id);
+  lastAreasSync = Date.now();
   return res.json({ success: true, id });
 });
 
 // Delivery Slots management endpoints
-apiRouter.get('/delivery/slots', (req: Request, res: Response) => {
+apiRouter.get('/delivery/slots', async (req: Request, res: Response) => {
+  await hydrateCatalogIfNeeded([], undefined, undefined, true);
   const vendorId = req.query.vendorId as string | undefined;
   if (vendorId && vendorId !== 'all') {
     return res.json(serverSlots.filter((s) => !s.vendorId || s.vendorId === 'all' || s.vendorId === vendorId));
@@ -509,12 +518,14 @@ apiRouter.post('/delivery/slots', requireRole(['admin']), (req: Request, res: Re
   } else {
     serverSlots.push(slot);
   }
+  lastSlotsSync = Date.now();
   return res.json({ success: true, slot });
 });
 
 apiRouter.delete('/delivery/slots/:id', requireRole(['admin']), (req: Request, res: Response) => {
   const id = req.params.id;
   serverSlots = serverSlots.filter((s) => s.id !== id);
+  lastSlotsSync = Date.now();
   return res.json({ success: true, id });
 });
 
@@ -609,6 +620,7 @@ function decodeFirestoreDoc(docJson: any): Record<string, any> | null {
 let lastCatalogSync = 0;
 let lastAreasSync = 0;
 let lastCouponsSync = 0;
+let lastSlotsSync = 0;
 const CATALOG_SYNC_TTL_MS = 15000;
 
 function normalizeServerProduct(d: Record<string, any>): Record<string, any> {
@@ -659,38 +671,52 @@ function normalizeServerCoupon(d: Record<string, any>): Record<string, any> {
 async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any[]> {
   const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
   const envDbId = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
-  const targets: Array<{ projectId: string; dbId: string }> = [];
+  const envApiKey = process.env.VITE_FIREBASE_API_KEY?.trim();
+  const targets: Array<{ projectId: string; dbId: string; apiKey?: string }> = [];
   const isCustomEnvOverride = Boolean(envProjectId && envProjectId !== firebaseAppletConfig?.projectId);
 
   if (isCustomEnvOverride && envProjectId) {
-    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)' });
+    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)', apiKey: envApiKey });
   }
   if (firebaseAppletConfig?.projectId && !targets.some((t) => t.projectId === firebaseAppletConfig.projectId)) {
     targets.push({
       projectId: firebaseAppletConfig.projectId,
       dbId: firebaseAppletConfig.firestoreDatabaseId || '(default)',
+      apiKey: firebaseAppletConfig.apiKey,
     });
   }
   if (envProjectId && !targets.some((t) => t.projectId === envProjectId)) {
-    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)' });
-  }
-  if (!targets.some((t) => t.projectId === 'puresudh-561f1')) {
-    targets.push({ projectId: 'puresudh-561f1', dbId: '(default)' });
+    targets.push({ projectId: envProjectId, dbId: envDbId || '(default)', apiKey: envApiKey });
   }
 
   for (const target of targets) {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3500);
-      const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(target.projectId)}/databases/${encodeURIComponent(target.dbId)}/documents/${encodeURIComponent(collectionName)}?pageSize=200`;
-      const res = await fetch(url, { signal: controller.signal });
+      const keyParam = target.apiKey ? `?key=${encodeURIComponent(target.apiKey)}` : '';
+      const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(target.projectId)}/databases/${encodeURIComponent(target.dbId)}/documents:runQuery${keyParam}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: collectionName }],
+            limit: 200,
+          },
+        }),
+        signal: controller.signal,
+      });
       clearTimeout(timer);
       if (!res.ok) continue;
       const json = await res.json();
-      if (Array.isArray(json?.documents) && json.documents.length > 0) {
-        return json.documents
-          .map(decodeFirestoreDoc)
+      if (Array.isArray(json) && json.length > 0) {
+        const docs = json
+          .filter((entry: any) => entry && entry.document)
+          .map((entry: any) => decodeFirestoreDoc(entry.document))
           .filter((d: any): d is Record<string, any> => Boolean(d && d.id));
+        if (docs.length > 0) {
+          return docs;
+        }
       }
     } catch {
       // Try next configured Firestore target or keep seed catalog
@@ -702,7 +728,8 @@ async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any
 async function hydrateCatalogIfNeeded(
   items: any[],
   pincode?: string,
-  couponCode?: string
+  couponCode?: string,
+  forceDeliverySync: boolean = false
 ): Promise<void> {
   const now = Date.now();
   const safeItems = Array.isArray(items) ? items : [];
@@ -714,7 +741,12 @@ async function hydrateCatalogIfNeeded(
 
   const cleanPin = pincode ? String(pincode).replace(/\D/g, '').trim() : '';
   const missingPincode = Boolean(cleanPin && !matchDeliveryArea(cleanPin, serverAreas));
-  const shouldSyncAreas = missingPincode || (Boolean(cleanPin) && now - lastAreasSync > CATALOG_SYNC_TTL_MS);
+  const shouldSyncAreas =
+    missingPincode ||
+    (forceDeliverySync && now - lastAreasSync > CATALOG_SYNC_TTL_MS) ||
+    (Boolean(cleanPin) && now - lastAreasSync > CATALOG_SYNC_TTL_MS);
+
+  const shouldSyncSlots = forceDeliverySync && now - lastSlotsSync > CATALOG_SYNC_TTL_MS;
 
   const cleanCoupon = couponCode ? String(couponCode).trim().toUpperCase() : '';
   const missingCoupon = Boolean(cleanCoupon && !serverCoupons.some((c) => c.code.toUpperCase() === cleanCoupon));
@@ -745,6 +777,19 @@ async function hydrateCatalogIfNeeded(
           const idx = serverAreas.findIndex((a) => a.id === d.id);
           if (idx >= 0) serverAreas[idx] = { ...serverAreas[idx], ...d };
           else serverAreas.push(d as any);
+        }
+      })
+    );
+  }
+
+  if (shouldSyncSlots) {
+    tasks.push(
+      fetchFirestoreCollectionDocs('deliverySlots').then((docs) => {
+        lastSlotsSync = Date.now();
+        for (const raw of docs) {
+          const idx = serverSlots.findIndex((s) => s.id === raw.id);
+          if (idx >= 0) serverSlots[idx] = { ...serverSlots[idx], ...raw };
+          else serverSlots.push(raw as any);
         }
       })
     );
@@ -4214,9 +4259,195 @@ apiRouter.get('/advertising/reports', (req: Request, res: Response) => {
   }
 });
 
+const LOCAL_GEOCODE_DIRECTORY: Array<{
+  pincode: string;
+  lat: number;
+  lng: number;
+  addressLine: string;
+  landmark: string;
+  city: string;
+  state: string;
+  keywords: string[];
+}> = [
+  {
+    pincode: '800001',
+    lat: 25.6093,
+    lng: 85.1376,
+    addressLine: 'Frazer Road, Near Patna Junction',
+    landmark: 'Dak Bungalow Chowk',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['800001', 'frazer', 'dak bungalow', 'dakbunglow', 'patna junction', 'gpo', 'kotwali', 'station road', 'patna'],
+  },
+  {
+    pincode: '800020',
+    lat: 25.5941,
+    lng: 85.1554,
+    addressLine: 'Main Road, Kankarbagh Colony',
+    landmark: 'Kendriya Vidyalaya More',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['800020', 'kankarbagh', 'hanuman nagar', 'old bypass'],
+  },
+  {
+    pincode: '800013',
+    lat: 25.6207,
+    lng: 85.1147,
+    addressLine: 'Boring Road Crossing, Patliputra Colony',
+    landmark: 'Near Patliputra Golamber',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['800013', 'boring road', 'patliputra', 'sri krishna puri', 'sk puri'],
+  },
+  {
+    pincode: '800003',
+    lat: 25.6142,
+    lng: 85.1610,
+    addressLine: 'Road No. 2, Rajendra Nagar',
+    landmark: 'Near Kadamkuan Nala Road',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['800003', 'rajendra nagar', 'kadamkuan'],
+  },
+  {
+    pincode: '800014',
+    lat: 25.6178,
+    lng: 85.1024,
+    addressLine: 'Bailey Road, Sheikhpura & Ashiana Nagar',
+    landmark: 'Near Paras HMRI Hospital',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['800014', 'ashiana', 'sheikhpura', 'paras', 'raja bazar'],
+  },
+  {
+    pincode: '801503',
+    lat: 25.6144,
+    lng: 85.0486,
+    addressLine: 'Near Saguna More, Bailey Road West',
+    landmark: 'Danapur Khagaul Turning',
+    city: 'Patna',
+    state: 'Bihar',
+    keywords: ['801503', 'saguna more', 'bailey road west', 'bailey road', 'danapur', 'khagaul', 'rp s more'],
+  },
+  {
+    pincode: '110001',
+    lat: 28.6315,
+    lng: 77.2167,
+    addressLine: 'Outer Circle, Connaught Place',
+    landmark: 'Rajiv Chowk Metro',
+    city: 'New Delhi',
+    state: 'Delhi',
+    keywords: ['110001', 'connaught place', 'new delhi', 'delhi'],
+  },
+  {
+    pincode: '560001',
+    lat: 12.9716,
+    lng: 77.5946,
+    addressLine: 'MG Road, Shivaji Nagar',
+    landmark: 'Trinity Metro Circle',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    keywords: ['560001', 'mg road', 'bengaluru', 'bangalore', 'indiranagar'],
+  },
+];
+
+function parseGeocodingV4Result(result: any) {
+  if (!result) return null;
+  const lat = result?.location?.latitude;
+  const lng = result?.location?.longitude;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+
+  let postalCode = '';
+  let city = '';
+  let state = '';
+  let landmark = '';
+  const streetParts: string[] = [];
+
+  if (Array.isArray(result.addressComponents)) {
+    for (const comp of result.addressComponents) {
+      const types: string[] = comp.types || [];
+      const text = comp.longText || comp.shortText || '';
+      if (!text) continue;
+      if (types.includes('postal_code')) {
+        postalCode = text;
+      } else if (types.includes('locality')) {
+        city = text;
+      } else if (types.includes('administrative_area_level_1')) {
+        state = text;
+      } else if (
+        types.includes('street_number') ||
+        types.includes('route') ||
+        types.includes('sublocality_level_1') ||
+        types.includes('sublocality')
+      ) {
+        if (!streetParts.includes(text)) streetParts.push(text);
+      } else if ((types.includes('point_of_interest') || types.includes('premise')) && !landmark) {
+        landmark = text;
+      }
+    }
+  }
+
+  const postal = result.postalAddress || {};
+  if (!postalCode && postal.postalCode) postalCode = String(postal.postalCode);
+  if (!city && postal.locality) city = String(postal.locality);
+  if (!state && postal.administrativeArea) state = String(postal.administrativeArea);
+
+  const formattedAddress = String(result.formattedAddress || streetParts.join(', '));
+  const addressLine =
+    streetParts.join(', ') ||
+    (Array.isArray(postal.addressLines) && postal.addressLines[0]) ||
+    formattedAddress.split(',').slice(0, 2).join(', ').trim() ||
+    'Pinned Location';
+
+  return {
+    lat,
+    lng,
+    placeId: result.placeId || undefined,
+    formattedAddress,
+    addressLine,
+    landmark,
+    city: city || 'Patna',
+    state: state || 'Bihar',
+    pincode: postalCode,
+  };
+}
+
+function resolveLocalGeocodeFallback(query: string) {
+  const q = query.toLowerCase().trim();
+  const pinMatch = q.match(/\b(\d{6})\b/);
+  if (pinMatch) {
+    const exactPin = LOCAL_GEOCODE_DIRECTORY.find((item) => item.pincode === pinMatch[1]);
+    if (exactPin) return exactPin;
+  }
+  const keywordMatch = LOCAL_GEOCODE_DIRECTORY.find((item) =>
+    item.keywords.some((kw) => q.includes(kw))
+  );
+  return keywordMatch || null;
+}
+
+function resolveNearestLocalHub(lat: number, lng: number) {
+  let best = LOCAL_GEOCODE_DIRECTORY[0];
+  let bestDistKm = Infinity;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  for (const entry of LOCAL_GEOCODE_DIRECTORY) {
+    const R = 6371;
+    const dLat = toRad(entry.lat - lat);
+    const dLng = toRad(entry.lng - lng);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat)) * Math.cos(toRad(entry.lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    if (dist < bestDistKm) {
+      bestDistKm = dist;
+      best = entry;
+    }
+  }
+  return { hub: best, distanceKm: Number(bestDistKm.toFixed(2)) };
+}
+
 /**
  * GET /api/maps/geocode
- * Server-side geocoding proxy using server environment key (never exposes server keys to client).
+ * Server-side Geocoding API v4 proxy with local Patna/hub directory fallback.
  */
 apiRouter.get('/maps/geocode', async (req: Request, res: Response) => {
   try {
@@ -4224,29 +4455,131 @@ apiRouter.get('/maps/geocode', async (req: Request, res: Response) => {
     if (!address || address.length > 300) {
       return res.status(400).json({ success: false, error: 'Valid address query is required.' });
     }
+
     const serverKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
-    if (!serverKey || serverKey === 'MY_GOOGLE_MAPS_API_KEY') {
-      return res.status(404).json({ success: false, error: 'Server geocoding key unavailable.' });
+    if (serverKey && serverKey !== 'MY_GOOGLE_MAPS_API_KEY') {
+      try {
+        const v4Url = `https://geocode.googleapis.com/v4/geocode/address/${encodeURIComponent(address)}?regionCode=IN&languageCode=en`;
+        const upstream = await fetch(v4Url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': serverKey,
+            'X-Goog-FieldMask': 'results.placeId,results.location,results.formattedAddress,results.postalAddress,results.addressComponents',
+            'X-Goog-Maps-Solution-ID': 'gmp_mcp_codeassist_v1_aistudio',
+          },
+        });
+        if (upstream.ok) {
+          const data: any = await upstream.json();
+          const parsed = parseGeocodingV4Result(data?.results?.[0]);
+          if (parsed) {
+            return res.json({ success: true, source: 'google_v4', ...parsed });
+          }
+        }
+      } catch {
+        // Proceed to fallback
+      }
     }
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(serverKey)}`;
-    const upstream = await fetch(url);
-    if (!upstream.ok) {
-      return res.status(upstream.status).json({ success: false, error: 'Geocoding upstream error.' });
-    }
-    const data: any = await upstream.json();
-    const loc = data?.results?.[0]?.geometry?.location;
-    if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+
+    const localMatch = resolveLocalGeocodeFallback(address);
+    if (localMatch) {
       return res.json({
         success: true,
-        lat: loc.lat,
-        lng: loc.lng,
-        formattedAddress: data.results[0].formatted_address,
+        source: 'local_directory',
+        lat: localMatch.lat,
+        lng: localMatch.lng,
+        formattedAddress: `${localMatch.addressLine}, ${localMatch.city}, ${localMatch.state} ${localMatch.pincode}`,
+        addressLine: localMatch.addressLine,
+        landmark: localMatch.landmark,
+        city: localMatch.city,
+        state: localMatch.state,
+        pincode: localMatch.pincode,
       });
     }
+
     return res.status(404).json({ success: false, error: 'Address coordinates not found.' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Geocoding failed.' });
   }
 });
+
+/**
+ * GET /api/maps/reverse-geocode?lat=...&lng=...
+ * Server-side Reverse Geocoding API v4 proxy (CORS-safe, never exposes server key to client).
+ */
+apiRouter.get('/maps/reverse-geocode', async (req: Request, res: Response) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ success: false, error: 'Valid lat and lng query parameters are required.' });
+    }
+
+    const serverKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+    if (serverKey && serverKey !== 'MY_GOOGLE_MAPS_API_KEY') {
+      try {
+        const url = new URL('https://geocode.googleapis.com/v4/geocode/location');
+        url.searchParams.append('location.latitude', String(lat));
+        url.searchParams.append('location.longitude', String(lng));
+        url.searchParams.append('languageCode', 'en');
+        url.searchParams.append('regionCode', 'IN');
+
+        const upstream = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': serverKey,
+            'X-Goog-FieldMask': 'results.placeId,results.formattedAddress,results.postalAddress,results.addressComponents,results.location',
+            'X-Goog-Maps-Solution-ID': 'gmp_mcp_codeassist_v1_aistudio',
+          },
+        });
+        if (upstream.ok) {
+          const data: any = await upstream.json();
+          const parsed = parseGeocodingV4Result(data?.results?.[0]);
+          if (parsed) {
+            return res.json({ success: true, source: 'google_v4', ...parsed });
+          }
+        }
+      } catch {
+        // Proceed to local hub fallback
+      }
+    }
+
+    const nearest = resolveNearestLocalHub(lat, lng);
+    const isNearPatnaHub = nearest.distanceKm <= 12;
+    if (isNearPatnaHub) {
+      return res.json({
+        success: true,
+        source: 'local_hub_proximity',
+        lat,
+        lng,
+        formattedAddress: `${nearest.hub.addressLine}, ${nearest.hub.city}, ${nearest.hub.state} ${nearest.hub.pincode}`,
+        addressLine: nearest.hub.addressLine,
+        landmark: nearest.hub.landmark,
+        city: nearest.hub.city,
+        state: nearest.hub.state,
+        pincode: nearest.hub.pincode,
+        distanceKm: nearest.distanceKm,
+      });
+    }
+
+    return res.json({
+      success: true,
+      source: 'coordinates_only',
+      lat,
+      lng,
+      formattedAddress: `Pinned Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+      addressLine: `GPS Coordinates ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      landmark: '',
+      city: 'Outside Patna Hubs',
+      state: 'India',
+      pincode: '',
+      distanceKm: nearest.distanceKm,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Reverse geocoding failed.' });
+  }
+});
+
 
 

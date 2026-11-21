@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Map,
+  Map as GoogleMap,
   AdvancedMarker,
   Pin,
+  useMap,
 } from '@vis.gl/react-google-maps';
 import {
   MapPin,
@@ -10,9 +11,7 @@ import {
   Check,
   Navigation,
   Search,
-  CheckCircle2,
   AlertCircle,
-  Building,
 } from 'lucide-react';
 import { useGoogleMaps } from './GoogleMapsProvider';
 
@@ -38,6 +37,21 @@ export interface AddressLocationPickerModalProps {
 }
 
 const DEFAULT_CENTER = { lat: 25.6093, lng: 85.1376 }; // Central Patna
+
+const PickerCameraController: React.FC<{ target: { lat: number; lng: number } }> = ({ target }) => {
+  const map = useMap();
+  const lastKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!map || !target) return;
+    const key = `${target.lat.toFixed(5)},${target.lng.toFixed(5)}`;
+    if (lastKeyRef.current === key) return;
+    lastKeyRef.current = key;
+    map.panTo(target);
+  }, [map, target]);
+
+  return null;
+};
 
 export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProps> = ({
   isOpen,
@@ -68,48 +82,91 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
   });
   const [isLocating, setIsLocating] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setPickerError(null);
+    if (initialCoords) {
+      setMarkerPos(initialCoords);
+    } else if (initialPincode) {
+      // Optionally center on initial pincode via server geocode
+      fetch(`/api/maps/geocode?address=${encodeURIComponent(`Patna ${initialPincode}`)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.success && typeof data.lat === 'number' && typeof data.lng === 'number') {
+            setMarkerPos({ lat: data.lat, lng: data.lng });
+            setResolvedAddress((prev) => ({
+              addressLine: data.addressLine || prev.addressLine,
+              city: data.city || prev.city,
+              state: data.state || prev.state,
+              pincode: data.pincode || initialPincode || prev.pincode,
+              landmark: data.landmark || prev.landmark,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, initialCoords, initialPincode]);
 
   if (!isOpen) return null;
 
-  // Reverse geocode when marker position changes
-  const reverseGeocode = (pos: { lat: number; lng: number }) => {
-    if (typeof window !== 'undefined' && (window as any).google?.maps?.Geocoder) {
-      setIsGeocoding(true);
-      const geocoder = new (window as any).google.maps.Geocoder();
-      geocoder.geocode({ location: pos }, (results: any[], status: string) => {
-        setIsGeocoding(false);
-        if (status === 'OK' && results?.[0]) {
-          const result = results[0];
-          let street = '';
-          let city = 'Patna';
-          let state = 'Bihar';
-          let pin = '800001';
-          let landmark = '';
-
-          result.address_components?.forEach((comp: any) => {
-            const types = comp.types || [];
-            if (types.includes('postal_code')) {
-              pin = comp.long_name;
-            } else if (types.includes('locality')) {
-              city = comp.long_name;
-            } else if (types.includes('administrative_area_level_1')) {
-              state = comp.long_name;
-            } else if (types.includes('route') || types.includes('street_number') || types.includes('sublocality')) {
-              street += (street ? ', ' : '') + comp.long_name;
-            } else if (types.includes('point_of_interest') || types.includes('premise')) {
-              landmark = comp.long_name;
-            }
-          });
-
-          setResolvedAddress({
-            addressLine: street || result.formatted_address.split(',')[0],
-            city,
-            state,
-            pincode: pin,
-            landmark,
-          });
+  // CORS-safe server-side reverse geocoding proxy (replaces legacy google.maps.Geocoder)
+  const reverseGeocode = async (pos: { lat: number; lng: number }) => {
+    setIsGeocoding(true);
+    setPickerError(null);
+    try {
+      const res = await fetch(
+        `/api/maps/reverse-geocode?lat=${encodeURIComponent(pos.lat)}&lng=${encodeURIComponent(pos.lng)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success) {
+          setResolvedAddress((prev) => ({
+            addressLine: data.addressLine || data.formattedAddress || prev.addressLine,
+            city: data.city || 'Patna',
+            state: data.state || 'Bihar',
+            pincode: data.pincode || prev.pincode || '',
+            landmark: data.landmark || '',
+          }));
+          setIsGeocoding(false);
+          return;
         }
-      });
+      }
+      setPickerError('Could not automatically resolve street address. Please confirm coordinates or use presets.');
+    } catch {
+      setPickerError('Network error while resolving pinned location.');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  const handleSearchAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = searchQuery.trim();
+    if (!clean) return;
+
+    setIsGeocoding(true);
+    setPickerError(null);
+    try {
+      const res = await fetch(`/api/maps/geocode?address=${encodeURIComponent(clean)}`);
+      const data = await res.json();
+      if (res.ok && data?.success && typeof data.lat === 'number' && typeof data.lng === 'number') {
+        setMarkerPos({ lat: data.lat, lng: data.lng });
+        setResolvedAddress({
+          addressLine: data.addressLine || clean,
+          city: data.city || 'Patna',
+          state: data.state || 'Bihar',
+          pincode: data.pincode || initialPincode || '800001',
+          landmark: data.landmark || '',
+        });
+      } else {
+        setPickerError(data?.error || 'Location not found. Try searching a Patna neighborhood or 6-digit pincode.');
+      }
+    } catch {
+      setPickerError('Unable to reach address search service right now.');
+    } finally {
+      setIsGeocoding(false);
     }
   };
 
@@ -125,8 +182,12 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
   };
 
   const handleDetectCurrentLocation = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setPickerError('Browser geolocation is not supported on this device.');
+      return;
+    }
     setIsLocating(true);
+    setPickerError(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords = {
@@ -138,8 +199,12 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
         reverseGeocode(coords);
       },
       (err) => {
-        console.warn('Geolocation error:', err);
         setIsLocating(false);
+        if (err.code === 1) {
+          setPickerError('Location permission denied. Enable browser location or click anywhere on the map.');
+        } else {
+          setPickerError('Unable to detect GPS coordinates. Please search or click on the map.');
+        }
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
@@ -182,21 +247,43 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
             </div>
             <div>
               <h3 className="font-bold text-base text-stone-100">Pin Delivery Doorstep on Google Maps</h3>
-              <p className="text-xs text-stone-400">Click anywhere on the map or detect your current GPS location</p>
+              <p className="text-xs text-stone-400">Search your area, click on the map, or detect your current GPS location</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-stone-800 transition"
+            className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-stone-800 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Search Bar */}
+        <form onSubmit={handleSearchAddress} className="p-3 bg-stone-50 border-b border-stone-200 flex gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search neighborhood or 6-digit PIN (e.g. Boring Road, 801503, Kankarbagh)"
+              className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isGeocoding}
+            className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            Search
+          </button>
+        </form>
+
         {/* Map Canvas */}
-        <div className="relative w-full h-[320px] sm:h-[380px] bg-stone-100">
+        <div className="relative w-full h-[300px] sm:h-[360px] bg-stone-100">
           {hasKey ? (
-            <Map
+            <GoogleMap
               defaultCenter={markerPos}
               defaultZoom={15}
               mapId="DEMO_MAP_ID"
@@ -207,6 +294,7 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
               disableDefaultUI={false}
               {...({ internalUsageAttributionIds: ['gmp_mcp_codeassist_v1_aistudio'] } as any)}
             >
+              <PickerCameraController target={markerPos} />
               <AdvancedMarker position={markerPos} title="Delivery Location">
                 <Pin
                   background="#059669"
@@ -215,25 +303,26 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
                   scale={1.2}
                 />
               </AdvancedMarker>
-            </Map>
+            </GoogleMap>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-radial from-stone-50 to-stone-100">
               <MapPin className="w-10 h-10 text-amber-600 mb-2" />
               <h5 className="font-bold text-stone-800 text-sm">Interactive Delivery Location Selector</h5>
               <p className="text-xs text-stone-500 max-w-sm mt-1">
-                Select your delivery address coordinates using the interactive pin placement or quick preset buttons below.
+                Select your delivery address coordinates using the search bar above or quick preset buttons below.
               </p>
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div className="flex flex-wrap justify-center gap-2 mt-3">
                 {[
-                  { name: 'Kankarbagh, Patna', pin: '800020' },
-                  { name: 'Boring Road, Patna', pin: '800013' },
-                  { name: 'Bailey Road, Patna', pin: '801503' },
-                  { name: 'Frazer Road, Patna', pin: '800001' },
+                  { name: 'Frazer Road, Patna', pin: '800001', lat: 25.6093, lng: 85.1376 },
+                  { name: 'Kankarbagh, Patna', pin: '800020', lat: 25.5941, lng: 85.1554 },
+                  { name: 'Boring Road, Patna', pin: '800013', lat: 25.6207, lng: 85.1147 },
+                  { name: 'Bailey Road West, Patna', pin: '801503', lat: 25.6144, lng: 85.0486 },
                 ].map((p) => (
                   <button
                     key={p.pin}
                     type="button"
                     onClick={() => {
+                      setMarkerPos({ lat: p.lat, lng: p.lng });
                       setResolvedAddress({
                         addressLine: p.name,
                         city: 'Patna',
@@ -242,9 +331,9 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
                         landmark: 'Main Road',
                       });
                     }}
-                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 hover:border-amber-500 hover:bg-amber-50 text-stone-700 transition"
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 hover:border-amber-500 hover:bg-amber-50 text-stone-700 transition cursor-pointer"
                   >
-                    📍 {p.name} ({p.pin})
+                    {p.name} ({p.pin})
                   </button>
                 ))}
               </div>
@@ -265,6 +354,13 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
 
         {/* Selected Address Details Card */}
         <div className="p-4 bg-stone-50 border-t border-stone-200 space-y-3">
+          {pickerError && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{pickerError}</span>
+            </div>
+          )}
+
           <div className="bg-white p-3 rounded-xl border border-stone-200 shadow-2xs">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
@@ -277,8 +373,13 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
             <p className="font-bold text-stone-800 text-sm">{resolvedAddress.addressLine}</p>
             <p className="text-xs text-stone-600">
               {resolvedAddress.landmark ? `Near ${resolvedAddress.landmark}, ` : ''}
-              {resolvedAddress.city}, {resolvedAddress.state} -{' '}
-              <strong className="text-amber-800 font-mono font-bold">{resolvedAddress.pincode}</strong>
+              {resolvedAddress.city}, {resolvedAddress.state}
+              {resolvedAddress.pincode ? (
+                <>
+                  {' '}
+                  - <strong className="text-amber-800 font-mono font-bold">{resolvedAddress.pincode}</strong>
+                </>
+              ) : null}
             </p>
           </div>
 
@@ -286,14 +387,14 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition"
+              className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleConfirm}
-              className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+              className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Use This Delivery Address</span>

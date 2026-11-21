@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   Truck,
   Zap,
@@ -6,12 +6,13 @@ import {
   Clock,
   ChevronLeft,
   ArrowRight,
-  ShieldCheck,
   BellOff,
   PhoneCall,
   DoorClosed,
   Gift,
 } from 'lucide-react';
+import { useDelivery } from '../../../context/DeliveryContext';
+import { initialDeliverySlots } from '../../../data/seedData';
 
 interface DeliveryStepProps {
   deliveryType: 'express' | 'scheduled';
@@ -26,12 +27,6 @@ interface DeliveryStepProps {
   onBackToAddress: () => void;
   onProceedToCoupon: () => void;
 }
-
-const SCHEDULED_SLOTS = [
-  { id: 'slot-morning', label: 'Morning Fresh Slot', time: '8:00 AM - 11:00 AM', tag: 'Fresh Batch' },
-  { id: 'slot-afternoon', label: 'Afternoon Slot', time: '12:00 PM - 3:00 PM', tag: 'Lunch & Snacks' },
-  { id: 'slot-evening', label: 'Evening Fresh Slot', time: '4:00 PM - 8:00 PM', tag: 'Most Popular' },
-];
 
 const QUICK_INSTRUCTIONS = [
   { id: 'door', label: 'Leave at doorstep / gate', icon: DoorClosed },
@@ -53,6 +48,29 @@ export const DeliveryStep: React.FC<DeliveryStepProps> = ({
   onBackToAddress,
   onProceedToCoupon,
 }) => {
+  const { deliverySlots } = useDelivery();
+
+  const availableSlots = useMemo(() => {
+    const source = deliverySlots && deliverySlots.length > 0 ? deliverySlots : initialDeliverySlots;
+    return source
+      .filter((s) => s.active !== false && s.isActive !== false)
+      .map((s) => ({
+        id: s.id,
+        label: s.name,
+        time: `${s.startTime} - ${s.endTime}`,
+        tag: s.cutoffTime ? `Cutoff ${s.cutoffTime}` : 'Fresh Dispatch',
+      }));
+  }, [deliverySlots]);
+
+  useEffect(() => {
+    if (deliveryType === 'scheduled' && availableSlots.length > 0) {
+      const stillValid = availableSlots.some((s) => s.id === selectedSlotId);
+      if (!stillValid) {
+        setSelectedSlotId(availableSlots[0].id);
+      }
+    }
+  }, [deliveryType, availableSlots, selectedSlotId, setSelectedSlotId]);
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs">
@@ -66,7 +84,7 @@ export const DeliveryStep: React.FC<DeliveryStepProps> = ({
 
         {/* Options Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          {/* 1. Express Superfast Delivery */}
+          {/* 1. Express Delivery */}
           <div
             onClick={() => setDeliveryType('express')}
             className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative ${
@@ -133,7 +151,7 @@ export const DeliveryStep: React.FC<DeliveryStepProps> = ({
               Available Delivery Slots Today
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {SCHEDULED_SLOTS.map((slot) => (
+              {availableSlots.map((slot) => (
                 <button
                   key={slot.id}
                   type="button"
