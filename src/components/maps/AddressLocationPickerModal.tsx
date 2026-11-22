@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Map as GoogleMap,
   AdvancedMarker,
@@ -12,8 +12,11 @@ import {
   Navigation,
   Search,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useGoogleMaps } from './GoogleMapsProvider';
+import { DeliveryArea } from '../../types';
+import { fetchDeliveryAreas } from '../../firebase/services';
 
 export interface AddressPickerResult {
   addressLine: string;
@@ -74,40 +77,130 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
     pincode: string;
     landmark?: string;
   }>({
-    addressLine: 'Near Central Station, Frazer Road',
-    city: 'Patna',
-    state: 'Bihar',
-    pincode: initialPincode || '800001',
-    landmark: 'Opposite Junction Gate',
+    addressLine: initialPincode ? `PIN ${initialPincode}` : 'Select or detect your delivery location',
+    city: '',
+    state: '',
+    pincode: initialPincode || '',
+    landmark: '',
   });
+  const [liveZones, setLiveZones] = useState<DeliveryArea[]>([]);
+  const [isLoadingZones, setIsLoadingZones] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
 
+  const geocodeQueryAndSelect = useCallback(
+    async (query: string, fallbackArea?: DeliveryArea) => {
+      setIsGeocoding(true);
+      setPickerError(null);
+      try {
+        const res = await fetch(`/api/maps/geocode?address=${encodeURIComponent(query)}`);
+        const data = res.ok ? await res.json() : null;
+        if (data?.success && typeof data.lat === 'number' && typeof data.lng === 'number') {
+          setMarkerPos({ lat: data.lat, lng: data.lng });
+          setResolvedAddress({
+            addressLine: data.addressLine || fallbackArea?.areaName || query,
+            city: data.city || fallbackArea?.city || '',
+            state: data.state || fallbackArea?.state || '',
+            pincode: data.pincode || fallbackArea?.pincode || initialPincode || '',
+            landmark: data.landmark || '',
+          });
+          return true;
+        }
+      } catch {
+        // Fallback to area metadata below if provided
+      } finally {
+        setIsGeocoding(false);
+      }
+
+      if (fallbackArea) {
+        setResolvedAddress({
+          addressLine: fallbackArea.areaName,
+          city: fallbackArea.city || '',
+          state: fallbackArea.state || '',
+          pincode: fallbackArea.pincode,
+          landmark: '',
+        });
+      }
+      return false;
+    },
+    [initialPincode]
+  );
+
   useEffect(() => {
     if (!isOpen) return;
+    let isCancelled = false;
     setPickerError(null);
+
+    const loadLiveDeliveryZones = async () => {
+      setIsLoadingZones(true);
+      try {
+        const [firestoreAreas, apiAreas] = await Promise.all([
+          fetchDeliveryAreas(true).catch(() => [] as DeliveryArea[]),
+          fetch('/api/delivery/areas')
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => [] as DeliveryArea[]),
+        ]);
+
+        if (isCancelled) return;
+
+        // Merge Firestore & backend-hydrated records (Firestore takes priority by ID)
+        const mergedMap = new globalThis.Map<string, DeliveryArea>();
+        if (Array.isArray(apiAreas)) {
+          for (const a of apiAreas) {
+            if (a && a.id) mergedMap.set(a.id, a);
+          }
+        }
+        if (Array.isArray(firestoreAreas)) {
+          for (const a of firestoreAreas) {
+            if (a && a.id) mergedMap.set(a.id, a);
+          }
+        }
+
+        const activeZones = Array.from(mergedMap.values()).filter(
+          (a) => a.active !== false && a.isDeliverable !== false && Boolean(a.pincode)
+        );
+        setLiveZones(activeZones);
+
+        if (!initialCoords && !initialPincode && activeZones.length > 0) {
+          const primaryZone = activeZones[0];
+          const query = [primaryZone.areaName, primaryZone.city, primaryZone.state, primaryZone.pincode]
+            .filter(Boolean)
+            .join(', ');
+          geocodeQueryAndSelect(query, primaryZone);
+        }
+      } finally {
+        if (!isCancelled) setIsLoadingZones(false);
+      }
+    };
+
+    loadLiveDeliveryZones();
+
     if (initialCoords) {
       setMarkerPos(initialCoords);
-    } else if (initialPincode) {
-      // Optionally center on initial pincode via server geocode
-      fetch(`/api/maps/geocode?address=${encodeURIComponent(`Patna ${initialPincode}`)}`)
+      fetch(
+        `/api/maps/reverse-geocode?lat=${encodeURIComponent(initialCoords.lat)}&lng=${encodeURIComponent(initialCoords.lng)}`
+      )
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
-          if (data?.success && typeof data.lat === 'number' && typeof data.lng === 'number') {
-            setMarkerPos({ lat: data.lat, lng: data.lng });
-            setResolvedAddress((prev) => ({
-              addressLine: data.addressLine || prev.addressLine,
-              city: data.city || prev.city,
-              state: data.state || prev.state,
-              pincode: data.pincode || initialPincode || prev.pincode,
-              landmark: data.landmark || prev.landmark,
-            }));
-          }
+          if (isCancelled || !data?.success) return;
+          setResolvedAddress({
+            addressLine: data.addressLine || data.formattedAddress || '',
+            city: data.city || '',
+            state: data.state || '',
+            pincode: data.pincode || initialPincode || '',
+            landmark: data.landmark || '',
+          });
         })
         .catch(() => {});
+    } else if (initialPincode) {
+      geocodeQueryAndSelect(initialPincode);
     }
-  }, [isOpen, initialCoords, initialPincode]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, initialCoords, initialPincode, geocodeQueryAndSelect]);
 
   if (!isOpen) return null;
 
@@ -124,8 +217,8 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
         if (data?.success) {
           setResolvedAddress((prev) => ({
             addressLine: data.addressLine || data.formattedAddress || prev.addressLine,
-            city: data.city || 'Patna',
-            state: data.state || 'Bihar',
+            city: data.city || '',
+            state: data.state || '',
             pincode: data.pincode || prev.pincode || '',
             landmark: data.landmark || '',
           }));
@@ -133,7 +226,7 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
           return;
         }
       }
-      setPickerError('Could not automatically resolve street address. Please confirm coordinates or use presets.');
+      setPickerError('Could not automatically resolve street address. Please search or select an active zone.');
     } catch {
       setPickerError('Network error while resolving pinned location.');
     } finally {
@@ -155,13 +248,13 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
         setMarkerPos({ lat: data.lat, lng: data.lng });
         setResolvedAddress({
           addressLine: data.addressLine || clean,
-          city: data.city || 'Patna',
-          state: data.state || 'Bihar',
-          pincode: data.pincode || initialPincode || '800001',
+          city: data.city || '',
+          state: data.state || '',
+          pincode: data.pincode || initialPincode || '',
           landmark: data.landmark || '',
         });
       } else {
-        setPickerError(data?.error || 'Location not found. Try searching a Patna neighborhood or 6-digit pincode.');
+        setPickerError(data?.error || 'Location not found. Try searching a neighborhood or 6-digit pincode.');
       }
     } catch {
       setPickerError('Unable to reach address search service right now.');
@@ -309,33 +402,41 @@ export const AddressLocationPickerModal: React.FC<AddressLocationPickerModalProp
               <MapPin className="w-10 h-10 text-amber-600 mb-2" />
               <h5 className="font-bold text-stone-800 text-sm">Interactive Delivery Location Selector</h5>
               <p className="text-xs text-stone-500 max-w-sm mt-1">
-                Select your delivery address coordinates using the search bar above or quick preset buttons below.
+                Search your street/PIN above, use GPS, or select an active serviceable delivery zone fetched from the store database.
               </p>
-              <div className="flex flex-wrap justify-center gap-2 mt-3">
-                {[
-                  { name: 'Frazer Road, Patna', pin: '800001', lat: 25.6093, lng: 85.1376 },
-                  { name: 'Kankarbagh, Patna', pin: '800020', lat: 25.5941, lng: 85.1554 },
-                  { name: 'Boring Road, Patna', pin: '800013', lat: 25.6207, lng: 85.1147 },
-                  { name: 'Bailey Road West, Patna', pin: '801503', lat: 25.6144, lng: 85.0486 },
-                ].map((p) => (
-                  <button
-                    key={p.pin}
-                    type="button"
-                    onClick={() => {
-                      setMarkerPos({ lat: p.lat, lng: p.lng });
-                      setResolvedAddress({
-                        addressLine: p.name,
-                        city: 'Patna',
-                        state: 'Bihar',
-                        pincode: p.pin,
-                        landmark: 'Main Road',
-                      });
-                    }}
-                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 hover:border-amber-500 hover:bg-amber-50 text-stone-700 transition cursor-pointer"
-                  >
-                    {p.name} ({p.pin})
-                  </button>
-                ))}
+              <div className="flex flex-wrap justify-center gap-2 mt-3 max-h-36 overflow-y-auto px-1">
+                {isLoadingZones ? (
+                  <div className="flex items-center gap-1.5 text-xs text-stone-500 py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    <span>Fetching active delivery zones...</span>
+                  </div>
+                ) : liveZones.length > 0 ? (
+                  liveZones.map((area) => {
+                    const zoneQuery = [area.areaName, area.city, area.state, area.pincode]
+                      .filter(Boolean)
+                      .join(', ');
+                    const isSelected = resolvedAddress.pincode === area.pincode;
+                    return (
+                      <button
+                        key={area.id}
+                        type="button"
+                        disabled={isGeocoding}
+                        onClick={() => geocodeQueryAndSelect(zoneQuery, area)}
+                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition cursor-pointer disabled:opacity-60 ${
+                          isSelected
+                            ? 'bg-amber-50 border-amber-500 text-amber-900'
+                            : 'bg-white border-stone-300 hover:border-amber-500 hover:bg-amber-50 text-stone-700'
+                        }`}
+                      >
+                        {area.areaName}{area.city ? `, ${area.city}` : ''} ({area.pincode})
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-stone-500 py-2">
+                    No active delivery zones found. Enter your address above or click Use My GPS.
+                  </p>
+                )}
               </div>
             </div>
           )}
