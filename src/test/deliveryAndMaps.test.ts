@@ -51,8 +51,19 @@ test('Delivery hub pincodes including 801503 are serviceable with accurate dynam
   assert.equal(res800020.is30MinDelivery, true);
   assert.equal(res800020.estimatedDeliveryTime, '30-minute delivery');
 
-  const resUnserviceable = evaluateDeliveryEligibility(
+  const res845438 = evaluateDeliveryEligibility(
     '845438',
+    initialDeliveryAreas,
+    250,
+    undefined,
+    initialDeliverySlots
+  );
+  assert.equal(res845438.isDeliverable, true);
+  assert.equal(res845438.deliverabilityStatus, 'Delivery Available');
+  assert.equal(res845438.city, 'Bettiah');
+
+  const resUnserviceable = evaluateDeliveryEligibility(
+    '999999',
     initialDeliveryAreas,
     250,
     undefined,
@@ -89,8 +100,13 @@ test('API delivery check and server-side geocode/reverse-geocode endpoints work 
     const check845438 = await fetch(`${baseUrl}/api/delivery/check?pincode=845438`);
     assert.equal(check845438.status, 200);
     const data845438: any = await check845438.json();
-    assert.equal(data845438.isDeliverable, false);
-    assert.equal(data845438.deliverabilityStatus, 'Currently unavailable in your area');
+    assert.equal(data845438.isDeliverable, true);
+
+    const checkUnserviceable = await fetch(`${baseUrl}/api/delivery/check?pincode=999999`);
+    assert.equal(checkUnserviceable.status, 200);
+    const dataUnserviceable: any = await checkUnserviceable.json();
+    assert.equal(dataUnserviceable.isDeliverable, false);
+    assert.equal(dataUnserviceable.deliverabilityStatus, 'Currently unavailable in your area');
 
     const geocodeRes = await fetch(`${baseUrl}/api/maps/geocode?address=${encodeURIComponent('Patna 800001')}`);
     assert.equal(geocodeRes.status, 200);

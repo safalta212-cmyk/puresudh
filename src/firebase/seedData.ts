@@ -498,6 +498,22 @@ export const SEED_DELIVERY_AREAS: DeliveryArea[] = [
     fastDeliveryAvailable: false,
     active: true,
   },
+  {
+    id: 'area-845438',
+    pincode: '845438',
+    pincodes: ['845438'],
+    areaName: 'Bettiah Central / Kali Bagh & Pujahan Patjirwa',
+    city: 'Bettiah',
+    state: 'Bihar',
+    isDeliverable: true,
+    estimatedTimeMinutes: 35,
+    estimatedDeliveryTime: '30-45 mins',
+    minimumOrder: 99,
+    deliveryCharge: 30,
+    freeDeliveryAbove: 299,
+    fastDeliveryAvailable: true,
+    active: true,
+  },
 ];
 
 export const SEED_DELIVERY_SLOTS: DeliverySlot[] = [

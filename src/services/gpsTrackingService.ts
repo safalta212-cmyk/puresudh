@@ -50,6 +50,7 @@ const PINCODE_COORDS_MAP: Record<string, { lat: number; lng: number }> = {
   '800016': { lat: 25.6188, lng: 85.1258 }, // Rajendra Nagar West
   '800020': { lat: 25.5941, lng: 85.1554 }, // Kankarbagh
   '801503': { lat: 25.6144, lng: 85.0486 }, // Bailey Road West / Saguna More
+  '845438': { lat: 26.8004445, lng: 84.4946816 }, // Bettiah Central / Kali Bagh Colony
   '201301': { lat: 28.5706, lng: 77.3261 }, // Noida Sector 18
   '201309': { lat: 28.6279, lng: 77.3649 }, // Noida Sector 62
   '110001': { lat: 28.6315, lng: 77.2167 }, // Connaught Place

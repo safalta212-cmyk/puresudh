@@ -82,6 +82,18 @@ export const PURE_SUDH_HUBS: HubLocation[] = [
     fastDelivery: false,
     active: true,
   },
+  {
+    id: 'hub-5',
+    name: 'Bettiah Central Dispatch Hub',
+    address: 'Kali Bagh Colony, Bettiah, West Champaran',
+    pincode: '845438',
+    position: { lat: 26.8004445, lng: 84.4946816 },
+    radiusMeters: 6000,
+    phone: '+91 98765 43214',
+    eta: '30-45 mins',
+    fastDelivery: true,
+    active: true,
+  },
 ];
 
 const DEFAULT_CENTER = { lat: 25.612, lng: 85.125 }; // Patna Center
@@ -241,7 +253,7 @@ export const StoreDeliveryCoverageMap: React.FC<{
                 : `Detected PIN ${data.pincode}: Currently outside express zones`
             );
           } else {
-            setUserLocationStatus('Location pinned. Check your nearest active Patna hub.');
+            setUserLocationStatus('Location pinned. Check your nearest active PureSudh hub.');
           }
           setResolvingPin(false);
           return;
@@ -425,12 +437,12 @@ export const StoreDeliveryCoverageMap: React.FC<{
               </div>
               <h5 className="font-bold text-stone-800 text-base">Google Maps Coverage Preview</h5>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Select one of our active Patna dispatch hubs below to check delivery fees and configured ETA for your neighborhood.
+                Select one of our active dispatch hubs below to check delivery fees and configured ETA for your neighborhood.
               </p>
 
               <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-stone-200 text-xs text-stone-700 text-left space-y-1.5 shadow-2xs">
                 <div className="font-semibold text-stone-800 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Active PureSudh Hubs in Patna:
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Active PureSudh Service Hubs:
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   {activeHubs.map((h) => (
@@ -459,7 +471,7 @@ export const StoreDeliveryCoverageMap: React.FC<{
             <div className="font-bold text-stone-800 mb-1 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-amber-600" /> Service Hubs
             </div>
-            <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
               {activeHubs.map((hub) => (
                 <button
                   key={hub.id}
@@ -544,7 +556,7 @@ export const StoreDeliveryCoverageMap: React.FC<{
             <Zap className="w-3.5 h-3.5 fill-emerald-600" />
             {isDeliverable && estimatedDeliveryTime
               ? `Active Zone ETA: ${estimatedDeliveryTime}`
-              : 'Live Patna Hub Network'}
+              : 'Live Bihar Hub Network'}
           </span>
           <span className="text-stone-300">•</span>
           <span className="text-stone-500">Insulated Temperature-Controlled Vans & Bikes</span>

@@ -4330,6 +4330,16 @@ const LOCAL_GEOCODE_DIRECTORY: Array<{
     keywords: ['801503', 'saguna more', 'bailey road west', 'bailey road', 'danapur', 'khagaul', 'rp s more'],
   },
   {
+    pincode: '845438',
+    lat: 26.8004445,
+    lng: 84.4946816,
+    addressLine: 'Kali Bagh Colony, Near Station Chowk',
+    landmark: 'Bettiah Railway Station',
+    city: 'Bettiah',
+    state: 'Bihar',
+    keywords: ['845438', 'bettiah', 'kali bagh', 'pujahan', 'patjirwa', 'west champaran', 'champaran'],
+  },
+  {
     pincode: '110001',
     lat: 28.6315,
     lng: 77.2167,
