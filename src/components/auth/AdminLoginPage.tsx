@@ -70,17 +70,18 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     setFormError(null);
     setResetMessage(null);
 
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setFormError('Please enter your administrative email address.');
       return;
     }
 
     try {
-      const res = await sendPasswordReset(email, 'admin');
+      const res = await sendPasswordReset(cleanEmail, 'admin');
       setResetMessage(res.message);
       showToast('Administrator password reset email sent!', 'success');
     } catch (err: any) {
-      setFormError(err.message || 'Failed to dispatch password reset email.');
+      setFormError(err?.message || 'Failed to dispatch password reset email.');
     }
   };
 
@@ -212,6 +213,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                   onClick={() => {
                     setIsForgotPassword(true);
                     setFormError(null);
+                    setResetMessage(null);
                   }}
                   className="text-[11px] font-semibold text-amber-400 hover:underline"
                 >
@@ -291,7 +293,11 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                   id="admin-forgot-email"
                   type="email"
                   value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFormError(null);
+                    setResetMessage(null);
+                  }}
                   placeholder="Enter admin email address"
                   required
                   className="w-full pl-10 pr-3 py-2.5 bg-stone-800/90 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"

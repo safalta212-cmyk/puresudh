@@ -2876,10 +2876,17 @@ function saveStoredStaff(staffList: ServerStaffRecord[]): void {
 
 function getFirebaseApiKeysForServer(): string[] {
   const keys: string[] = [];
+  const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
   const envKey = process.env.VITE_FIREBASE_API_KEY?.trim();
   const cfgKey = firebaseAppletConfig?.apiKey?.trim();
+  const isCustomProjectOverride = Boolean(
+    envProjectId && envProjectId !== firebaseAppletConfig?.projectId
+  );
+
   if (envKey) keys.push(envKey);
-  if (cfgKey && !keys.includes(cfgKey)) keys.push(cfgKey);
+  if (!isCustomProjectOverride && cfgKey && !keys.includes(cfgKey)) {
+    keys.push(cfgKey);
+  }
   return keys;
 }
 
@@ -2914,13 +2921,20 @@ async function verifyFirebaseIdTokenOnServer(
   return null;
 }
 
-async function ensureFirebaseAuthUserExists(email: string): Promise<{ ensured: boolean; created: boolean }> {
+async function ensureFirebaseAuthUserExists(
+  email: string
+): Promise<{ ensured: boolean; created: boolean; errorCode?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail || cleanEmail.endsWith('@email.com')) {
-    return { ensured: false, created: false };
+    return { ensured: false, created: false, errorCode: 'DEMO_EMAIL' };
+  }
+  const apiKeys = getFirebaseApiKeysForServer();
+  if (apiKeys.length === 0) {
+    return { ensured: false, created: false, errorCode: 'MISSING_API_KEY' };
   }
   const randomPassword = crypto.randomBytes(24).toString('base64url') + '#A1!';
-  for (const apiKey of getFirebaseApiKeysForServer()) {
+  let lastErrorCode = '';
+  for (const apiKey of apiKeys) {
     try {
       const res = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`,
@@ -2942,11 +2956,14 @@ async function ensureFirebaseAuthUserExists(email: string): Promise<{ ensured: b
       if (errMsg === 'EMAIL_EXISTS') {
         return { ensured: true, created: false };
       }
+      if (errMsg) {
+        lastErrorCode = errMsg;
+      }
     } catch {
-      // Continue to next configured key
+      lastErrorCode = 'NETWORK_ERROR';
     }
   }
-  return { ensured: false, created: false };
+  return { ensured: false, created: false, errorCode: lastErrorCode || 'UNKNOWN' };
 }
 
 // Known authoritative role map
@@ -3602,7 +3619,28 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
     const knownRoleEntry = KNOWN_ROLES[cleanEmail];
     const portal = (targetPortal || 'customer') as 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery';
 
-    if (staffEntry?.active === false || storedUser?.active === false) {
+    // Also inspect Firestore staff & users collections so riders/users created directly in Firestore are verified and synced
+    let fsStaffEntry: any = null;
+    let fsUserEntry: any = null;
+    if (!staffEntry && !storedUser && !knownRoleEntry) {
+      const [fsStaffRes, fsUsersRes] = await Promise.allSettled([
+        fetchFirestoreCollectionDocs('staff'),
+        fetchFirestoreCollectionDocs('users'),
+      ]);
+      if (fsStaffRes.status === 'fulfilled') {
+        fsStaffEntry = fsStaffRes.value.find((s: any) => String(s?.email || '').trim().toLowerCase() === cleanEmail) || null;
+      }
+      if (fsUsersRes.status === 'fulfilled') {
+        fsUserEntry = fsUsersRes.value.find((u: any) => String(u?.email || '').trim().toLowerCase() === cleanEmail) || null;
+      }
+    }
+
+    if (
+      staffEntry?.active === false ||
+      storedUser?.active === false ||
+      fsStaffEntry?.active === false ||
+      fsUserEntry?.active === false
+    ) {
       return res.status(403).json({
         success: false,
         exists: true,
@@ -3610,7 +3648,11 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
       });
     }
 
-    if (!staffEntry && !storedUser && !registeredMemUser && !knownRoleEntry) {
+    const foundAnyRecord = Boolean(
+      staffEntry || storedUser || registeredMemUser || knownRoleEntry || fsStaffEntry || fsUserEntry
+    );
+
+    if (!foundAnyRecord) {
       if (portal === 'admin' && cleanEmail !== VALID_ADMIN_EMAIL) {
         return res.status(403).json({
           success: false,
@@ -3618,18 +3660,33 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
           error: 'Access Denied: Only an authorized administrator email can reset the Admin Portal password.',
         });
       }
-      // Allow Firebase Authentication to handle password reset for accounts created directly in Firebase Auth
+      if (portal === 'delivery' || portal === 'staff' || portal === 'vendor') {
+        return res.status(404).json({
+          success: false,
+          exists: false,
+          error: `No registered ${portal} account found for ${cleanEmail}. Please verify your email or contact PureSudh Administration.`,
+        });
+      }
+      // Customer portal may have Firebase-Auth-only users (e.g. when Firestore profile creation was skipped)
       return res.json({
         success: true,
-        exists: true,
-        role: portal === 'admin' ? 'admin' : portal,
+        exists: false,
+        role: 'customer',
         authType: 'firebase',
+        firebaseEnsured: false,
+        accountFoundLocally: false,
       });
     }
 
     const resolvedRole = staffEntry
       ? normalizeStaffPortalRole(staffEntry.role)
-      : storedUser?.role || registeredMemUser?.role || knownRoleEntry?.role || 'customer';
+      : fsStaffEntry
+      ? normalizeStaffPortalRole(fsStaffEntry.role)
+      : storedUser?.role ||
+        (fsUserEntry?.role ? normalizeStaffPortalRole(fsUserEntry.role) : undefined) ||
+        registeredMemUser?.role ||
+        knownRoleEntry?.role ||
+        'customer';
 
     if (portal === 'admin' && resolvedRole !== 'admin') {
       return res.status(403).json({
@@ -3665,7 +3722,7 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
 
     // Built-in @email.com accounts cannot receive real external emails
     if (BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
-      const phone = staffEntry?.phone || storedUser?.phone || '';
+      const phone = staffEntry?.phone || fsStaffEntry?.phone || storedUser?.phone || fsUserEntry?.phone || '';
       return res.json({
         success: true,
         exists: true,
@@ -3675,14 +3732,32 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
       });
     }
 
-    // Ensure Firebase Auth user exists when the staff/delivery account was added via Admin Roster or local JSON
-    await ensureFirebaseAuthUserExists(cleanEmail);
+    // Ensure Firebase Auth user exists when account is verified in local JSON or Firestore
+    const ensureResult = await ensureFirebaseAuthUserExists(cleanEmail);
+    const hasExplicitServerProject = Boolean(
+      process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID
+    );
+    if (
+      hasExplicitServerProject &&
+      (ensureResult.errorCode === 'PASSWORD_LOGIN_DISABLED' ||
+        ensureResult.errorCode === 'OPERATION_NOT_ALLOWED')
+    ) {
+      return res.status(400).json({
+        success: false,
+        exists: true,
+        error:
+          'Email/Password sign-in is disabled in Firebase Authentication for this project. Enable Email/Password under Firebase Console → Authentication → Sign-in method.',
+      });
+    }
 
     return res.json({
       success: true,
       exists: true,
       role: resolvedRole,
       authType: 'firebase',
+      firebaseEnsured: ensureResult.ensured,
+      firebaseCreated: ensureResult.created,
+      accountFoundLocally: true,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, exists: false, error: err.message || 'Password reset validation failed.' });
@@ -3710,6 +3785,7 @@ apiRouter.post('/auth/request-demo-reset', authResetLimiter, (req: Request, res:
 
     const users = loadStoredUsers();
     const user = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
+    const staffMatch = loadStoredStaff().find((s) => (s.email || '').toLowerCase() === cleanEmail);
     if (!user) {
       return res.status(404).json({ success: false, error: 'Demo account record not found.' });
     }
@@ -3725,7 +3801,7 @@ apiRouter.post('/auth/request-demo-reset', authResetLimiter, (req: Request, res:
     }
 
     const submittedDigits = String(phone || '').replace(/\D/g, '').slice(-10);
-    const storedDigits = String(user.phone || '').replace(/\D/g, '').slice(-10);
+    const storedDigits = String(staffMatch?.phone || user.phone || '').replace(/\D/g, '').slice(-10);
 
     if (submittedDigits.length !== 10 || storedDigits.length !== 10) {
       return res.status(400).json({ success: false, error: 'Please enter a valid 10-digit registered mobile number.' });
@@ -3735,7 +3811,7 @@ apiRouter.post('/auth/request-demo-reset', authResetLimiter, (req: Request, res:
     if (!isMatch) {
       return res.status(403).json({
         success: false,
-        error: 'Mobile number does not match the registered rider/staff profile.',
+        error: 'Mobile number does not match the registered profile.',
       });
     }
 

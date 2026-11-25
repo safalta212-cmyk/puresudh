@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -42,6 +43,12 @@ export const AuthModal: React.FC = () => {
   // Status & Feedback messages
   const [formError, setFormError] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  const [demoResetActive, setDemoResetActive] = useState(false);
+  const [maskedPhoneHint, setMaskedPhoneHint] = useState('');
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [submittingReset, setSubmittingReset] = useState(false);
 
   // Keep internal tab synchronized when mode opened from outside
   useEffect(() => {
@@ -52,6 +59,10 @@ export const AuthModal: React.FC = () => {
     } else {
       setActiveTab('login');
     }
+    setDemoResetActive(false);
+    setVerifyPhone('');
+    setNewResetPassword('');
+    setConfirmResetPassword('');
     setFormError(null);
     setResetSuccessMessage(null);
   }, [authModalMode, isAuthModalOpen]);
@@ -142,17 +153,84 @@ export const AuthModal: React.FC = () => {
     e.preventDefault();
     setFormError(null);
     setResetSuccessMessage(null);
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setFormError('Please enter your registered email address.');
       return;
     }
 
     try {
-      const res = await sendPasswordReset(email, targetPortal || 'customer');
+      const res = await sendPasswordReset(cleanEmail, targetPortal || 'customer');
       setResetSuccessMessage(res.message);
-      showToast('Password reset instructions sent!', 'success');
+      if (res.mode === 'demo_phone_reset') {
+        setDemoResetActive(true);
+        setMaskedPhoneHint(res.maskedPhone || 'registered phone');
+        showToast('Verify your registered mobile number to set a new password.', 'info');
+      } else {
+        setDemoResetActive(false);
+        showToast('Password reset instructions processed!', 'success');
+      }
     } catch (err: any) {
-      setFormError(err.message || 'Failed to send password reset email.');
+      setDemoResetActive(false);
+      setFormError(err?.message || 'Failed to send password reset email.');
+    }
+  };
+
+  const handleCompleteDemoReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (newResetPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      const reqRes = await fetch('/api/auth/request-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: verifyPhone.trim(),
+          targetPortal: targetPortal || 'customer',
+        }),
+      });
+      const reqData = await reqRes.json().catch(() => null);
+      if (!reqRes.ok || !reqData?.success || !reqData?.resetToken) {
+        throw new Error(reqData?.error || 'Could not verify registered mobile number.');
+      }
+
+      const compRes = await fetch('/api/auth/complete-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          resetToken: reqData.resetToken,
+          newPassword: newResetPassword,
+        }),
+      });
+      const compData = await compRes.json().catch(() => null);
+      if (!compRes.ok || !compData?.success) {
+        throw new Error(compData?.error || 'Failed to update password.');
+      }
+
+      setDemoResetActive(false);
+      setActiveTab('login');
+      setVerifyPhone('');
+      setNewResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setResetSuccessMessage(compData.message || 'Password updated! Sign in with your new password.');
+      showToast('Password updated! Please sign in.', 'success');
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to complete password reset.');
+    } finally {
+      setSubmittingReset(false);
     }
   };
 
@@ -288,7 +366,9 @@ export const AuthModal: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setActiveTab('forgot-password');
+                    setDemoResetActive(false);
                     setFormError(null);
+                    setResetSuccessMessage(null);
                   }}
                   className="text-[11px] font-semibold text-amber-800 hover:underline"
                 >
@@ -517,57 +597,156 @@ export const AuthModal: React.FC = () => {
         )}
 
         {/* 3. FORGOT PASSWORD FORM */}
-        {activeTab === 'forgot-password' && (
-          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
-            <div className="text-left">
-              <h3 className="font-bold text-sm text-stone-900 mb-1">Reset Your Password</h3>
-              <p className="text-xs text-stone-600 leading-relaxed">
-                Enter your registered customer email address. We will send password reset instructions to your inbox.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
-                <input
-                  id="auth-forgot-email"
-                  type="email"
-                  value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@gmail.com or name@email.com"
-                  required
-                  className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+        {activeTab === 'forgot-password' &&
+          (demoResetActive ? (
+            <form onSubmit={handleCompleteDemoReset} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Registered Mobile ({maskedPhoneHint})
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    id="auth-demo-verify-phone"
+                    type="tel"
+                    value={verifyPhone}
+                    onChange={(e) => {
+                      setVerifyPhone(e.target.value);
+                      setFormError(null);
+                    }}
+                    placeholder="Enter 10-digit registered mobile"
+                    required
+                    className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{isLoading ? 'Sending...' : 'Send Password Reset Link'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <div className="text-center pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  New Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    id="auth-demo-new-password"
+                    type="password"
+                    value={newResetPassword}
+                    onChange={(e) => setNewResetPassword(e.target.value)}
+                    placeholder="Minimum 6 characters"
+                    required
+                    minLength={6}
+                    className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    id="auth-demo-confirm-password"
+                    type="password"
+                    value={confirmResetPassword}
+                    onChange={(e) => setConfirmResetPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    required
+                    minLength={6}
+                    className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
               <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('login');
-                  setFormError(null);
-                  setResetSuccessMessage(null);
-                }}
-                className="text-xs font-semibold text-amber-800 hover:underline"
+                id="auth-demo-reset-submit-btn"
+                type="submit"
+                disabled={submittingReset}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                Back to Sign In
+                <KeyRound className="w-4 h-4" />
+                <span>{submittingReset ? 'Updating Password...' : 'Verify & Update Password'}</span>
               </button>
-            </div>
-          </form>
-        )}
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDemoResetActive(false);
+                    setFormError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className="text-xs font-semibold text-stone-500 hover:text-stone-800 mr-4 cursor-pointer"
+                >
+                  Try Different Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDemoResetActive(false);
+                    setActiveTab('login');
+                    setFormError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className="text-xs font-semibold text-amber-800 hover:underline cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div className="text-left">
+                <h3 className="font-bold text-sm text-stone-900 mb-1">Reset Your Password</h3>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Enter your registered customer email address. We will send password reset instructions to your inbox.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    id="auth-forgot-email"
+                    type="email"
+                    value={email ?? ''}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFormError(null);
+                      setResetSuccessMessage(null);
+                    }}
+                    placeholder="name@gmail.com or name@email.com"
+                    required
+                    className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <span>{isLoading ? 'Sending...' : 'Send Password Reset Link'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('login');
+                    setDemoResetActive(false);
+                    setFormError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className="text-xs font-semibold text-amber-800 hover:underline"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            </form>
+          ))}
       </div>
     </div>
   );

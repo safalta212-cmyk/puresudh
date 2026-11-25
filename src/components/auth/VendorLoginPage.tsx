@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Phone,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -35,6 +37,12 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [demoResetActive, setDemoResetActive] = useState(false);
+  const [maskedPhoneHint, setMaskedPhoneHint] = useState('');
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [submittingReset, setSubmittingReset] = useState(false);
 
   const handleVendorLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,17 +71,84 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
     setFormError(null);
     setResetMessage(null);
 
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setFormError('Please enter your vendor partner email address.');
       return;
     }
 
     try {
-      const res = await sendPasswordReset(email, 'vendor');
+      const res = await sendPasswordReset(cleanEmail, 'vendor');
       setResetMessage(res.message);
-      showToast('Password reset link sent to your vendor email!', 'success');
+      if (res.mode === 'demo_phone_reset') {
+        setDemoResetActive(true);
+        setMaskedPhoneHint(res.maskedPhone || 'registered phone');
+        showToast('Verify your registered mobile number to set a new password.', 'info');
+      } else {
+        setDemoResetActive(false);
+        showToast('Password reset link sent to your vendor email!', 'success');
+      }
     } catch (err: any) {
-      setFormError(err.message || 'Failed to dispatch password reset email.');
+      setDemoResetActive(false);
+      setFormError(err?.message || 'Failed to dispatch password reset email.');
+    }
+  };
+
+  const handleCompleteDemoReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (newResetPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      const reqRes = await fetch('/api/auth/request-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: verifyPhone.trim(),
+          targetPortal: 'vendor',
+        }),
+      });
+      const reqData = await reqRes.json().catch(() => null);
+      if (!reqRes.ok || !reqData?.success || !reqData?.resetToken) {
+        throw new Error(reqData?.error || 'Could not verify registered mobile number.');
+      }
+
+      const compRes = await fetch('/api/auth/complete-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          resetToken: reqData.resetToken,
+          newPassword: newResetPassword,
+        }),
+      });
+      const compData = await compRes.json().catch(() => null);
+      if (!compRes.ok || !compData?.success) {
+        throw new Error(compData?.error || 'Failed to update password.');
+      }
+
+      setDemoResetActive(false);
+      setIsForgotPassword(false);
+      setVerifyPhone('');
+      setNewResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setResetMessage(compData.message || 'Password updated! Sign in with your new password.');
+      showToast('Vendor password updated!', 'success');
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to complete password reset.');
+    } finally {
+      setSubmittingReset(false);
     }
   };
 
@@ -166,7 +241,9 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
                   type="button"
                   onClick={() => {
                     setIsForgotPassword(true);
+                    setDemoResetActive(false);
                     setFormError(null);
+                    setResetMessage(null);
                   }}
                   className="text-[11px] font-semibold text-amber-800 hover:underline"
                 >
@@ -227,6 +304,99 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
               </button>
             </div>
           </form>
+        ) : demoResetActive ? (
+          <form onSubmit={handleCompleteDemoReset} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Registered Partner Mobile ({maskedPhoneHint})
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="vendor-demo-verify-phone"
+                  type="tel"
+                  value={verifyPhone}
+                  onChange={(e) => {
+                    setVerifyPhone(e.target.value);
+                    setFormError(null);
+                  }}
+                  placeholder="Enter 10-digit registered mobile"
+                  required
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="vendor-demo-new-password"
+                  type="password"
+                  value={newResetPassword}
+                  onChange={(e) => setNewResetPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="vendor-demo-confirm-password"
+                  type="password"
+                  value={confirmResetPassword}
+                  onChange={(e) => setConfirmResetPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <button
+              id="vendor-demo-reset-submit-btn"
+              type="submit"
+              disabled={submittingReset}
+              className="w-full bg-amber-800 hover:bg-amber-900 text-white font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>{submittingReset ? 'Updating Password...' : 'Verify & Update Password'}</span>
+            </button>
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoResetActive(false);
+                  setFormError(null);
+                  setResetMessage(null);
+                }}
+                className="text-xs font-semibold text-stone-500 hover:text-stone-800 mr-4 cursor-pointer"
+              >
+                Try Different Email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoResetActive(false);
+                  setIsForgotPassword(false);
+                  setFormError(null);
+                  setResetMessage(null);
+                }}
+                className="text-xs font-semibold text-stone-500 hover:text-stone-800 cursor-pointer"
+              >
+                Back to Vendor Sign In
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <p className="text-xs text-stone-600 leading-relaxed">
@@ -243,7 +413,11 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
                   id="vendor-forgot-email"
                   type="email"
                   value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFormError(null);
+                    setResetMessage(null);
+                  }}
                   placeholder="vendor@email.com"
                   required
                   className="w-full pl-10 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -265,6 +439,7 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
                 type="button"
                 onClick={() => {
                   setIsForgotPassword(false);
+                  setDemoResetActive(false);
                   setFormError(null);
                   setResetMessage(null);
                 }}

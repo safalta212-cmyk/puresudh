@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, Plugin} from 'vite';
+import {defineConfig, loadEnv, Plugin} from 'vite';
 import express from 'express';
 import {apiRouter} from './src/api/serverApi';
 
@@ -19,7 +19,13 @@ function apiPlugin(): Plugin {
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const loadedEnv = loadEnv(mode, process.cwd(), 'VITE_');
+  for (const [key, value] of Object.entries(loadedEnv)) {
+    if (value && !process.env[key]) {
+      process.env[key] = value;
+    }
+  }
   return {
     plugins: [react(), tailwindcss(), apiPlugin()],
     build: {

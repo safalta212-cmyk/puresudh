@@ -53,6 +53,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,11 +138,30 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
     }
 
     setIsSendingReset(true);
+    setPasswordError(null);
+    setResetNotice(null);
     try {
-      const res = await sendPasswordReset(user.email);
-      showToast(res.message || `Password reset link sent to ${user.email}`, 'success');
+      const portal =
+        user.role === 'admin' ||
+        user.role === 'staff' ||
+        user.role === 'vendor' ||
+        user.role === 'delivery'
+          ? user.role
+          : 'customer';
+      const res = await sendPasswordReset(user.email, portal);
+      if (res.mode === 'demo_phone_reset') {
+        const msg =
+          'Built-in @email.com accounts do not receive external emails. Enter your new password in the "Update Password" form above.';
+        setResetNotice(msg);
+        showToast(msg, 'info');
+      } else {
+        const msg = res.message || `Password reset link sent to ${user.email}`;
+        setResetNotice(msg);
+        showToast(msg, 'success');
+      }
     } catch (err: any) {
-      showToast(err.message || 'Failed to send reset email.', 'error');
+      setPasswordError(err?.message || 'Failed to send reset email.');
+      showToast(err?.message || 'Failed to send reset email.', 'error');
     } finally {
       setIsSendingReset(false);
     }
@@ -388,17 +408,24 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
               )}
             </button>
 
-            <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
-              <span className="text-[11px] text-stone-500">Need to reset via email?</span>
-              <button
-                type="button"
-                onClick={handleSendResetEmail}
-                disabled={isSendingReset}
-                className="text-[11px] font-bold text-amber-800 hover:text-amber-900 transition flex items-center gap-1 cursor-pointer"
-              >
-                <Key className="w-3 h-3" />
-                Send Reset Email
-              </button>
+            <div className="pt-2 border-t border-stone-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-stone-500">Need to reset via email?</span>
+                <button
+                  type="button"
+                  onClick={handleSendResetEmail}
+                  disabled={isSendingReset}
+                  className="text-[11px] font-bold text-amber-800 hover:text-amber-900 transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Key className="w-3 h-3" />
+                  {isSendingReset ? 'Sending...' : 'Send Reset Email'}
+                </button>
+              </div>
+              {resetNotice && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-snug">
+                  {resetNotice}
+                </div>
+              )}
             </div>
           </form>
         </div>

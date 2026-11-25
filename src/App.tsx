@@ -44,6 +44,7 @@ import { AdminLoginPage } from './components/auth/AdminLoginPage';
 import { StaffLoginPage } from './components/auth/StaffLoginPage';
 import { DeliveryLoginPage } from './components/auth/DeliveryLoginPage';
 import { VendorLoginPage } from './components/auth/VendorLoginPage';
+import { PasswordResetActionModal } from './components/auth/PasswordResetActionModal';
 import { AnnouncementBar } from './components/ui';
 import { BRAND } from './constants';
 
@@ -1035,6 +1036,7 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const renderActiveView = () => {
   // Dedicated Separate Authentication Pages
   if (currentView === 'customer-login' || currentView === 'customer-register') {
     return (
@@ -1324,6 +1326,14 @@ const AppContent: React.FC = () => {
         />
       )}
     </div>
+  );
+  };
+
+  return (
+    <>
+      {renderActiveView()}
+      <PasswordResetActionModal disabled={currentView === 'delivery-login'} />
+    </>
   );
 };
 

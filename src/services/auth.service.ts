@@ -399,7 +399,7 @@ export function verifyRoleAccess(
 export async function sendPasswordReset(
   email: string,
   targetPortal: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer'
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; mode?: 'firebase_email' | 'demo_phone_reset'; maskedPhone?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail) {
     throw new Error('Please provide an email address.');
@@ -408,6 +408,11 @@ export async function sendPasswordReset(
   if (!emailRegex.test(cleanEmail)) {
     throw new Error('Please enter a valid email address.');
   }
+
+  let serverAuthType: 'firebase' | 'demo_local' | undefined;
+  let maskedPhone: string | undefined;
+  let serverAccountExists = false;
+  let firebaseEnsured = false;
 
   try {
     const valRes = await fetch('/api/auth/forgot-password-validate', {
@@ -421,10 +426,59 @@ export async function sendPasswordReset(
       if (!valRes.ok || !valData?.success) {
         throw new Error(valData?.error || 'No registered account found with this email address.');
       }
+      serverAuthType = valData.authType;
+      maskedPhone = valData.maskedPhone;
+      serverAccountExists = Boolean(valData.exists);
+      firebaseEnsured = Boolean(valData.firebaseEnsured);
     }
   } catch (err: any) {
     if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
       throw err;
+    }
+  }
+
+  if (serverAuthType === 'demo_local') {
+    return {
+      success: true,
+      mode: 'demo_phone_reset',
+      maskedPhone,
+      message: `Verified account (${cleanEmail}). Verify your registered mobile number (${maskedPhone || 'registered phone'}) in the login portal to reset your password.`,
+    };
+  }
+
+  if (serverAccountExists && !firebaseEnsured && resolvedFirebaseConfig.apiKey) {
+    try {
+      const randomBytes = new Uint8Array(24);
+      if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+        window.crypto.getRandomValues(randomBytes);
+      }
+      const randomPass =
+        Array.from(randomBytes, (b) => b.toString(16).padStart(2, '0')).join('') + '#A1!';
+      const signUpRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(
+          resolvedFirebaseConfig.apiKey
+        )}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: randomPass,
+            returnSecureToken: false,
+          }),
+        }
+      );
+      if (!signUpRes.ok) {
+        const errJson = await signUpRes.json().catch(() => null);
+        const errMsg = String(errJson?.error?.message || '');
+        if (errMsg === 'PASSWORD_LOGIN_DISABLED' || errMsg === 'OPERATION_NOT_ALLOWED') {
+          throw new Error(formatFirebaseAuthError({ code: 'auth/operation-not-allowed' }));
+        }
+      }
+    } catch (syncErr: any) {
+      if (syncErr?.message?.includes('auth/operation-not-allowed')) {
+        throw syncErr;
+      }
     }
   }
 
@@ -464,7 +518,10 @@ export async function sendPasswordReset(
     }
     return {
       success: true,
-      message: `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
+      mode: 'firebase_email',
+      message: serverAccountExists
+        ? `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`
+        : `If a password-based account exists for ${cleanEmail}, reset instructions have been sent to your inbox/spam folder.`,
     };
   } catch (err: any) {
     throw new Error(formatFirebaseAuthError(err));

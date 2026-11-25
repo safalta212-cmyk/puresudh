@@ -14,7 +14,7 @@ import {
   browserLocalPersistence,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { auth, db, stripUndefinedFields } from '../firebase/config';
+import { auth, db, resolvedFirebaseConfig, stripUndefinedFields } from '../firebase/config';
 import { UserProfile, UserRole, Address } from '../types';
 import { COLLECTIONS } from '../constants';
 import {
@@ -1293,6 +1293,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Authoritative server verification when Express backend is running
       let serverAuthType: 'firebase' | 'demo_local' | undefined;
       let maskedPhone: string | undefined;
+      let serverAccountExists = false;
+      let firebaseEnsured = false;
 
       try {
         const valRes = await fetch('/api/auth/forgot-password-validate', {
@@ -1308,6 +1310,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           serverAuthType = valData.authType;
           maskedPhone = valData.maskedPhone;
+          serverAccountExists = Boolean(valData.exists);
+          firebaseEnsured = Boolean(valData.firebaseEnsured);
         }
       } catch (err: any) {
         if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
@@ -1320,8 +1324,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           success: true,
           mode: 'demo_phone_reset',
           maskedPhone,
-          message: `Verified fleet account (${cleanEmail}). Because @email.com is a built-in demo address without external email delivery, verify the registered mobile number (${maskedPhone || '********04'}) below to set a new password.`,
+          message: `Verified account (${cleanEmail}). Because @email.com is a built-in demo address without external email delivery, verify the registered mobile number (${maskedPhone || '********'}) below to set a new password.`,
         };
+      }
+
+      // If account was verified in DB/roster but backend lacked the active Firebase API key to sync,
+      // provision/confirm the Firebase Auth Email/Password record statelessly without disturbing current session.
+      if (serverAccountExists && !firebaseEnsured && resolvedFirebaseConfig.apiKey) {
+        try {
+          const randomBytes = new Uint8Array(24);
+          if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+            window.crypto.getRandomValues(randomBytes);
+          }
+          const randomPass =
+            Array.from(randomBytes, (b) => b.toString(16).padStart(2, '0')).join('') + '#A1!';
+          const signUpRes = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(
+              resolvedFirebaseConfig.apiKey
+            )}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: cleanEmail,
+                password: randomPass,
+                returnSecureToken: false,
+              }),
+            }
+          );
+          if (!signUpRes.ok) {
+            const errJson = await signUpRes.json().catch(() => null);
+            const errMsg = String(errJson?.error?.message || '');
+            if (errMsg === 'PASSWORD_LOGIN_DISABLED' || errMsg === 'OPERATION_NOT_ALLOWED') {
+              throw new Error(
+                formatFirebaseAuthError({ code: 'auth/operation-not-allowed' })
+              );
+            }
+          }
+        } catch (syncErr: any) {
+          if (syncErr?.message?.includes('auth/operation-not-allowed')) {
+            throw syncErr;
+          }
+        }
       }
 
       const portalRouteMap: Record<string, string> = {
@@ -1362,7 +1406,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return {
           success: true,
           mode: 'firebase_email',
-          message: `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete reset.`,
+          message: serverAccountExists
+            ? `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete the reset. (If you originally signed in with Google, use "Continue with Google".)`
+            : `If a password-based account is registered for ${cleanEmail}, a reset link has been sent to your inbox/spam folder. If you signed in with Google or have not registered yet, please use Google Sign-In or Create Account.`,
         };
       } catch (err: any) {
         throw new Error(formatFirebaseAuthError(err));

@@ -22,49 +22,106 @@ async function withServer(fn: (baseUrl: string) => Promise<void>) {
 }
 
 test('Delivery forgot-password validation enforces RBAC, disposable-email rejection, and portal isolation', async () => {
-  await withServer(async (baseUrl) => {
-    // 1. Disposable emails blocked
-    const tempRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'rider@mailinator.com', targetPortal: 'delivery' }),
-    });
-    assert.equal(tempRes.status, 403);
+  const staffFile = path.resolve(process.cwd(), 'data', 'staff.json');
+  const staffExisted = fs.existsSync(staffFile);
+  const staffBackup = staffExisted ? fs.readFileSync(staffFile, 'utf-8') : null;
 
-    // 2. Customer email rejected on delivery portal
-    const custRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'customer@email.com', targetPortal: 'delivery' }),
-    });
-    assert.equal(custRes.status, 403);
-    const custJson = await custRes.json();
-    assert.equal(custJson.success, false);
+  try {
+    await withServer(async (baseUrl) => {
+      // 1. Disposable emails blocked
+      const tempRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'rider@mailinator.com', targetPortal: 'delivery' }),
+      });
+      assert.equal(tempRes.status, 403);
 
-    // 3. Registered built-in fleet rider allowed and returns demo_local mode
-    const delRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'delivery@email.com', targetPortal: 'delivery' }),
-    });
-    assert.equal(delRes.status, 200);
-    const delJson = await delRes.json();
-    assert.equal(delJson.success, true);
-    assert.equal(delJson.role, 'delivery');
-    assert.equal(delJson.authType, 'demo_local');
-    assert.equal(delJson.maskedPhone, '******2804');
+      // 2. Customer email rejected on delivery portal
+      const custRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'customer@email.com', targetPortal: 'delivery' }),
+      });
+      assert.equal(custRes.status, 403);
+      const custJson = await custRes.json();
+      assert.equal(custJson.success, false);
 
-    // 4. Real-domain Firebase delivery candidate returns firebase authType
-    const fbRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'rider.patna@gmail.com', targetPortal: 'delivery' }),
+      // 3. Unregistered email rejected on restricted delivery portal (404)
+      const unknownRiderRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'unregistered.rider@gmail.com', targetPortal: 'delivery' }),
+      });
+      assert.equal(unknownRiderRes.status, 404);
+      const unknownRiderJson = await unknownRiderRes.json();
+      assert.equal(unknownRiderJson.success, false);
+      assert.equal(unknownRiderJson.exists, false);
+
+      // 4. Unregistered email on customer portal returns accountFoundLocally: false
+      const unknownCustRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'unregistered.cust@gmail.com', targetPortal: 'customer' }),
+      });
+      assert.equal(unknownCustRes.status, 200);
+      const unknownCustJson = await unknownCustRes.json();
+      assert.equal(unknownCustJson.success, true);
+      assert.equal(unknownCustJson.exists, false);
+      assert.equal(unknownCustJson.accountFoundLocally, false);
+
+      // 5. Registered built-in fleet rider allowed and returns demo_local mode
+      const delRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'delivery@email.com', targetPortal: 'delivery' }),
+      });
+      assert.equal(delRes.status, 200);
+      const delJson = await delRes.json();
+      assert.equal(delJson.success, true);
+      assert.equal(delJson.role, 'delivery');
+      assert.equal(delJson.authType, 'demo_local');
+      assert.equal(delJson.maskedPhone, '******2804');
+
+      // 6. Registered real-domain delivery staff in roster returns firebase authType
+      fs.mkdirSync(path.dirname(staffFile), { recursive: true });
+      fs.writeFileSync(
+        staffFile,
+        JSON.stringify(
+          [
+            {
+              id: 'stf-patna-test',
+              name: 'Patna Rider',
+              email: 'rider.patna@gmail.com',
+              phone: '+91 9876543210',
+              role: 'Delivery',
+              active: true,
+            },
+          ],
+          null,
+          2
+        ),
+        'utf-8'
+      );
+
+      const fbRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'rider.patna@gmail.com', targetPortal: 'delivery' }),
+      });
+      assert.equal(fbRes.status, 200);
+      const fbJson = await fbRes.json();
+      assert.equal(fbJson.success, true);
+      assert.equal(fbJson.role, 'delivery');
+      assert.equal(fbJson.authType, 'firebase');
+      assert.equal(fbJson.accountFoundLocally, true);
     });
-    assert.equal(fbRes.status, 200);
-    const fbJson = await fbRes.json();
-    assert.equal(fbJson.success, true);
-    assert.equal(fbJson.authType, 'firebase');
-  });
+  } finally {
+    if (staffExisted && staffBackup !== null) {
+      fs.writeFileSync(staffFile, staffBackup, 'utf-8');
+    } else if (!staffExisted && fs.existsSync(staffFile)) {
+      fs.unlinkSync(staffFile);
+    }
+  }
 });
 
 test('Admin staff sync rejects unauthenticated calls', async () => {
