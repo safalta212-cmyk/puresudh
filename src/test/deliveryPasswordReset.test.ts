@@ -237,3 +237,108 @@ test('Verified delivery demo reset verifies mobile, rotates hash, invalidates ol
     }
   }
 });
+
+test('Delivery verify-role authorizes admin and active delivery staff while rejecting arbitrary prefixes and inactive riders', async () => {
+  const staffFile = path.resolve(process.cwd(), 'data', 'staff.json');
+  const staffExisted = fs.existsSync(staffFile);
+  const staffBackup = staffExisted ? fs.readFileSync(staffFile, 'utf-8') : null;
+
+  try {
+    await withServer(async (baseUrl) => {
+      // 1. Reject arbitrary delivery.* prefix email (no email-prefix privilege escalation)
+      const prefixAttempt = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'delivery.random999@gmail.com', requestedPortal: 'delivery' }),
+      });
+      assert.equal(prefixAttempt.status, 403);
+      const prefixJson = await prefixAttempt.json();
+      assert.equal(prefixJson.authorized, false);
+      assert.equal(prefixJson.role, 'customer');
+
+      // 2. Reject forged admin role claim on non-admin email
+      const spoofedAdmin = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'random.user@gmail.com', role: 'admin', requestedPortal: 'delivery' }),
+      });
+      assert.equal(spoofedAdmin.status, 403);
+      const spoofedJson = await spoofedAdmin.json();
+      assert.equal(spoofedJson.authorized, false);
+
+      // 3. Reject invalid Bearer token
+      const badToken = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer invalid.token.value',
+        },
+        body: JSON.stringify({ email: 'aanews70@gmail.com', requestedPortal: 'delivery' }),
+      });
+      assert.equal(badToken.status, 401);
+
+      // 4. Authorize admin Google account for delivery hub
+      const adminRes = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'aanews70@gmail.com', requestedPortal: 'delivery' }),
+      });
+      assert.equal(adminRes.status, 200);
+      const adminJson = await adminRes.json();
+      assert.equal(adminJson.authorized, true);
+      assert.equal(adminJson.role, 'admin');
+
+      // 5. Authorize active delivery rider in staff roster, reject when deactivated
+      fs.mkdirSync(path.dirname(staffFile), { recursive: true });
+      fs.writeFileSync(
+        staffFile,
+        JSON.stringify(
+          [
+            {
+              id: 'stf-google-active',
+              name: 'Google Active Rider',
+              email: 'active.rider.google@gmail.com',
+              role: 'Delivery',
+              active: true,
+            },
+            {
+              id: 'stf-google-inactive',
+              name: 'Disabled Rider',
+              email: 'disabled.rider.google@gmail.com',
+              role: 'Delivery',
+              active: false,
+            },
+          ],
+          null,
+          2
+        ),
+        'utf-8'
+      );
+
+      const activeRider = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'active.rider.google@gmail.com', requestedPortal: 'delivery' }),
+      });
+      assert.equal(activeRider.status, 200);
+      const activeJson = await activeRider.json();
+      assert.equal(activeJson.authorized, true);
+      assert.equal(activeJson.role, 'delivery');
+
+      const disabledRider = await fetch(`${baseUrl}/api/auth/verify-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'disabled.rider.google@gmail.com', requestedPortal: 'delivery' }),
+      });
+      assert.equal(disabledRider.status, 403);
+      const disabledJson = await disabledRider.json();
+      assert.equal(disabledJson.authorized, false);
+    });
+  } finally {
+    if (staffExisted && staffBackup !== null) {
+      fs.writeFileSync(staffFile, staffBackup, 'utf-8');
+    } else if (!staffExisted && fs.existsSync(staffFile)) {
+      fs.unlinkSync(staffFile);
+    }
+  }
+});

@@ -3434,20 +3434,14 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
 
     // Determine authoritative role
     let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer';
-    if (staffMatch) {
+    if (staffMatch && staffMatch.active !== false) {
       resolvedRole = normalizeStaffPortalRole(staffMatch.role);
-    } else if (storedMatch) {
+    } else if (storedMatch && storedMatch.active !== false) {
       resolvedRole = storedMatch.role;
     } else if (KNOWN_ROLES[cleanEmail]) {
       resolvedRole = KNOWN_ROLES[cleanEmail].role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';
-    } else if (cleanEmail.startsWith('delivery')) {
-      resolvedRole = 'delivery';
-    } else if (cleanEmail.startsWith('staff')) {
-      resolvedRole = 'staff';
-    } else if (cleanEmail.startsWith('vendor')) {
-      resolvedRole = 'vendor';
     }
 
     // Portal Authorization Validation
@@ -3956,30 +3950,74 @@ apiRouter.post('/auth/complete-demo-reset', authResetLimiter, (req: Request, res
  * Checks whether user has permission to access the requested portal.
  * If unauthorized, returns the user's appropriate dashboard URL for redirection.
  */
-apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
+apiRouter.post('/auth/verify-role', async (req: Request, res: Response) => {
   try {
-    const { email, role, requestedPortal } = req.body;
-    const cleanEmail = (email || '').trim().toLowerCase();
+    const { email, role, requestedPortal } = req.body || {};
+    const authHeader = String(req.headers.authorization || '');
+    let cleanEmail = (email || '').trim().toLowerCase();
 
-    const staffMatch = cleanEmail ? loadStoredStaff().find((s) => (s.email || '').toLowerCase() === cleanEmail) : undefined;
-    const storedMatch = cleanEmail ? loadStoredUsers().find((u) => (u.email || '').toLowerCase() === cleanEmail) : undefined;
+    if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      const verifiedCaller = await verifyFirebaseIdTokenOnServer(token);
+      if (!verifiedCaller) {
+        return res.status(401).json({
+          authorized: false,
+          error: 'Invalid or expired authentication token.',
+        });
+      }
+      cleanEmail = verifiedCaller.email;
+    }
 
-    // Determine authoritative role
-    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = (role as any) || 'customer';
-    if (staffMatch && staffMatch.active !== false) {
-      resolvedRole = normalizeStaffPortalRole(staffMatch.role);
-    } else if (storedMatch && storedMatch.active !== false) {
-      resolvedRole = storedMatch.role;
-    } else if (cleanEmail && KNOWN_ROLES[cleanEmail]) {
-      resolvedRole = KNOWN_ROLES[cleanEmail].role;
+    if (!cleanEmail) {
+      return res.status(400).json({
+        authorized: false,
+        error: 'Email or verified authentication token is required.',
+      });
+    }
+
+    const emailCheck = isTemporaryEmail(cleanEmail);
+    if (emailCheck.isTemporary) {
+      return res.status(403).json({
+        authorized: false,
+        role: 'customer',
+        redirectUrl: '/account',
+        message: emailCheck.reason || 'Temporary or disposable email addresses are not permitted.',
+      });
+    }
+
+    const staffMatch = loadStoredStaff().find((s) => (s.email || '').toLowerCase() === cleanEmail);
+    const storedMatch = loadStoredUsers().find((u) => (u.email || '').toLowerCase() === cleanEmail);
+    const knownEntry = KNOWN_ROLES[cleanEmail];
+    const target = requestedPortal || 'customer';
+
+    // Determine authoritative role (never infer privilege from email prefixes or spoofed admin claim)
+    let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer';
+    if (staffMatch) {
+      resolvedRole = staffMatch.active === false ? 'customer' : normalizeStaffPortalRole(staffMatch.role);
+    } else if (storedMatch) {
+      resolvedRole = storedMatch.active === false ? 'customer' : storedMatch.role;
+    } else if (knownEntry) {
+      resolvedRole = knownEntry.role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';
-    } else if (cleanEmail.startsWith('delivery')) {
-      resolvedRole = 'delivery';
-    } else if (cleanEmail.startsWith('staff')) {
-      resolvedRole = 'staff';
-    } else if (cleanEmail.startsWith('vendor')) {
-      resolvedRole = 'vendor';
+    } else if (role === 'staff' || role === 'delivery' || role === 'vendor') {
+      resolvedRole = role;
+    } else if (
+      (target === 'delivery' || target === 'staff' || target === 'vendor') &&
+      (!role || role === 'customer')
+    ) {
+      // Check Firestore roster if readable and not cached in local JSON yet
+      try {
+        const fsStaffRes = await fetchFirestoreCollectionResult('staff');
+        const fsStaffEntry = fsStaffRes.docs.find(
+          (s: any) => String(s?.email || '').trim().toLowerCase() === cleanEmail
+        );
+        if (fsStaffEntry && fsStaffEntry.active !== false) {
+          resolvedRole = normalizeStaffPortalRole(fsStaffEntry.role);
+        }
+      } catch {
+        // Ignore Firestore lookup error
+      }
     }
 
     const dashboardMap: Record<string, string> = {
@@ -3990,7 +4028,6 @@ apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
       customer: '/account',
     };
 
-    const target = requestedPortal || 'customer';
     let isAuthorized = false;
 
     if (target === 'admin') {

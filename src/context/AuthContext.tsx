@@ -281,7 +281,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.role]);
 
   // Load user profile from Firestore when Firebase Auth state changes
-  const syncFirebaseUser = useCallback(async (fbUser: FirebaseUser | null): Promise<UserProfile | null> => {
+  const syncFirebaseUser = useCallback(async (
+    fbUser: FirebaseUser | null,
+    verifiedRoleOverride?: UserRole
+  ): Promise<UserProfile | null> => {
     if (!fbUser) return null;
     try {
       const [claims, hasAdminDoc] = await Promise.all([
@@ -312,8 +315,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (raw) localCached = JSON.parse(raw);
       } catch {}
 
+      let effRole = resolveEffectiveRole(
+        claims,
+        snapExists ? firestoreData.role : undefined,
+        fbUser.email,
+        hasAdminDoc
+      );
+
+      if (effRole === 'customer') {
+        if (verifiedRoleOverride && verifiedRoleOverride !== 'customer') {
+          effRole = verifiedRoleOverride;
+        } else if (
+          fbUser.email &&
+          localCached?.role &&
+          localCached.role !== 'customer' &&
+          localCached.email?.trim().toLowerCase() === fbUser.email.trim().toLowerCase()
+        ) {
+          try {
+            const idToken = await fbUser.getIdToken().catch(() => '');
+            const verifyRes = await fetch('/api/auth/verify-role', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+              },
+              body: JSON.stringify({
+                email: fbUser.email,
+                requestedPortal: localCached.role,
+              }),
+            });
+            const ct = verifyRes.headers.get('content-type') || '';
+            if (verifyRes.ok && ct.includes('application/json')) {
+              const verifyData = await verifyRes.json().catch(() => null);
+              if (verifyData?.authorized && verifyData?.role) {
+                effRole = verifyData.role;
+              }
+            }
+          } catch {
+            // Static / offline mode fallback
+          }
+        }
+      }
+
       if (snapExists) {
-        const effRole = resolveEffectiveRole(claims, firestoreData.role, fbUser.email, hasAdminDoc);
         const fullProfile: UserProfile = {
           id: fbUser.uid,
           uid: fbUser.uid,
@@ -353,7 +397,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return fullProfile;
       } else {
         // First-time profile creation in Firestore
-        const effRole = resolveEffectiveRole(claims, undefined, fbUser.email, hasAdminDoc);
         const newProfile: UserProfile = {
           id: fbUser.uid,
           uid: fbUser.uid,
@@ -373,8 +416,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               await fbUser.getIdToken(true);
             } catch {}
           }
-          const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
-          await setDoc(userRef, stripUndefinedFields(newProfile), { merge: true });
+          // Non-admin owners are restricted by Firestore rules to creating customer/vendor roles
+          if (effRole === 'customer' || effRole === 'vendor' || effRole === 'admin') {
+            const userRef = doc(db, COLLECTIONS.USERS, fbUser.uid);
+            await setDoc(userRef, stripUndefinedFields(newProfile), { merge: true });
+          }
           if (effRole === 'admin' && !hasAdminDoc) {
             await setDoc(
               doc(db, 'admins', fbUser.uid),
@@ -1516,12 +1562,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch {}
 
-      const effectiveRole = resolveEffectiveRole(
+      let effectiveRole = resolveEffectiveRole(
         claims,
         firestoreData.role,
         cred.user.email,
         hasAdminDoc
       );
+
+      if (
+        effectiveRole === 'customer' &&
+        (target === 'delivery' || target === 'staff' || target === 'vendor') &&
+        cred.user.email
+      ) {
+        try {
+          const idToken = await cred.user.getIdToken().catch(() => '');
+          const verifyRes = await fetch('/api/auth/verify-role', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({
+              email: cred.user.email,
+              requestedPortal: target,
+            }),
+          });
+          const ct = verifyRes.headers.get('content-type') || '';
+          if (verifyRes.ok && ct.includes('application/json')) {
+            const verifyData = await verifyRes.json().catch(() => null);
+            if (verifyData?.authorized && verifyData?.role) {
+              effectiveRole = verifyData.role;
+            }
+          }
+        } catch {
+          // Ignore network error in static mode
+        }
+      }
 
       if (target && !verifyRoleAccess(effectiveRole, target)) {
         await signOut(auth).catch(() => {});
@@ -1532,7 +1608,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       hadFirebaseUserRef.current = true;
-      const syncedProfile = await syncFirebaseUser(cred.user);
+      const syncedProfile = await syncFirebaseUser(cred.user, effectiveRole);
       closeAuthModal();
       return { success: true, profile: syncedProfile || undefined };
     } catch (err: any) {
