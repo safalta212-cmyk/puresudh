@@ -83,7 +83,7 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
         showToast('Verify your registered mobile number to set a new password.', 'info');
       } else {
         setDemoResetActive(false);
-        showToast('Password reset link sent to your staff email!', 'success');
+        showToast('Password reset instructions processed!', 'success');
       }
     } catch (err: any) {
       setDemoResetActive(false);
@@ -238,7 +238,9 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
                   type="button"
                   onClick={() => {
                     setIsForgotPassword(true);
+                    setDemoResetActive(false);
                     setFormError(null);
+                    setResetMessage(null);
                   }}
                   className="text-[11px] font-semibold text-emerald-400 hover:underline"
                 >

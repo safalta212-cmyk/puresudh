@@ -1,5 +1,104 @@
 [
   {
+    "clickId": "click-1795589245998-2894e5",
+    "campaignId": "camp-vendor-1-mwvrh5ak-5209",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-fraud-test",
+    "timestamp": "2026-11-25T06:47:25.986Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:25.986Z"
+  },
+  {
+    "clickId": "click-1795589245934-06da58",
+    "campaignId": "camp-vendor-2-iso-1795589245889",
+    "vendorId": "vendor-2",
+    "productId": "prod-fresh-paneer",
+    "customerId": "cust-cpc-sec-1795589245922",
+    "timestamp": "2026-11-25T06:47:25.923Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:25.923Z"
+  },
+  {
+    "clickId": "click-1795589239717-fbd338",
+    "campaignId": "camp-sp-test-1795589239241",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-rapid-fraudster",
+    "timestamp": "2026-11-25T06:47:19.703Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:19.703Z"
+  },
+  {
+    "clickId": "click-1795589239701-5fe0c0",
+    "campaignId": "camp-sp-test-1795589239241",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-sponsored-shopper",
+    "timestamp": "2026-11-25T06:47:19.689Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:19.689Z"
+  },
+  {
+    "clickId": "click-1795589237545-d9fa62",
+    "campaignId": "camp-vendor-1-mwvrgyr1-ad77",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-rapid-clicker",
+    "timestamp": "2026-11-25T06:47:17.533Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:17.533Z"
+  },
+  {
+    "clickId": "click-1795589237529-75b5d0",
+    "campaignId": "camp-vendor-1-mwvrgyr1-ad77",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-idem-user",
+    "timestamp": "2026-11-25T06:47:17.519Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:17.519Z"
+  },
+  {
+    "clickId": "click-1795589237510-b519c8",
+    "campaignId": "camp-vendor-1-mwvrgyr1-ad77",
+    "vendorId": "vendor-1",
+    "productId": "prod-thekua-traditional",
+    "customerId": "cust-aarav-test",
+    "timestamp": "2026-11-25T06:47:17.499Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T06:47:17.499Z"
+  },
+  {
+    "clickId": "click-expired-window-1795589235538",
+    "campaignId": "camp-attr-test-1795589235524",
+    "vendorId": "vendor-1",
+    "productId": "prod-expired-window-item",
+    "customerId": "cust-old-clicker",
+    "timestamp": "2026-11-10T06:47:15.524Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-10T06:47:15.524Z"
+  },
+  {
+    "clickId": "click-phase7-1795589235529",
+    "campaignId": "camp-attr-test-1795589235524",
+    "vendorId": "vendor-1",
+    "productId": "prod-desi-ghee-thekua",
+    "customerId": "cust-attribution-user",
+    "timestamp": "2026-11-25T04:47:15.524Z",
+    "validationStatus": "VALID",
+    "chargeable": true,
+    "createdAt": "2026-11-25T04:47:15.524Z"
+  },
+  {
     "clickId": "click-1795583864657-8d50b8",
     "campaignId": "camp-vendor-1-mwvo9szs-bb59",
     "vendorId": "vendor-1",

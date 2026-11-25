@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { auth } from '../../firebase/config';
 import { MediaUploader } from '../common/MediaUploader';
 import {
   isTemporaryOrFakePhone,
@@ -131,9 +132,23 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
     }
   };
 
+  const isDemoAccount = Boolean(user?.email && user.email.toLowerCase().endsWith('@email.com'));
+  const fbProviders = auth.currentUser?.providerData?.map((p) => p.providerId) || [];
+  const hasPasswordProvider = fbProviders.includes('password');
+  const isGoogleOnlyAccount = Boolean(
+    auth.currentUser && fbProviders.includes('google.com') && !hasPasswordProvider
+  );
+
   const handleSendResetEmail = async () => {
     if (!user?.email) {
       showToast('No email associated with this account.', 'error');
+      return;
+    }
+    if (isGoogleOnlyAccount) {
+      const msg =
+        'This account currently signs in with Google only. Set a password in the "Update Password" form above to enable email/password sign-in and reset emails.';
+      setResetNotice(msg);
+      showToast(msg, 'info');
       return;
     }
 
@@ -151,7 +166,7 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
       const res = await sendPasswordReset(user.email, portal);
       if (res.mode === 'demo_phone_reset') {
         const msg =
-          'Built-in @email.com accounts do not receive external emails. Enter your new password in the "Update Password" form above.';
+          'Built-in @email.com accounts do not receive external emails. Use "Forgot password?" on the Sign-In screen to verify your registered mobile number and update your password.';
         setResetNotice(msg);
         showToast(msg, 'info');
       } else {
@@ -349,8 +364,24 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
               <Lock className="w-4 h-4 text-amber-700" />
               Password & Security
             </h4>
-            <p className="text-xs text-stone-500">Update your account authentication credentials</p>
+            <p className="text-xs text-stone-500">
+              {isGoogleOnlyAccount
+                ? 'Signed in with Google — set a password below to enable email/password login'
+                : 'Update your account authentication credentials'}
+            </p>
           </div>
+
+          {isGoogleOnlyAccount && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-snug">
+              You currently sign in with <strong>Google</strong> and have no password linked yet. Enter a new password below to enable email/password login and password reset emails.
+            </div>
+          )}
+
+          {isDemoAccount && !auth.currentUser && (
+            <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-700 text-[11px] leading-snug">
+              Built-in demo accounts reset passwords via the Sign-In page&apos;s &quot;Forgot password?&quot; mobile verification flow.
+            </div>
+          )}
 
           <form onSubmit={handleChangePassword} className="space-y-3.5 text-xs">
             <div>
@@ -403,6 +434,8 @@ export const AccountProfileTab: React.FC<AccountProfileTabProps> = ({ onProfileU
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   Updating Password...
                 </>
+              ) : isGoogleOnlyAccount ? (
+                'Set Account Password'
               ) : (
                 'Update Password'
               )}

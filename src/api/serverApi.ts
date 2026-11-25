@@ -668,7 +668,9 @@ function normalizeServerCoupon(d: Record<string, any>): Record<string, any> {
   };
 }
 
-async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any[]> {
+async function fetchFirestoreCollectionResult(
+  collectionName: string
+): Promise<{ docs: any[]; permissionDenied: boolean }> {
   const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
   const envDbId = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
   const envApiKey = process.env.VITE_FIREBASE_API_KEY?.trim();
@@ -689,6 +691,8 @@ async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any
     targets.push({ projectId: envProjectId, dbId: envDbId || '(default)', apiKey: envApiKey });
   }
 
+  let sawPermissionDenied = false;
+
   for (const target of targets) {
     try {
       const controller = new AbortController();
@@ -707,7 +711,12 @@ async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!res.ok) continue;
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sawPermissionDenied = true;
+        }
+        continue;
+      }
       const json = await res.json();
       if (Array.isArray(json) && json.length > 0) {
         const docs = json
@@ -715,14 +724,20 @@ async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any
           .map((entry: any) => decodeFirestoreDoc(entry.document))
           .filter((d: any): d is Record<string, any> => Boolean(d && d.id));
         if (docs.length > 0) {
-          return docs;
+          return { docs, permissionDenied: false };
         }
       }
+      return { docs: [], permissionDenied: false };
     } catch {
       // Try next configured Firestore target or keep seed catalog
     }
   }
-  return [];
+  return { docs: [], permissionDenied: sawPermissionDenied };
+}
+
+async function fetchFirestoreCollectionDocs(collectionName: string): Promise<any[]> {
+  const result = await fetchFirestoreCollectionResult(collectionName);
+  return result.docs;
 }
 
 async function hydrateCatalogIfNeeded(
@@ -2923,7 +2938,7 @@ async function verifyFirebaseIdTokenOnServer(
 
 async function ensureFirebaseAuthUserExists(
   email: string
-): Promise<{ ensured: boolean; created: boolean; errorCode?: string }> {
+): Promise<{ ensured: boolean; created: boolean; uid?: string; errorCode?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail || cleanEmail.endsWith('@email.com')) {
     return { ensured: false, created: false, errorCode: 'DEMO_EMAIL' };
@@ -2949,7 +2964,12 @@ async function ensureFirebaseAuthUserExists(
         }
       );
       if (res.ok) {
-        return { ensured: true, created: true };
+        const okJson = await res.json().catch(() => null);
+        return {
+          ensured: true,
+          created: true,
+          uid: okJson?.localId ? String(okJson.localId) : undefined,
+        };
       }
       const errJson = await res.json().catch(() => null);
       const errMsg = String(errJson?.error?.message || '');
@@ -3517,6 +3537,8 @@ apiRouter.post('/admin/sync-staff', async (req: Request, res: Response) => {
 
     const { staffList, staffMember, deleteStaffId } = req.body || {};
     let currentStaff = loadStoredStaff();
+    let singleEnsureResult: { ensured: boolean; created: boolean; uid?: string; errorCode?: string } | null = null;
+    const syncedProvisioned: Array<{ email: string; uid?: string; created: boolean }> = [];
 
     if (Array.isArray(staffList)) {
       currentStaff = staffList
@@ -3531,6 +3553,29 @@ apiRouter.post('/admin/sync-staff', async (req: Request, res: Response) => {
           active: s.active !== false,
           updatedAt: String(s.updatedAt || new Date().toISOString()),
         }));
+
+      let usersDirty = false;
+      for (const entry of currentStaff) {
+        const cleanEmail = entry.email.toLowerCase();
+        const portalRole = normalizeStaffPortalRole(entry.role);
+        const userIdx = storedUsers.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+        if (userIdx >= 0) {
+          storedUsers[userIdx].role = portalRole;
+          storedUsers[userIdx].active = entry.active;
+          if (entry.name) storedUsers[userIdx].name = entry.name;
+          if (entry.phone) storedUsers[userIdx].phone = entry.phone;
+          usersDirty = true;
+        }
+        if (entry.active && !BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
+          const prov = await ensureFirebaseAuthUserExists(cleanEmail);
+          if (prov.ensured) {
+            syncedProvisioned.push({ email: cleanEmail, uid: prov.uid, created: prov.created });
+          }
+        }
+      }
+      if (usersDirty) {
+        saveStoredUsers(storedUsers);
+      }
     } else if (deleteStaffId && typeof deleteStaffId === 'string') {
       currentStaff = currentStaff.filter((s) => s.id !== deleteStaffId);
     } else if (staffMember && typeof staffMember.email === 'string') {
@@ -3563,12 +3608,20 @@ apiRouter.post('/admin/sync-staff', async (req: Request, res: Response) => {
         saveStoredUsers(storedUsers);
       }
       if (entry.active && !BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
-        await ensureFirebaseAuthUserExists(cleanEmail);
+        singleEnsureResult = await ensureFirebaseAuthUserExists(cleanEmail);
       }
     }
 
     saveStoredStaff(currentStaff);
-    return res.json({ success: true, count: currentStaff.length });
+    return res.json({
+      success: true,
+      count: currentStaff.length,
+      firebaseProvisioned: singleEnsureResult?.ensured,
+      firebaseCreated: singleEnsureResult?.created,
+      firebaseUid: singleEnsureResult?.uid,
+      firebaseErrorCode: singleEnsureResult?.errorCode,
+      provisioned: syncedProvisioned,
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to sync staff roster.' });
   }
@@ -3622,16 +3675,21 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
     // Also inspect Firestore staff & users collections so riders/users created directly in Firestore are verified and synced
     let fsStaffEntry: any = null;
     let fsUserEntry: any = null;
+    let firestorePermissionDenied = false;
     if (!staffEntry && !storedUser && !knownRoleEntry) {
       const [fsStaffRes, fsUsersRes] = await Promise.allSettled([
-        fetchFirestoreCollectionDocs('staff'),
-        fetchFirestoreCollectionDocs('users'),
+        fetchFirestoreCollectionResult('staff'),
+        fetchFirestoreCollectionResult('users'),
       ]);
       if (fsStaffRes.status === 'fulfilled') {
-        fsStaffEntry = fsStaffRes.value.find((s: any) => String(s?.email || '').trim().toLowerCase() === cleanEmail) || null;
+        if (fsStaffRes.value.permissionDenied) firestorePermissionDenied = true;
+        fsStaffEntry =
+          fsStaffRes.value.docs.find((s: any) => String(s?.email || '').trim().toLowerCase() === cleanEmail) || null;
       }
       if (fsUsersRes.status === 'fulfilled') {
-        fsUserEntry = fsUsersRes.value.find((u: any) => String(u?.email || '').trim().toLowerCase() === cleanEmail) || null;
+        if (fsUsersRes.value.permissionDenied) firestorePermissionDenied = true;
+        fsUserEntry =
+          fsUsersRes.value.docs.find((u: any) => String(u?.email || '').trim().toLowerCase() === cleanEmail) || null;
       }
     }
 
@@ -3660,21 +3718,25 @@ apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: R
           error: 'Access Denied: Only an authorized administrator email can reset the Admin Portal password.',
         });
       }
-      if (portal === 'delivery' || portal === 'staff' || portal === 'vendor') {
+      // If Firestore collections could not be read unauthenticated (standard security rule 403)
+      // or the account was created directly in Firebase Auth/Firestore without syncing local JSON,
+      // allow Firebase Auth's own OOB email reset flow to proceed without auto-creating accounts;
+      // login and Firestore rules still enforce delivery/staff/vendor RBAC on sign-in.
+      if ((portal === 'delivery' || portal === 'staff' || portal === 'vendor') && !firestorePermissionDenied) {
         return res.status(404).json({
           success: false,
           exists: false,
           error: `No registered ${portal} account found for ${cleanEmail}. Please verify your email or contact PureSudh Administration.`,
         });
       }
-      // Customer portal may have Firebase-Auth-only users (e.g. when Firestore profile creation was skipped)
       return res.json({
         success: true,
         exists: false,
-        role: 'customer',
+        role: portal,
         authType: 'firebase',
         firebaseEnsured: false,
         accountFoundLocally: false,
+        firestoreRestricted: firestorePermissionDenied,
       });
     }
 

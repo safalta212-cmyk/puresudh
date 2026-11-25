@@ -9,6 +9,7 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
+  reauthenticateWithPopup,
   User as FirebaseUser,
   setPersistence,
   browserLocalPersistence,
@@ -1375,8 +1376,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         admin: '/admin/login',
         customer: '/customer/login',
       };
+      const hostname = typeof window !== 'undefined' && window.location?.hostname
+        ? window.location.hostname.toLowerCase()
+        : '';
+      const authDomainHost = (resolvedFirebaseConfig.authDomain || '').toLowerCase();
+      const isTrustedContinueHost =
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        (authDomainHost && hostname === authDomainHost) ||
+        hostname.endsWith('.firebaseapp.com') ||
+        hostname.endsWith('.web.app');
       const continueUrl =
-        typeof window !== 'undefined' && window.location?.origin
+        isTrustedContinueHost && typeof window !== 'undefined' && window.location?.origin
           ? `${window.location.origin}${portalRouteMap[portal] || '/customer/login'}`
           : undefined;
 
@@ -1407,8 +1418,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           success: true,
           mode: 'firebase_email',
           message: serverAccountExists
-            ? `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete the reset. (If you originally signed in with Google, use "Continue with Google".)`
-            : `If a password-based account is registered for ${cleanEmail}, a reset link has been sent to your inbox/spam folder. If you signed in with Google or have not registered yet, please use Google Sign-In or Create Account.`,
+            ? `Password reset email requested for ${cleanEmail}. Check your inbox and spam folder. (Note: if this email only uses Google Sign-In without a password, Firebase will not send a reset email—sign in with Google and set a password under Account → Profile.)`
+            : `If a password-based account is registered for ${cleanEmail}, a reset email has been dispatched to your inbox/spam folder. If you use Google Sign-In or haven't registered yet, use Google Sign-In or contact PureSudh Administration.`,
         };
       } catch (err: any) {
         throw new Error(formatFirebaseAuthError(err));
@@ -1429,14 +1440,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const currentFbUser = auth.currentUser;
     if (!currentFbUser) {
-      // Demo mode password update
-      return { success: true, message: 'Password updated successfully!' };
+      return {
+        success: false,
+        error: 'Built-in demo accounts must update their password via the Sign-In screen ("Forgot password?") mobile verification flow.',
+      };
     }
     try {
       await fbUpdatePassword(currentFbUser, newPass);
       return { success: true, message: 'Password has been securely updated in Firebase Authentication.' };
     } catch (err: any) {
       if (err.code === 'auth/requires-recent-login') {
+        const usesGoogle = currentFbUser.providerData?.some((p) => p.providerId === 'google.com');
+        if (usesGoogle) {
+          try {
+            const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            await reauthenticateWithPopup(currentFbUser, provider);
+            await fbUpdatePassword(currentFbUser, newPass);
+            return {
+              success: true,
+              message: 'Password has been linked and updated in Firebase Authentication.',
+            };
+          } catch (reauthErr: any) {
+            return {
+              success: false,
+              error: formatFirebaseAuthError(reauthErr),
+            };
+          }
+        }
         return {
           success: false,
           error: 'Security checkpoint: Please log out and sign in again before changing your password.',

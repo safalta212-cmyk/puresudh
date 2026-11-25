@@ -114,7 +114,7 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
         showToast('Verify your registered mobile number to set a new password.', 'info');
       } else {
         setDemoResetActive(false);
-        showToast('Password reset link sent!', 'success');
+        showToast('Password reset instructions processed!', 'success');
       }
     } catch (err: any) {
       setDemoResetActive(false);

@@ -489,8 +489,18 @@ export async function sendPasswordReset(
     admin: '/admin/login',
     customer: '/customer/login',
   };
+  const hostname = typeof window !== 'undefined' && window.location?.hostname
+    ? window.location.hostname.toLowerCase()
+    : '';
+  const authDomainHost = (resolvedFirebaseConfig.authDomain || '').toLowerCase();
+  const isTrustedContinueHost =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    (authDomainHost && hostname === authDomainHost) ||
+    hostname.endsWith('.firebaseapp.com') ||
+    hostname.endsWith('.web.app');
   const continueUrl =
-    typeof window !== 'undefined' && window.location?.origin
+    isTrustedContinueHost && typeof window !== 'undefined' && window.location?.origin
       ? `${window.location.origin}${portalRouteMap[targetPortal] || '/customer/login'}`
       : undefined;
 
@@ -520,8 +530,8 @@ export async function sendPasswordReset(
       success: true,
       mode: 'firebase_email',
       message: serverAccountExists
-        ? `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`
-        : `If a password-based account exists for ${cleanEmail}, reset instructions have been sent to your inbox/spam folder.`,
+        ? `Password reset email requested for ${cleanEmail}. Check your inbox and spam folder. (If you only use Google Sign-In, set a password in Account Profile after signing in with Google.)`
+        : `If a password-based account is registered for ${cleanEmail}, a reset email has been dispatched to your inbox/spam folder.`,
     };
   } catch (err: any) {
     throw new Error(formatFirebaseAuthError(err));

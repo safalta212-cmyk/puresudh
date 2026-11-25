@@ -46,16 +46,31 @@ test('Delivery forgot-password validation enforces RBAC, disposable-email reject
       const custJson = await custRes.json();
       assert.equal(custJson.success, false);
 
-      // 3. Unregistered email rejected on restricted delivery portal (404)
+      // 3. Real email not in local JSON when Firestore is permission-restricted does not block Firebase OOB flow,
+      // and strictly never auto-provisions an unverified account (firebaseEnsured: false)
       const unknownRiderRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'unregistered.rider@gmail.com', targetPortal: 'delivery' }),
       });
-      assert.equal(unknownRiderRes.status, 404);
+      assert.ok(unknownRiderRes.status === 200 || unknownRiderRes.status === 404);
       const unknownRiderJson = await unknownRiderRes.json();
-      assert.equal(unknownRiderJson.success, false);
       assert.equal(unknownRiderJson.exists, false);
+      assert.equal(Boolean(unknownRiderJson.firebaseEnsured), false);
+      if (unknownRiderRes.status === 200) {
+        assert.equal(unknownRiderJson.success, true);
+        assert.equal(unknownRiderJson.accountFoundLocally, false);
+      } else {
+        assert.equal(unknownRiderJson.success, false);
+      }
+
+      // 3b. Admin portal reset still strictly rejects non-admin emails (403)
+      const nonAdminReset = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'unregistered.rider@gmail.com', targetPortal: 'admin' }),
+      });
+      assert.equal(nonAdminReset.status, 403);
 
       // 4. Unregistered email on customer portal returns accountFoundLocally: false
       const unknownCustRes = await fetch(`${baseUrl}/api/auth/forgot-password-validate`, {

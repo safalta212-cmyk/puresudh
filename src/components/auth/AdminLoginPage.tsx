@@ -79,7 +79,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     try {
       const res = await sendPasswordReset(cleanEmail, 'admin');
       setResetMessage(res.message);
-      showToast('Administrator password reset email sent!', 'success');
+      showToast('Administrator reset instructions processed!', 'success');
     } catch (err: any) {
       setFormError(err?.message || 'Failed to dispatch password reset email.');
     }

@@ -19,8 +19,9 @@ import {
   deleteStaffMember,
   toggleStaffStatus,
 } from '../../../firebase/services';
+import { doc, setDoc } from 'firebase/firestore';
 import { isTemporaryEmail } from '../../../validation';
-import { auth, formatFirestorePermissionMessage } from '../../../firebase/config';
+import { auth, db, formatFirestorePermissionMessage, stripUndefinedFields } from '../../../firebase/config';
 import { useAuth } from '../../../context/AuthContext';
 
 interface AdminStaffTabProps {
@@ -64,11 +65,16 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     staffList?: StaffMember[];
     staffMember?: StaffMember;
     deleteStaffId?: string;
-  }) => {
+  }): Promise<{
+    firebaseProvisioned?: boolean;
+    firebaseUid?: string;
+    firebaseErrorCode?: string;
+    provisioned?: Array<{ email: string; uid?: string; created: boolean }>;
+  } | null> => {
     try {
       const idToken = await auth.currentUser?.getIdToken().catch(() => null);
-      if (!idToken) return;
-      await fetch('/api/admin/sync-staff', {
+      if (!idToken) return null;
+      const res = await fetch('/api/admin/sync-staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,8 +82,42 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
         },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) return null;
+      return await res.json().catch(() => null);
     } catch {
-      // Non-blocking sync
+      return null;
+    }
+  };
+
+  const ensureFirestoreStaffUserDoc = async (staff: StaffMember, firebaseUid?: string) => {
+    if (!firebaseUid) return;
+    const cleanEmail = staff.email.trim().toLowerCase();
+    const portalRole =
+      cleanEmail === 'aanews70@gmail.com'
+        ? 'admin'
+        : staff.role === 'delivery' || staff.role === 'delivery_lead'
+        ? 'delivery'
+        : staff.role === 'admin'
+        ? 'admin'
+        : 'staff';
+    try {
+      await setDoc(
+        doc(db, 'users', firebaseUid),
+        stripUndefinedFields({
+          id: firebaseUid,
+          uid: firebaseUid,
+          email: cleanEmail,
+          displayName: staff.name,
+          phone: staff.phone || '',
+          role: portalRole,
+          staffId: staff.id,
+          createdAt: staff.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+        { merge: true }
+      );
+    } catch {
+      // Non-blocking role profile sync
     }
   };
 
@@ -87,7 +127,16 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       const data = await fetchStaffMembers();
       setStaffList(data);
       if (data.length > 0) {
-        syncStaffWithServer({ staffList: data });
+        const syncRes = await syncStaffWithServer({ staffList: data });
+        if (Array.isArray(syncRes?.provisioned)) {
+          for (const prov of syncRes.provisioned) {
+            if (!prov.uid) continue;
+            const match = data.find((s) => s.email.trim().toLowerCase() === prov.email.toLowerCase());
+            if (match) {
+              await ensureFirestoreStaffUserDoc(match, prov.uid);
+            }
+          }
+        }
       }
     } catch (err) {
       console.error('Error fetching staff:', err);
@@ -167,9 +216,22 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       };
 
       await saveStaffMember(staffToSave);
-      await syncStaffWithServer({ staffMember: staffToSave });
+      const syncRes = await syncStaffWithServer({ staffMember: staffToSave });
+      if (syncRes?.firebaseUid) {
+        await ensureFirestoreStaffUserDoc(staffToSave, syncRes.firebaseUid);
+      }
       await loadStaff();
-      showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
+      if (
+        syncRes?.firebaseErrorCode === 'OPERATION_NOT_ALLOWED' ||
+        syncRes?.firebaseErrorCode === 'PASSWORD_LOGIN_DISABLED'
+      ) {
+        showToast(
+          `Staff member "${staffToSave.name}" saved, but Email/Password sign-in is disabled in Firebase Authentication for this project.`,
+          'info'
+        );
+      } else {
+        showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
+      }
       setIsModalOpen(false);
     } catch (err: any) {
       showToast(formatFirestorePermissionMessage(err, 'Failed to save staff member'), 'error');
@@ -184,7 +246,10 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     try {
       await toggleStaffStatus(s.id, !s.active);
       const updated = { ...s, active: !s.active };
-      await syncStaffWithServer({ staffMember: updated });
+      const syncRes = await syncStaffWithServer({ staffMember: updated });
+      if (syncRes?.firebaseUid) {
+        await ensureFirestoreStaffUserDoc(updated, syncRes.firebaseUid);
+      }
       setStaffList((prev) =>
         prev.map((item) => (item.id === s.id ? { ...item, active: !item.active } : item))
       );
@@ -200,9 +265,13 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     if (resettingId === s.id) return;
     setResettingId(s.id);
     try {
+      const syncRes = await syncStaffWithServer({ staffMember: s });
+      if (syncRes?.firebaseUid) {
+        await ensureFirestoreStaffUserDoc(s, syncRes.firebaseUid);
+      }
       const portal = s.role === 'delivery' || s.role === 'delivery_lead' ? 'delivery' : 'staff';
       const res = await sendPasswordReset(s.email, portal);
-      showToast(res.message, 'success');
+      showToast(res.message, res.mode === 'demo_phone_reset' ? 'info' : 'success');
     } catch (err: any) {
       showToast(err?.message || `Failed to send reset link to ${s.email}`, 'error');
     } finally {

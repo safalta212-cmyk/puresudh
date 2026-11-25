@@ -86,7 +86,7 @@ export const VendorLoginPage: React.FC<VendorLoginPageProps> = ({
         showToast('Verify your registered mobile number to set a new password.', 'info');
       } else {
         setDemoResetActive(false);
-        showToast('Password reset link sent to your vendor email!', 'success');
+        showToast('Password reset instructions processed!', 'success');
       }
     } catch (err: any) {
       setDemoResetActive(false);
