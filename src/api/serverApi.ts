@@ -2607,19 +2607,89 @@ export interface ServerStoredUser {
   id: string;
   email: string;
   passwordHash: string;
+  passwordUpdatedAt?: string;
   name: string;
   phone: string;
   role: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery';
+  active?: boolean;
   createdAt: string;
   addresses?: any[];
   vendorDetails?: any;
 }
 
+export interface ServerStaffRecord {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: 'admin' | 'manager' | 'catalog_manager' | 'delivery' | 'delivery_lead' | 'staff';
+  department?: string;
+  active: boolean;
+  updatedAt?: string;
+}
+
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const STAFF_FILE = path.join(DATA_DIR, 'staff.json');
+
+const authResetLimiter = createRateLimiter(
+  60 * 1000,
+  12,
+  'Too many password reset requests. Please wait a minute before trying again.'
+);
 
 function hashPassword(password: string): string {
   return crypto.pbkdf2Sync(password, 'puresudh_salt_2026', 1000, 32, 'sha256').toString('hex');
+}
+
+function hashPasswordSecure(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt:${salt}:${derived}`;
+}
+
+function verifyPasswordHash(password: string, storedHash: string): boolean {
+  if (!storedHash || typeof password !== 'string') return false;
+  if (storedHash.startsWith('scrypt:')) {
+    const parts = storedHash.split(':');
+    if (parts.length !== 3) return false;
+    const [, salt, expectedHex] = parts;
+    try {
+      const derived = crypto.scryptSync(password, salt, 64);
+      const expected = Buffer.from(expectedHex, 'hex');
+      if (derived.length !== expected.length) return false;
+      return crypto.timingSafeEqual(derived, expected);
+    } catch {
+      return false;
+    }
+  }
+  const legacyHex = hashPassword(password);
+  try {
+    const a = Buffer.from(legacyHex, 'hex');
+    const b = Buffer.from(storedHash, 'hex');
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeStaffPortalRole(
+  rawRole?: string
+): 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' {
+  const r = String(rawRole || '').trim().toLowerCase();
+  if (r === 'admin') return 'admin';
+  if (r === 'delivery' || r === 'delivery_lead') return 'delivery';
+  if (r === 'staff' || r === 'manager' || r === 'catalog_manager') return 'staff';
+  if (r === 'vendor') return 'vendor';
+  return 'customer';
+}
+
+function maskIndianPhone(phone?: string): string {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 4) return 'registered phone';
+  const last4 = digits.slice(-4);
+  return `******${last4}`;
 }
 
 const VALID_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'aanews70@gmail.com').trim().toLowerCase();
@@ -2727,7 +2797,10 @@ function loadStoredUsers(): ServerStoredUser[] {
         if (existingAdminIdx === -1) {
           cleaned.unshift(INITIAL_DEMO_USERS[0]);
           changed = true;
-        } else if (cleaned[existingAdminIdx].passwordHash !== validAdminHash || cleaned[existingAdminIdx].role !== 'admin') {
+        } else if (
+          !cleaned[existingAdminIdx].passwordUpdatedAt &&
+          (cleaned[existingAdminIdx].passwordHash !== validAdminHash || cleaned[existingAdminIdx].role !== 'admin')
+        ) {
           cleaned[existingAdminIdx].passwordHash = validAdminHash;
           cleaned[existingAdminIdx].role = 'admin';
           changed = true;
@@ -2772,6 +2845,110 @@ function saveStoredUsers(users: ServerStoredUser[]): void {
   }
 }
 
+function loadStoredStaff(): ServerStaffRecord[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(STAFF_FILE)) {
+      const raw = fs.readFileSync(STAFF_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((s) => s && typeof s.email === 'string');
+      }
+    }
+  } catch (e) {
+    console.warn('Error loading staff.json:', e);
+  }
+  return [];
+}
+
+function saveStoredStaff(staffList: ServerStaffRecord[]): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(STAFF_FILE, JSON.stringify(staffList, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Failed to save staff.json:', e);
+  }
+}
+
+function getFirebaseApiKeysForServer(): string[] {
+  const keys: string[] = [];
+  const envKey = process.env.VITE_FIREBASE_API_KEY?.trim();
+  const cfgKey = firebaseAppletConfig?.apiKey?.trim();
+  if (envKey) keys.push(envKey);
+  if (cfgKey && !keys.includes(cfgKey)) keys.push(cfgKey);
+  return keys;
+}
+
+async function verifyFirebaseIdTokenOnServer(
+  idToken: string
+): Promise<{ uid: string; email: string; emailVerified: boolean } | null> {
+  if (!idToken || typeof idToken !== 'string') return null;
+  for (const apiKey of getFirebaseApiKeysForServer()) {
+    try {
+      const res = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const fbUser = Array.isArray(data?.users) ? data.users[0] : null;
+      if (fbUser?.localId && fbUser?.email) {
+        return {
+          uid: String(fbUser.localId),
+          email: String(fbUser.email).trim().toLowerCase(),
+          emailVerified: Boolean(fbUser.emailVerified),
+        };
+      }
+    } catch {
+      // Try next configured key
+    }
+  }
+  return null;
+}
+
+async function ensureFirebaseAuthUserExists(email: string): Promise<{ ensured: boolean; created: boolean }> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || cleanEmail.endsWith('@email.com')) {
+    return { ensured: false, created: false };
+  }
+  const randomPassword = crypto.randomBytes(24).toString('base64url') + '#A1!';
+  for (const apiKey of getFirebaseApiKeysForServer()) {
+    try {
+      const res = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: randomPassword,
+            returnSecureToken: false,
+          }),
+        }
+      );
+      if (res.ok) {
+        return { ensured: true, created: true };
+      }
+      const errJson = await res.json().catch(() => null);
+      const errMsg = String(errJson?.error?.message || '');
+      if (errMsg === 'EMAIL_EXISTS') {
+        return { ensured: true, created: false };
+      }
+    } catch {
+      // Continue to next configured key
+    }
+  }
+  return { ensured: false, created: false };
+}
+
 // Known authoritative role map
 const KNOWN_ROLES: Record<string, { role: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'; name: string }> = {
   [VALID_ADMIN_EMAIL]: { role: 'admin', name: 'Platform Administrator' },
@@ -2780,6 +2957,19 @@ const KNOWN_ROLES: Record<string, { role: 'customer' | 'admin' | 'staff' | 'vend
   'vendor@email.com': { role: 'vendor', name: 'Patna Artisan Kitchens' },
   'customer@email.com': { role: 'customer', name: 'Aarav Sharma' },
 };
+
+const BUILTIN_DEMO_EMAILS = new Set([
+  'staff@email.com',
+  'delivery@email.com',
+  'vendor@email.com',
+  'customer@email.com',
+]);
+
+// Single-use demo account password reset tokens (SHA-256 hash stored, expires in 10 mins)
+const demoResetTokens = new Map<
+  string,
+  { email: string; tokenHash: string; expiresAt: number }
+>();
 
 // In-memory registered user storage for server validation
 const registeredServerUsers: Map<string, { email: string; name: string; phone: string; role: 'customer'; createdAt: string }> = new Map();
@@ -3079,6 +3269,7 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
       : (cleanPhoneDigits.startsWith('0') && cleanPhoneDigits.length === 11 ? cleanPhoneDigits.slice(1) : cleanPhoneDigits);
 
     const users = loadStoredUsers();
+    const staffList = loadStoredStaff();
 
     // Match by email or by phone number
     const user = users.find((u) => {
@@ -3097,15 +3288,25 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
       });
     }
 
-    // Verify password strictly against stored PBKDF2 hash (zero hardcoded admin passwords)
-    const hashed = hashPassword(password);
-    const isDemoPassMatch =
-      (user.email.toLowerCase() === 'staff@email.com' && password === 'staff123')
-      || (user.email.toLowerCase() === 'delivery@email.com' && password === 'delivery123')
-      || (user.email.toLowerCase() === 'vendor@email.com' && password === 'vendor123')
-      || (user.email.toLowerCase() === 'customer@email.com' && password === 'cust123');
+    const staffMatch = staffList.find(
+      (s) => s.email && s.email.toLowerCase() === (user.email || '').toLowerCase()
+    );
+    if (user.active === false || (staffMatch && staffMatch.active === false)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Account disabled: Please contact PureSudh Administration to restore access.',
+      });
+    }
 
-    const isValidPassword = (user.passwordHash === hashed) || isDemoPassMatch;
+    // Verify password strictly against stored hash (demo password fallback disabled once reset)
+    const isDemoPassMatch =
+      !user.passwordUpdatedAt &&
+      ((user.email.toLowerCase() === 'staff@email.com' && password === 'staff123') ||
+        (user.email.toLowerCase() === 'delivery@email.com' && password === 'delivery123') ||
+        (user.email.toLowerCase() === 'vendor@email.com' && password === 'vendor123') ||
+        (user.email.toLowerCase() === 'customer@email.com' && password === 'cust123'));
+
+    const isValidPassword = verifyPasswordHash(password, user.passwordHash) || isDemoPassMatch;
 
     if (!isValidPassword) {
       return res.status(401).json({
@@ -3114,30 +3315,32 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
       });
     }
 
+    const effectiveRole = staffMatch ? normalizeStaffPortalRole(staffMatch.role) : user.role;
+
     // Check RBAC against targetPortal
     const portal = targetPortal || 'customer';
-    if (portal === 'admin' && user.role !== 'admin') {
+    if (portal === 'admin' && effectiveRole !== 'admin') {
       return res.status(403).json({
         success: false,
         error: `Access Denied: This account (${user.email}) does not have Administrator privileges. Please use Customer Sign In.`,
         redirectUrl: '/customer/login',
       });
     }
-    if (portal === 'staff' && user.role !== 'staff' && user.role !== 'delivery' && user.role !== 'admin') {
+    if (portal === 'staff' && effectiveRole !== 'staff' && effectiveRole !== 'delivery' && effectiveRole !== 'admin') {
       return res.status(403).json({
         success: false,
         error: `Access Denied: This account (${user.email}) is not authorized for Staff Operations Desk.`,
         redirectUrl: '/customer/login',
       });
     }
-    if (portal === 'delivery' && user.role !== 'delivery' && user.role !== 'staff' && user.role !== 'admin') {
+    if (portal === 'delivery' && effectiveRole !== 'delivery' && effectiveRole !== 'staff' && effectiveRole !== 'admin') {
       return res.status(403).json({
         success: false,
         error: `Access Denied: This account (${user.email}) is not authorized for the Delivery Rider Portal.`,
         redirectUrl: '/customer/login',
       });
     }
-    if (portal === 'vendor' && user.role !== 'vendor' && user.role !== 'admin') {
+    if (portal === 'vendor' && effectiveRole !== 'vendor' && effectiveRole !== 'admin') {
       return res.status(403).json({
         success: false,
         error: `Access Denied: This account (${user.email}) is not authorized for Vendor Partner Hub.`,
@@ -3151,9 +3354,9 @@ apiRouter.post('/auth/login', (req: Request, res: Response) => {
         id: user.id,
         uid: user.id,
         email: user.email,
-        displayName: user.name,
-        phone: user.phone,
-        role: user.role,
+        displayName: staffMatch?.name || user.name,
+        phone: staffMatch?.phone || user.phone,
+        role: effectiveRole,
         createdAt: user.createdAt,
         addresses: user.addresses || [],
         vendorDetails: user.vendorDetails,
@@ -3189,9 +3392,16 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
       });
     }
 
+    const staffMatch = loadStoredStaff().find((s) => (s.email || '').toLowerCase() === cleanEmail);
+    const storedMatch = loadStoredUsers().find((u) => (u.email || '').toLowerCase() === cleanEmail);
+
     // Determine authoritative role
     let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = 'customer';
-    if (KNOWN_ROLES[cleanEmail]) {
+    if (staffMatch) {
+      resolvedRole = normalizeStaffPortalRole(staffMatch.role);
+    } else if (storedMatch) {
+      resolvedRole = storedMatch.role;
+    } else if (KNOWN_ROLES[cleanEmail]) {
       resolvedRole = KNOWN_ROLES[cleanEmail].role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';
@@ -3261,11 +3471,98 @@ apiRouter.post('/auth/login-validate', (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/admin/sync-staff
+ * Authoritatively syncs Admin-managed Staff & Delivery Rider roster into server state
+ * and provisions Firebase Authentication records for real staff/rider emails so
+ * portal password resets work immediately without disturbing the Admin session.
+ */
+apiRouter.post('/admin/sync-staff', async (req: Request, res: Response) => {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const verifiedCaller = await verifyFirebaseIdTokenOnServer(token);
+
+    if (!verifiedCaller) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Valid Administrator authentication token required.' });
+    }
+
+    const storedUsers = loadStoredUsers();
+    const callerStored = storedUsers.find((u) => u.email.toLowerCase() === verifiedCaller.email);
+    const callerStaff = loadStoredStaff().find((s) => s.email.toLowerCase() === verifiedCaller.email);
+    const isAdminCaller =
+      verifiedCaller.email === VALID_ADMIN_EMAIL ||
+      callerStored?.role === 'admin' ||
+      callerStaff?.role === 'admin';
+
+    if (!isAdminCaller) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only administrators can synchronize staff and delivery accounts.' });
+    }
+
+    const { staffList, staffMember, deleteStaffId } = req.body || {};
+    let currentStaff = loadStoredStaff();
+
+    if (Array.isArray(staffList)) {
+      currentStaff = staffList
+        .filter((s: any) => s && typeof s.email === 'string' && s.email.includes('@'))
+        .map((s: any) => ({
+          id: String(s.id || `stf-${Date.now()}`),
+          name: String(s.name || 'Staff Member').trim(),
+          email: String(s.email).trim().toLowerCase(),
+          phone: s.phone ? String(s.phone).trim() : undefined,
+          role: (s.role || 'staff') as ServerStaffRecord['role'],
+          department: s.department ? String(s.department).trim() : 'Operations',
+          active: s.active !== false,
+          updatedAt: String(s.updatedAt || new Date().toISOString()),
+        }));
+    } else if (deleteStaffId && typeof deleteStaffId === 'string') {
+      currentStaff = currentStaff.filter((s) => s.id !== deleteStaffId);
+    } else if (staffMember && typeof staffMember.email === 'string') {
+      const cleanEmail = staffMember.email.trim().toLowerCase();
+      const entry: ServerStaffRecord = {
+        id: String(staffMember.id || `stf-${Date.now()}`),
+        name: String(staffMember.name || 'Staff Member').trim(),
+        email: cleanEmail,
+        phone: staffMember.phone ? String(staffMember.phone).trim() : undefined,
+        role: (staffMember.role || 'staff') as ServerStaffRecord['role'],
+        department: staffMember.department ? String(staffMember.department).trim() : 'Operations',
+        active: staffMember.active !== false,
+        updatedAt: new Date().toISOString(),
+      };
+      const idx = currentStaff.findIndex((s) => s.id === entry.id || s.email.toLowerCase() === cleanEmail);
+      if (idx >= 0) {
+        currentStaff[idx] = entry;
+      } else {
+        currentStaff.unshift(entry);
+      }
+
+      // Sync corresponding role into users.json and provision Firebase Auth account if active
+      const portalRole = normalizeStaffPortalRole(entry.role);
+      const userIdx = storedUsers.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+      if (userIdx >= 0) {
+        storedUsers[userIdx].role = portalRole;
+        storedUsers[userIdx].active = entry.active;
+        if (entry.name) storedUsers[userIdx].name = entry.name;
+        if (entry.phone) storedUsers[userIdx].phone = entry.phone;
+        saveStoredUsers(storedUsers);
+      }
+      if (entry.active && !BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
+        await ensureFirebaseAuthUserExists(cleanEmail);
+      }
+    }
+
+    saveStoredStaff(currentStaff);
+    return res.json({ success: true, count: currentStaff.length });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to sync staff roster.' });
+  }
+});
+
+/**
  * POST /api/auth/forgot-password-validate
  * Strictly verifies that the requested email belongs to a registered account
  * and is authorized for the requested portal before allowing a password reset.
  */
-apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) => {
+apiRouter.post('/auth/forgot-password-validate', authResetLimiter, async (req: Request, res: Response) => {
   try {
     const { email, targetPortal } = req.body;
     if (!email || typeof email !== 'string') {
@@ -3297,13 +3594,23 @@ apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) =
       });
     }
 
+    const staffList = loadStoredStaff();
+    const staffEntry = staffList.find((s) => (s.email || '').toLowerCase() === cleanEmail);
     const users = loadStoredUsers();
     const storedUser = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
     const registeredMemUser = registeredServerUsers.get(cleanEmail);
     const knownRoleEntry = KNOWN_ROLES[cleanEmail];
-    const portal = targetPortal || 'customer';
+    const portal = (targetPortal || 'customer') as 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery';
 
-    if (!storedUser && !registeredMemUser && !knownRoleEntry) {
+    if (staffEntry?.active === false || storedUser?.active === false) {
+      return res.status(403).json({
+        success: false,
+        exists: true,
+        error: 'This account is currently disabled. Please contact PureSudh Administration.',
+      });
+    }
+
+    if (!staffEntry && !storedUser && !registeredMemUser && !knownRoleEntry) {
       if (portal === 'admin' && cleanEmail !== VALID_ADMIN_EMAIL) {
         return res.status(403).json({
           success: false,
@@ -3315,11 +3622,14 @@ apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) =
       return res.json({
         success: true,
         exists: true,
-        role: portal === 'admin' ? 'admin' : 'customer',
+        role: portal === 'admin' ? 'admin' : portal,
+        authType: 'firebase',
       });
     }
 
-    const resolvedRole = storedUser?.role || registeredMemUser?.role || knownRoleEntry?.role || 'customer';
+    const resolvedRole = staffEntry
+      ? normalizeStaffPortalRole(staffEntry.role)
+      : storedUser?.role || registeredMemUser?.role || knownRoleEntry?.role || 'customer';
 
     if (portal === 'admin' && resolvedRole !== 'admin') {
       return res.status(403).json({
@@ -3353,13 +3663,152 @@ apiRouter.post('/auth/forgot-password-validate', (req: Request, res: Response) =
       });
     }
 
+    // Built-in @email.com accounts cannot receive real external emails
+    if (BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
+      const phone = staffEntry?.phone || storedUser?.phone || '';
+      return res.json({
+        success: true,
+        exists: true,
+        role: resolvedRole,
+        authType: 'demo_local',
+        maskedPhone: maskIndianPhone(phone),
+      });
+    }
+
+    // Ensure Firebase Auth user exists when the staff/delivery account was added via Admin Roster or local JSON
+    await ensureFirebaseAuthUserExists(cleanEmail);
+
     return res.json({
       success: true,
       exists: true,
       role: resolvedRole,
+      authType: 'firebase',
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, exists: false, error: err.message || 'Password reset validation failed.' });
+  }
+});
+
+/**
+ * POST /api/auth/request-demo-reset
+ * Strictly scoped to built-in non-deliverable @email.com fleet/demo accounts.
+ * Requires matching the registered 10-digit mobile number before issuing a short-lived
+ * single-use reset token. Real user emails must always use Firebase Auth OOB email verification.
+ */
+apiRouter.post('/auth/request-demo-reset', authResetLimiter, (req: Request, res: Response) => {
+  try {
+    const { email, phone, targetPortal } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const portal = String(targetPortal || 'customer').trim().toLowerCase();
+
+    if (!BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Direct mobile verification reset is only available for built-in fleet demo accounts. Please use the email reset link.',
+      });
+    }
+
+    const users = loadStoredUsers();
+    const user = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'Demo account record not found.' });
+    }
+
+    if (portal === 'delivery' && user.role !== 'delivery' && user.role !== 'staff' && user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Account is not authorized for Delivery Portal reset.' });
+    }
+    if (portal === 'staff' && user.role !== 'staff' && user.role !== 'delivery' && user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Account is not authorized for Staff Portal reset.' });
+    }
+    if (portal === 'vendor' && user.role !== 'vendor' && user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Account is not authorized for Vendor Portal reset.' });
+    }
+
+    const submittedDigits = String(phone || '').replace(/\D/g, '').slice(-10);
+    const storedDigits = String(user.phone || '').replace(/\D/g, '').slice(-10);
+
+    if (submittedDigits.length !== 10 || storedDigits.length !== 10) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid 10-digit registered mobile number.' });
+    }
+
+    const isMatch = crypto.timingSafeEqual(Buffer.from(submittedDigits), Buffer.from(storedDigits));
+    if (!isMatch) {
+      return res.status(403).json({
+        success: false,
+        error: 'Mobile number does not match the registered rider/staff profile.',
+      });
+    }
+
+    const rawToken = crypto.randomBytes(24).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    demoResetTokens.set(cleanEmail, {
+      email: cleanEmail,
+      tokenHash,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
+    return res.json({
+      success: true,
+      resetToken: rawToken,
+      expiresInSeconds: 600,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Verification failed.' });
+  }
+});
+
+/**
+ * POST /api/auth/complete-demo-reset
+ * Consumes a single-use verified token for built-in @email.com accounts and updates passwordHash.
+ */
+apiRouter.post('/auth/complete-demo-reset', authResetLimiter, (req: Request, res: Response) => {
+  try {
+    const { email, resetToken, newPassword } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const token = String(resetToken || '').trim();
+    const nextPass = String(newPassword || '');
+
+    if (!BUILTIN_DEMO_EMAILS.has(cleanEmail)) {
+      return res.status(403).json({ success: false, error: 'Invalid account type for local reset.' });
+    }
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Missing password reset verification token.' });
+    }
+    if (nextPass.length < 6 || nextPass.length > 128) {
+      return res.status(400).json({ success: false, error: 'Password must be between 6 and 128 characters.' });
+    }
+
+    const record = demoResetTokens.get(cleanEmail);
+    if (!record || Date.now() > record.expiresAt) {
+      demoResetTokens.delete(cleanEmail);
+      return res.status(400).json({ success: false, error: 'Reset verification expired. Please request a new reset.' });
+    }
+
+    const submittedHash = crypto.createHash('sha256').update(token).digest('hex');
+    const tokenValid = crypto.timingSafeEqual(Buffer.from(submittedHash, 'hex'), Buffer.from(record.tokenHash, 'hex'));
+    if (!tokenValid) {
+      return res.status(403).json({ success: false, error: 'Invalid reset verification token.' });
+    }
+
+    // Consume single-use token immediately
+    demoResetTokens.delete(cleanEmail);
+
+    const users = loadStoredUsers();
+    const idx = users.findIndex((u) => (u.email || '').toLowerCase() === cleanEmail);
+    if (idx < 0) {
+      return res.status(404).json({ success: false, error: 'Account not found.' });
+    }
+
+    users[idx].passwordHash = hashPasswordSecure(nextPass);
+    users[idx].passwordUpdatedAt = new Date().toISOString();
+    saveStoredUsers(users);
+
+    return res.json({
+      success: true,
+      message: `Password for ${cleanEmail} has been updated. You can now sign in with your new password.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update password.' });
   }
 });
 
@@ -3374,9 +3823,16 @@ apiRouter.post('/auth/verify-role', (req: Request, res: Response) => {
     const { email, role, requestedPortal } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
 
+    const staffMatch = cleanEmail ? loadStoredStaff().find((s) => (s.email || '').toLowerCase() === cleanEmail) : undefined;
+    const storedMatch = cleanEmail ? loadStoredUsers().find((u) => (u.email || '').toLowerCase() === cleanEmail) : undefined;
+
     // Determine authoritative role
     let resolvedRole: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' = (role as any) || 'customer';
-    if (cleanEmail && KNOWN_ROLES[cleanEmail]) {
+    if (staffMatch && staffMatch.active !== false) {
+      resolvedRole = normalizeStaffPortalRole(staffMatch.role);
+    } else if (storedMatch && storedMatch.active !== false) {
+      resolvedRole = storedMatch.role;
+    } else if (cleanEmail && KNOWN_ROLES[cleanEmail]) {
       resolvedRole = KNOWN_ROLES[cleanEmail].role;
     } else if (cleanEmail === VALID_ADMIN_EMAIL) {
       resolvedRole = 'admin';

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Truck,
   Lock,
   Mail,
+  Phone,
   Eye,
   EyeOff,
   ArrowRight,
@@ -10,7 +11,10 @@ import {
   Navigation,
   CheckCircle2,
   AlertCircle,
+  KeyRound,
 } from 'lucide-react';
+import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
+import { auth } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -33,16 +37,51 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
+  // Demo-account mobile verification reset step
+  const [demoResetActive, setDemoResetActive] = useState(false);
+  const [maskedPhoneHint, setMaskedPhoneHint] = useState<string>('');
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [submittingReset, setSubmittingReset] = useState(false);
+
+  // Firebase OOB action link handler (?mode=resetPassword&oobCode=...)
+  const [oobCode, setOobCode] = useState<string | null>(null);
+  const [oobEmail, setOobEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const code = params.get('oobCode');
+    if (mode === 'resetPassword' && code) {
+      verifyPasswordResetCode(auth, code)
+        .then((verifiedEmail) => {
+          setOobCode(code);
+          setOobEmail(verifiedEmail);
+          setEmail(verifiedEmail);
+          setIsForgotPassword(true);
+          setResetMessage(`Reset link verified for ${verifiedEmail}. Set your new password below.`);
+        })
+        .catch(() => {
+          setFormError('This password reset link is invalid or has expired. Please request a new reset link.');
+          setIsForgotPassword(true);
+        });
+    }
+  }, []);
+
   const handleDeliveryLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setResetMessage(null);
 
-    if (!email || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       setFormError('Please enter your delivery rider email and password.');
       return;
     }
 
-    const result = await login(email, password, 'delivery');
+    const result = await login(cleanEmail, password, 'delivery');
     if (result.success) {
       showToast('Signed in to Delivery Rider GPS Hub.', 'success');
       if (onNavigateDashboard) {
@@ -60,17 +99,120 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
     setFormError(null);
     setResetMessage(null);
 
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setFormError('Please enter your registered rider email address.');
       return;
     }
 
     try {
-      const res = await sendPasswordReset(email, 'delivery');
+      const res = await sendPasswordReset(cleanEmail, 'delivery');
       setResetMessage(res.message);
-      showToast('Password reset link sent!', 'success');
+      if (res.mode === 'demo_phone_reset') {
+        setDemoResetActive(true);
+        setMaskedPhoneHint(res.maskedPhone || 'registered phone');
+        showToast('Verify your registered mobile number to set a new password.', 'info');
+      } else {
+        setDemoResetActive(false);
+        showToast('Password reset link sent!', 'success');
+      }
     } catch (err: any) {
-      setFormError(err.message || 'Failed to dispatch password reset email.');
+      setDemoResetActive(false);
+      setFormError(err?.message || 'Failed to dispatch password reset email.');
+    }
+  };
+
+  const handleCompleteDemoReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (newResetPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      const reqRes = await fetch('/api/auth/request-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: verifyPhone.trim(),
+          targetPortal: 'delivery',
+        }),
+      });
+      const reqData = await reqRes.json().catch(() => null);
+      if (!reqRes.ok || !reqData?.success || !reqData?.resetToken) {
+        throw new Error(reqData?.error || 'Could not verify registered mobile number.');
+      }
+
+      const compRes = await fetch('/api/auth/complete-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          resetToken: reqData.resetToken,
+          newPassword: newResetPassword,
+        }),
+      });
+      const compData = await compRes.json().catch(() => null);
+      if (!compRes.ok || !compData?.success) {
+        throw new Error(compData?.error || 'Failed to update password.');
+      }
+
+      setDemoResetActive(false);
+      setIsForgotPassword(false);
+      setVerifyPhone('');
+      setNewResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setResetMessage(compData.message || 'Password updated! Sign in with your new password.');
+      showToast('Delivery rider password updated!', 'success');
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to complete password reset.');
+    } finally {
+      setSubmittingReset(false);
+    }
+  };
+
+  const handleCompleteFirebaseOobReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oobCode) return;
+    setFormError(null);
+
+    if (newResetPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      await confirmPasswordReset(auth, oobCode, newResetPassword);
+      const updatedMsg = `Password reset completed for ${oobEmail || email}. You can now sign in.`;
+      setOobCode(null);
+      setOobEmail(null);
+      setIsForgotPassword(false);
+      setNewResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setResetMessage(updatedMsg);
+      showToast('Password updated! Please sign in.', 'success');
+      try {
+        window.history.replaceState(null, '', '/delivery/login');
+      } catch {}
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to confirm new password. The reset link may have expired.');
+    } finally {
+      setSubmittingReset(false);
     }
   };
 
@@ -122,8 +264,8 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
         )}
 
         {resetMessage && (
-          <div className="mb-5 p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs font-medium flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="mb-5 p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs font-medium flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <span>{resetMessage}</span>
           </div>
         )}
@@ -140,7 +282,10 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
                   id="delivery-login-email"
                   type="email"
                   value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFormError(null);
+                  }}
                   placeholder="delivery@email.com"
                   required
                   autoComplete="email"
@@ -158,7 +303,9 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
                   type="button"
                   onClick={() => {
                     setIsForgotPassword(true);
+                    setDemoResetActive(false);
                     setFormError(null);
+                    setResetMessage(null);
                   }}
                   className="text-[11px] font-semibold text-amber-400 hover:underline cursor-pointer"
                 >
@@ -197,6 +344,149 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
               <span>{isLoading ? 'Verifying Rider Access...' : 'Sign In to Delivery Hub'}</span>
             </button>
           </form>
+        ) : oobCode ? (
+          <form onSubmit={handleCompleteFirebaseOobReset} className="space-y-4">
+            <p className="text-xs text-stone-300 leading-relaxed">
+              Set a new password for <span className="font-semibold text-amber-300">{oobEmail || email}</span>.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="delivery-oob-new-password"
+                  type="password"
+                  value={newResetPassword}
+                  onChange={(e) => setNewResetPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="delivery-oob-confirm-password"
+                  type="password"
+                  value={confirmResetPassword}
+                  onChange={(e) => setConfirmResetPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={submittingReset}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>{submittingReset ? 'Updating Password...' : 'Save New Password'}</span>
+            </button>
+          </form>
+        ) : demoResetActive ? (
+          <form onSubmit={handleCompleteDemoReset} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                Registered Rider Mobile ({maskedPhoneHint})
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="delivery-demo-verify-phone"
+                  type="tel"
+                  value={verifyPhone}
+                  onChange={(e) => {
+                    setVerifyPhone(e.target.value);
+                    setFormError(null);
+                  }}
+                  placeholder="Enter 10-digit registered mobile"
+                  required
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="delivery-demo-new-password"
+                  type="password"
+                  value={newResetPassword}
+                  onChange={(e) => setNewResetPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
+                <input
+                  id="delivery-demo-confirm-password"
+                  type="password"
+                  value={confirmResetPassword}
+                  onChange={(e) => setConfirmResetPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            <button
+              id="delivery-demo-reset-submit-btn"
+              type="submit"
+              disabled={submittingReset}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>{submittingReset ? 'Updating Password...' : 'Verify & Update Password'}</span>
+            </button>
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoResetActive(false);
+                  setFormError(null);
+                  setResetMessage(null);
+                }}
+                className="text-xs font-semibold text-stone-400 hover:text-white cursor-pointer mr-4"
+              >
+                Try Different Email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoResetActive(false);
+                  setIsForgotPassword(false);
+                  setFormError(null);
+                  setResetMessage(null);
+                }}
+                className="text-xs font-semibold text-stone-400 hover:text-white cursor-pointer"
+              >
+                Back to Rider Sign In
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <p className="text-xs text-stone-400 leading-relaxed">
@@ -209,16 +499,23 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
               <div className="relative">
                 <Mail className="w-4 h-4 text-stone-500 absolute left-3.5 top-3 pointer-events-none" />
                 <input
+                  id="delivery-forgot-email"
                   type="email"
                   value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFormError(null);
+                    setResetMessage(null);
+                  }}
                   placeholder="delivery@email.com"
                   required
+                  autoComplete="email"
                   className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
             </div>
             <button
+              id="delivery-forgot-submit-btn"
               type="submit"
               disabled={isLoading}
               className="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
@@ -231,6 +528,7 @@ export const DeliveryLoginPage: React.FC<DeliveryLoginPageProps> = ({
                 type="button"
                 onClick={() => {
                   setIsForgotPassword(false);
+                  setDemoResetActive(false);
                   setFormError(null);
                   setResetMessage(null);
                 }}

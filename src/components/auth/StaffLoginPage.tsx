@@ -32,17 +32,25 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [demoResetActive, setDemoResetActive] = useState(false);
+  const [maskedPhoneHint, setMaskedPhoneHint] = useState('');
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [submittingReset, setSubmittingReset] = useState(false);
 
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setResetMessage(null);
 
-    if (!email || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       setFormError('Please enter staff email and operational password.');
       return;
     }
 
-    const result = await login(email, password, 'staff');
+    const result = await login(cleanEmail, password, 'staff');
     if (result.success) {
       showToast('Authenticated into Staff Fulfillment Desk.', 'success');
       if (onNavigateDashboard) {
@@ -60,17 +68,84 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
     setFormError(null);
     setResetMessage(null);
 
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setFormError('Please enter your staff email address.');
       return;
     }
 
     try {
-      const res = await sendPasswordReset(email, 'staff');
+      const res = await sendPasswordReset(cleanEmail, 'staff');
       setResetMessage(res.message);
-      showToast('Password reset link sent to your staff email!', 'success');
+      if (res.mode === 'demo_phone_reset') {
+        setDemoResetActive(true);
+        setMaskedPhoneHint(res.maskedPhone || 'registered phone');
+        showToast('Verify your registered mobile number to set a new password.', 'info');
+      } else {
+        setDemoResetActive(false);
+        showToast('Password reset link sent to your staff email!', 'success');
+      }
     } catch (err: any) {
-      setFormError(err.message || 'Failed to dispatch password reset email.');
+      setDemoResetActive(false);
+      setFormError(err?.message || 'Failed to dispatch password reset email.');
+    }
+  };
+
+  const handleCompleteDemoReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (newResetPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      const reqRes = await fetch('/api/auth/request-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: verifyPhone.trim(),
+          targetPortal: 'staff',
+        }),
+      });
+      const reqData = await reqRes.json().catch(() => null);
+      if (!reqRes.ok || !reqData?.success || !reqData?.resetToken) {
+        throw new Error(reqData?.error || 'Could not verify registered mobile number.');
+      }
+
+      const compRes = await fetch('/api/auth/complete-demo-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          resetToken: reqData.resetToken,
+          newPassword: newResetPassword,
+        }),
+      });
+      const compData = await compRes.json().catch(() => null);
+      if (!compRes.ok || !compData?.success) {
+        throw new Error(compData?.error || 'Failed to update password.');
+      }
+
+      setDemoResetActive(false);
+      setIsForgotPassword(false);
+      setVerifyPhone('');
+      setNewResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setResetMessage(compData.message || 'Password updated! Sign in with your new password.');
+      showToast('Staff password updated!', 'success');
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to complete password reset.');
+    } finally {
+      setSubmittingReset(false);
     }
   };
 
@@ -202,6 +277,75 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
               <span>{isLoading ? 'Verifying Dispatch Role...' : 'Sign In to Operations Desk'}</span>
             </button>
           </form>
+        ) : demoResetActive ? (
+          <form onSubmit={handleCompleteDemoReset} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                Registered Staff Mobile ({maskedPhoneHint})
+              </label>
+              <input
+                type="tel"
+                value={verifyPhone}
+                onChange={(e) => {
+                  setVerifyPhone(e.target.value);
+                  setFormError(null);
+                }}
+                placeholder="Enter 10-digit registered mobile"
+                required
+                className="w-full px-3.5 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newResetPassword}
+                onChange={(e) => setNewResetPassword(e.target.value)}
+                placeholder="Minimum 6 characters"
+                required
+                minLength={6}
+                className="w-full px-3.5 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={confirmResetPassword}
+                onChange={(e) => setConfirmResetPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                required
+                minLength={6}
+                className="w-full px-3.5 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={submittingReset}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>{submittingReset ? 'Updating Password...' : 'Verify & Update Password'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoResetActive(false);
+                  setIsForgotPassword(false);
+                  setFormError(null);
+                  setResetMessage(null);
+                }}
+                className="text-xs font-semibold text-stone-400 hover:text-white"
+              >
+                Back to Staff Sign In
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <p className="text-xs text-stone-400 leading-relaxed">
@@ -218,7 +362,11 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
                   id="staff-forgot-email"
                   type="email"
                   value={email ?? ''}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFormError(null);
+                    setResetMessage(null);
+                  }}
                   placeholder="staff@email.com"
                   required
                   className="w-full pl-10 pr-3 py-2.5 bg-stone-900 border border-stone-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -240,6 +388,7 @@ export const StaffLoginPage: React.FC<StaffLoginPageProps> = ({
                 type="button"
                 onClick={() => {
                   setIsForgotPassword(false);
+                  setDemoResetActive(false);
                   setFormError(null);
                   setResetMessage(null);
                 }}

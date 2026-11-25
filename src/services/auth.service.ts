@@ -428,8 +428,40 @@ export async function sendPasswordReset(
     }
   }
 
+  const portalRouteMap: Record<string, string> = {
+    delivery: '/delivery/login',
+    staff: '/staff/login',
+    vendor: '/vendor/login',
+    admin: '/admin/login',
+    customer: '/customer/login',
+  };
+  const continueUrl =
+    typeof window !== 'undefined' && window.location?.origin
+      ? `${window.location.origin}${portalRouteMap[targetPortal] || '/customer/login'}`
+      : undefined;
+
   try {
-    await sendPasswordResetEmail(auth, cleanEmail);
+    if (continueUrl) {
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail, {
+          url: continueUrl,
+          handleCodeInApp: false,
+        });
+      } catch (redirectErr: any) {
+        const code = String(redirectErr?.code || '');
+        if (
+          code === 'auth/unauthorized-domain' ||
+          code === 'auth/invalid-continue-uri' ||
+          code === 'auth/missing-continue-uri'
+        ) {
+          await sendPasswordResetEmail(auth, cleanEmail);
+        } else {
+          throw redirectErr;
+        }
+      }
+    } else {
+      await sendPasswordResetEmail(auth, cleanEmail);
+    }
     return {
       success: true,
       message: `Password reset instructions have been sent to ${cleanEmail}. Please check your inbox and spam folder.`,

@@ -69,7 +69,12 @@ interface AuthContextType {
   sendPasswordReset: (
     email: string,
     portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
-  ) => Promise<{ success: boolean; message: string }>;
+  ) => Promise<{
+    success: boolean;
+    message: string;
+    mode?: 'firebase_email' | 'demo_phone_reset';
+    maskedPhone?: string;
+  }>;
   updateUserPassword: (newPass: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   loginWithGoogle: (
     targetPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
@@ -666,69 +671,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      // 1. Check quick non-admin test accounts ONLY with exact valid password verification
-      const isStaffMatch = cleanEmail === 'staff@email.com' || (normalizedPhone && normalizedPhone === '9431012802');
-      if (isStaffMatch && pass === 'staff123') {
-        await clearMismatchedFirebaseSession(defaultStaffUser.email);
-        setUser(defaultStaffUser);
-        setRole('staff');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultStaffUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: defaultStaffUser };
-      }
-
-      const isDeliveryMatch = cleanEmail === 'delivery@email.com' || (normalizedPhone && normalizedPhone === '9431012804');
-      if (isDeliveryMatch && pass === 'delivery123') {
-        if (target !== 'delivery' && target !== 'customer') {
-          setIsLoading(false);
-          return { success: false, error: `Unauthorized: Delivery rider credentials cannot access ${String(target).toUpperCase()} portal.` };
-        }
-        await clearMismatchedFirebaseSession(defaultDeliveryUser.email);
-        setUser(defaultDeliveryUser);
-        setRole('delivery');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultDeliveryUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: defaultDeliveryUser };
-      }
-
-      const isVendorMatch = cleanEmail === 'vendor@email.com' || (normalizedPhone && normalizedPhone === '9431012803');
-      if (isVendorMatch && pass === 'vendor123') {
-        if (target === 'staff') {
-          setIsLoading(false);
-          return { success: false, error: `Unauthorized: Vendor credentials cannot access ${target.toUpperCase()} portal.` };
-        }
-        await clearMismatchedFirebaseSession(defaultVendorUser.email);
-        setUser(defaultVendorUser);
-        setRole('vendor');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultVendorUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: defaultVendorUser };
-      }
-
-      const isCustMatch = cleanEmail === 'customer@email.com' || (normalizedPhone && normalizedPhone === '9431012845');
-      if (isCustMatch && pass === 'cust123') {
-        if (target !== 'customer') {
-          setIsLoading(false);
-          return {
-            success: false,
-            error: `Access Denied: Customer account is not authorized to access ${target.toUpperCase()} portal. Privileged role required.`,
-          };
-        }
-        await clearMismatchedFirebaseSession(defaultCustomerUser.email);
-        setUser(defaultCustomerUser);
-        setRole('customer');
-        localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultCustomerUser));
-        closeAuthModal();
-        setIsLoading(false);
-        return { success: true, profile: defaultCustomerUser };
-      }
-
-      // 2. Authoritative Server Login API verification (when Express backend is available)
+      // 1. Authoritative Server Login API verification (when Express backend is available)
       let serverErrorMessage: string | null = null;
       let serverStatus = 0;
+      let expressBackendReachable = false;
       try {
         const serverRes = await fetch('/api/auth/login', {
           method: 'POST',
@@ -742,6 +688,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const contentType = serverRes.headers.get('content-type') || '';
 
         if (serverRes.ok && contentType.includes('application/json')) {
+          expressBackendReachable = true;
           const data = await serverRes.json();
           if (data && data.success && data.profile) {
             const loadedProfile: UserProfile = {
@@ -775,6 +722,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: true, profile: loadedProfile };
           }
         } else if (contentType.includes('application/json')) {
+          expressBackendReachable = true;
           serverStatus = serverRes.status;
           const errData = await serverRes.json().catch(() => null);
           if (errData?.error) {
@@ -797,7 +745,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // On 401/404, still allow Firebase Auth verification in Step 4 (e.g. if password was reset via Firebase)
         }
       } catch (serverErr: any) {
-        console.warn('Server auth endpoint notice (evaluating Firebase Auth):', serverErr.message);
+        console.warn('Server auth endpoint notice (evaluating offline/Firebase Auth):', serverErr.message);
+      }
+
+      // 2. Offline / static-SPA fallback for built-in test accounts (only when Express backend is unreachable)
+      if (!expressBackendReachable) {
+        const isStaffMatch = cleanEmail === 'staff@email.com' || (normalizedPhone && normalizedPhone === '9431012802');
+        if (isStaffMatch && pass === 'staff123') {
+          await clearMismatchedFirebaseSession(defaultStaffUser.email);
+          setUser(defaultStaffUser);
+          setRole('staff');
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultStaffUser));
+          closeAuthModal();
+          setIsLoading(false);
+          return { success: true, profile: defaultStaffUser };
+        }
+
+        const isDeliveryMatch = cleanEmail === 'delivery@email.com' || (normalizedPhone && normalizedPhone === '9431012804');
+        if (isDeliveryMatch && pass === 'delivery123') {
+          if (target !== 'delivery' && target !== 'customer') {
+            setIsLoading(false);
+            return { success: false, error: `Unauthorized: Delivery rider credentials cannot access ${String(target).toUpperCase()} portal.` };
+          }
+          await clearMismatchedFirebaseSession(defaultDeliveryUser.email);
+          setUser(defaultDeliveryUser);
+          setRole('delivery');
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultDeliveryUser));
+          closeAuthModal();
+          setIsLoading(false);
+          return { success: true, profile: defaultDeliveryUser };
+        }
+
+        const isVendorMatch = cleanEmail === 'vendor@email.com' || (normalizedPhone && normalizedPhone === '9431012803');
+        if (isVendorMatch && pass === 'vendor123') {
+          if (target === 'staff') {
+            setIsLoading(false);
+            return { success: false, error: `Unauthorized: Vendor credentials cannot access ${target.toUpperCase()} portal.` };
+          }
+          await clearMismatchedFirebaseSession(defaultVendorUser.email);
+          setUser(defaultVendorUser);
+          setRole('vendor');
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultVendorUser));
+          closeAuthModal();
+          setIsLoading(false);
+          return { success: true, profile: defaultVendorUser };
+        }
+
+        const isCustMatch = cleanEmail === 'customer@email.com' || (normalizedPhone && normalizedPhone === '9431012845');
+        if (isCustMatch && pass === 'cust123') {
+          if (target !== 'customer') {
+            setIsLoading(false);
+            return {
+              success: false,
+              error: `Access Denied: Customer account is not authorized to access ${target.toUpperCase()} portal. Privileged role required.`,
+            };
+          }
+          await clearMismatchedFirebaseSession(defaultCustomerUser.email);
+          setUser(defaultCustomerUser);
+          setRole('customer');
+          localStorage.setItem('pure_sudh_active_user', JSON.stringify(defaultCustomerUser));
+          closeAuthModal();
+          setIsLoading(false);
+          return { success: true, profile: defaultCustomerUser };
+        }
       }
 
       // 3. Local offline registered accounts fallback (only if server didn't return 401)
@@ -870,12 +880,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Firestore user profile read notice:', fsErr);
           }
 
-          const effectiveRole = resolveEffectiveRole(
+          let effectiveRole = resolveEffectiveRole(
             claims,
             firestoreData.role,
             cred.user.email || cleanEmail,
             hasAdminDoc
           );
+
+          // If Firestore user doc still shows customer on Staff/Delivery login, check authoritative synced roster
+          if (effectiveRole === 'customer' && (target === 'delivery' || target === 'staff')) {
+            try {
+              const verifyRes = await fetch('/api/auth/verify-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: cred.user.email || cleanEmail,
+                  role: effectiveRole,
+                  requestedPortal: target,
+                }),
+              });
+              const ct = verifyRes.headers.get('content-type') || '';
+              if (ct.includes('application/json')) {
+                const verifyData = await verifyRes.json().catch(() => null);
+                if (verifyData?.authorized && verifyData?.role) {
+                  effectiveRole = verifyData.role;
+                }
+              }
+            } catch {
+              // Ignore network error in static mode
+            }
+          }
 
           if (!verifyRoleAccess(effectiveRole, target)) {
             await signOut(auth).catch(() => {});
@@ -1224,7 +1258,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sendPasswordReset = async (
     email: string,
     portalOverride?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery'
-  ): Promise<{ success: boolean; message: string }> => {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    mode?: 'firebase_email' | 'demo_phone_reset';
+    maskedPhone?: string;
+  }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
       throw new Error('Please provide an email address.');
@@ -1248,35 +1287,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const portal = portalOverride || 'customer';
+    setIsLoading(true);
 
-    // Authoritative server verification when Express backend is running
     try {
-      const valRes = await fetch('/api/auth/forgot-password-validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, targetPortal: portal }),
-      });
-      const contentType = valRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const valData = await valRes.json().catch(() => null);
-        if (!valRes.ok || !valData?.success) {
-          throw new Error(valData?.error || 'No registered account found with this email address.');
+      // Authoritative server verification when Express backend is running
+      let serverAuthType: 'firebase' | 'demo_local' | undefined;
+      let maskedPhone: string | undefined;
+
+      try {
+        const valRes = await fetch('/api/auth/forgot-password-validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, targetPortal: portal }),
+        });
+        const contentType = valRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const valData = await valRes.json().catch(() => null);
+          if (!valRes.ok || !valData?.success) {
+            throw new Error(valData?.error || 'No registered account found with this email address.');
+          }
+          serverAuthType = valData.authType;
+          maskedPhone = valData.maskedPhone;
+        }
+      } catch (err: any) {
+        if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+          throw err;
         }
       }
-    } catch (err: any) {
-      if (err?.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
-        throw err;
-      }
-    }
 
-    try {
-      await sendPasswordResetEmail(auth, cleanEmail);
-      return {
-        success: true,
-        message: `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete reset.`,
+      if (serverAuthType === 'demo_local') {
+        return {
+          success: true,
+          mode: 'demo_phone_reset',
+          maskedPhone,
+          message: `Verified fleet account (${cleanEmail}). Because @email.com is a built-in demo address without external email delivery, verify the registered mobile number (${maskedPhone || '********04'}) below to set a new password.`,
+        };
+      }
+
+      const portalRouteMap: Record<string, string> = {
+        delivery: '/delivery/login',
+        staff: '/staff/login',
+        vendor: '/vendor/login',
+        admin: '/admin/login',
+        customer: '/customer/login',
       };
-    } catch (err: any) {
-      throw new Error(formatFirebaseAuthError(err));
+      const continueUrl =
+        typeof window !== 'undefined' && window.location?.origin
+          ? `${window.location.origin}${portalRouteMap[portal] || '/customer/login'}`
+          : undefined;
+
+      try {
+        if (continueUrl) {
+          try {
+            await sendPasswordResetEmail(auth, cleanEmail, {
+              url: continueUrl,
+              handleCodeInApp: false,
+            });
+          } catch (redirectErr: any) {
+            const code = String(redirectErr?.code || '');
+            if (
+              code === 'auth/unauthorized-domain' ||
+              code === 'auth/invalid-continue-uri' ||
+              code === 'auth/missing-continue-uri'
+            ) {
+              await sendPasswordResetEmail(auth, cleanEmail);
+            } else {
+              throw redirectErr;
+            }
+          }
+        } else {
+          await sendPasswordResetEmail(auth, cleanEmail);
+        }
+
+        return {
+          success: true,
+          mode: 'firebase_email',
+          message: `Password reset link sent to ${cleanEmail}. Check your inbox and spam folder to complete reset.`,
+        };
+      } catch (err: any) {
+        throw new Error(formatFirebaseAuthError(err));
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 

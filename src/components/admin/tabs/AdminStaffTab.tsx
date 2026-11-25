@@ -20,13 +20,15 @@ import {
   toggleStaffStatus,
 } from '../../../firebase/services';
 import { isTemporaryEmail } from '../../../validation';
-import { formatFirestorePermissionMessage } from '../../../firebase/config';
+import { auth, formatFirestorePermissionMessage } from '../../../firebase/config';
+import { useAuth } from '../../../context/AuthContext';
 
 interface AdminStaffTabProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
 export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
+  const { sendPasswordReset } = useAuth();
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,6 +37,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
   const [staffToDelete, setStaffToDelete] = useState<StaffMember | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -57,11 +60,35 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     { key: 'settings:manage', label: 'Store Settings Access' },
   ];
 
+  const syncStaffWithServer = async (payload: {
+    staffList?: StaffMember[];
+    staffMember?: StaffMember;
+    deleteStaffId?: string;
+  }) => {
+    try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      if (!idToken) return;
+      await fetch('/api/admin/sync-staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Non-blocking sync
+    }
+  };
+
   const loadStaff = async () => {
     setLoading(true);
     try {
       const data = await fetchStaffMembers();
       setStaffList(data);
+      if (data.length > 0) {
+        syncStaffWithServer({ staffList: data });
+      }
     } catch (err) {
       console.error('Error fetching staff:', err);
     } finally {
@@ -140,6 +167,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       };
 
       await saveStaffMember(staffToSave);
+      await syncStaffWithServer({ staffMember: staffToSave });
       await loadStaff();
       showToast(`Staff member "${staffToSave.name}" saved!`, 'success');
       setIsModalOpen(false);
@@ -155,6 +183,8 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     setTogglingId(s.id);
     try {
       await toggleStaffStatus(s.id, !s.active);
+      const updated = { ...s, active: !s.active };
+      await syncStaffWithServer({ staffMember: updated });
       setStaffList((prev) =>
         prev.map((item) => (item.id === s.id ? { ...item, active: !item.active } : item))
       );
@@ -166,10 +196,25 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
     }
   };
 
+  const handleSendResetLink = async (s: StaffMember) => {
+    if (resettingId === s.id) return;
+    setResettingId(s.id);
+    try {
+      const portal = s.role === 'delivery' || s.role === 'delivery_lead' ? 'delivery' : 'staff';
+      const res = await sendPasswordReset(s.email, portal);
+      showToast(res.message, 'success');
+    } catch (err: any) {
+      showToast(err?.message || `Failed to send reset link to ${s.email}`, 'error');
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   const confirmDeleteStaff = async () => {
     if (!staffToDelete) return;
     try {
       await deleteStaffMember(staffToDelete.id);
+      await syncStaffWithServer({ deleteStaffId: staffToDelete.id });
       setStaffList((prev) => prev.filter((item) => item.id !== staffToDelete.id));
       showToast(`Staff member "${staffToDelete.name}" removed`, 'info');
     } catch (err) {
@@ -308,21 +353,33 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-1.5">
+                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-1.5">
                   <button
-                    onClick={() => handleOpenEdit(staff)}
-                    className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
-                    title="Edit Staff Member"
+                    type="button"
+                    disabled={!staff.active || resettingId === staff.id}
+                    onClick={() => handleSendResetLink(staff)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-40 transition-colors cursor-pointer"
+                    title="Send Password Reset Link"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Key className="w-3 h-3" />
+                    <span>{resettingId === staff.id ? 'Sending...' : 'Send Reset Link'}</span>
                   </button>
-                  <button
-                    onClick={() => setStaffToDelete(staff)}
-                    className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    title="Delete Staff Access"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenEdit(staff)}
+                      className="p-1.5 rounded-lg text-stone-600 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
+                      title="Edit Staff Member"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setStaffToDelete(staff)}
+                      className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Delete Staff Access"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
