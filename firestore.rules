@@ -494,7 +494,18 @@ service cloud.firestore {
 
     // Staff Roster
     match /staff/{staffId} {
-      allow get, list: if isStaff() || isAdmin();
+      allow get: if isStaff() || isAdmin() || (
+        isSignedIn() &&
+        'email' in request.auth.token &&
+        request.auth.token.email is string &&
+        existing().get('email', '').lower() == request.auth.token.email.lower()
+      );
+      allow list: if isStaff() || isAdmin() || (
+        isSignedIn() &&
+        'email' in request.auth.token &&
+        request.auth.token.email is string &&
+        resource.data.email == request.auth.token.email.lower()
+      );
       allow write: if isAdmin();
     }
 

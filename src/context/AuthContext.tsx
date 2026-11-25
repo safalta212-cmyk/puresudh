@@ -280,6 +280,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.role]);
 
+  const resolveRosterRoleForUser = useCallback(async (
+    fbUser: FirebaseUser,
+    requestedPortal?: 'customer' | 'admin' | 'staff' | 'vendor' | 'delivery' | UserRole
+  ): Promise<UserRole | null> => {
+    const cleanEmail = fbUser.email?.trim().toLowerCase();
+    if (!cleanEmail) return null;
+
+    // 1. Check authoritative backend roster (/api/auth/verify-role) with Firebase ID token
+    try {
+      const idToken = await fbUser.getIdToken().catch(() => '');
+      const verifyRes = await fetch('/api/auth/verify-role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          requestedPortal: requestedPortal || 'delivery',
+        }),
+      });
+      const ct = verifyRes.headers.get('content-type') || '';
+      if (verifyRes.ok && ct.includes('application/json')) {
+        const verifyData = await verifyRes.json().catch(() => null);
+        if (verifyData?.authorized && verifyData?.role && verifyData.role !== 'customer') {
+          return verifyData.role as UserRole;
+        }
+      }
+    } catch {
+      // Fall back to direct Firestore staff lookup
+    }
+
+    // 2. Check Firestore staff roster for the signed-in user's own email
+    try {
+      const staffSnap = await Promise.race([
+        getDocs(query(collection(db, 'staff'), where('email', '==', cleanEmail))),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      if (staffSnap && !staffSnap.empty) {
+        const activeStaff = staffSnap.docs
+          .map((d) => d.data() as { role?: string; active?: boolean })
+          .find((s) => s.active !== false);
+        if (activeStaff?.role) {
+          const rawRole = String(activeStaff.role).trim().toLowerCase();
+          if (rawRole === 'admin') return 'admin';
+          if (rawRole === 'delivery' || rawRole === 'delivery_lead') return 'delivery';
+          return 'staff';
+        }
+      }
+    } catch {
+      // Ignore permission or network errors
+    }
+
+    return null;
+  }, []);
+
   // Load user profile from Firestore when Firebase Auth state changes
   const syncFirebaseUser = useCallback(async (
     fbUser: FirebaseUser | null,
@@ -325,34 +381,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (effRole === 'customer') {
         if (verifiedRoleOverride && verifiedRoleOverride !== 'customer') {
           effRole = verifiedRoleOverride;
-        } else if (
-          fbUser.email &&
-          localCached?.role &&
-          localCached.role !== 'customer' &&
-          localCached.email?.trim().toLowerCase() === fbUser.email.trim().toLowerCase()
-        ) {
-          try {
-            const idToken = await fbUser.getIdToken().catch(() => '');
-            const verifyRes = await fetch('/api/auth/verify-role', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-              },
-              body: JSON.stringify({
-                email: fbUser.email,
-                requestedPortal: localCached.role,
-              }),
-            });
-            const ct = verifyRes.headers.get('content-type') || '';
-            if (verifyRes.ok && ct.includes('application/json')) {
-              const verifyData = await verifyRes.json().catch(() => null);
-              if (verifyData?.authorized && verifyData?.role) {
-                effRole = verifyData.role;
-              }
+        } else if (fbUser.email) {
+          const cachedMatchesUser =
+            localCached?.role &&
+            localCached.role !== 'customer' &&
+            localCached.email?.trim().toLowerCase() === fbUser.email.trim().toLowerCase();
+          const onPrivilegedPath =
+            typeof window !== 'undefined' &&
+            (window.location.pathname.startsWith('/delivery') ||
+              window.location.pathname.startsWith('/staff') ||
+              window.location.pathname.startsWith('/vendor'));
+          if (cachedMatchesUser || onPrivilegedPath) {
+            const targetHint: UserRole =
+              (cachedMatchesUser ? localCached.role : undefined) ||
+              (typeof window !== 'undefined' && window.location.pathname.startsWith('/staff')
+                ? 'staff'
+                : typeof window !== 'undefined' && window.location.pathname.startsWith('/vendor')
+                ? 'vendor'
+                : 'delivery');
+            const rosterRole = await resolveRosterRoleForUser(fbUser, targetHint);
+            if (rosterRole) {
+              effRole = rosterRole;
             }
-          } catch {
-            // Static / offline mode fallback
           }
         }
       }
@@ -934,35 +984,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             hasAdminDoc
           );
 
-          // If Firestore user doc still shows customer on Staff/Delivery login, check authoritative synced roster
-          if (effectiveRole === 'customer' && (target === 'delivery' || target === 'staff')) {
-            try {
-              const verifyRes = await fetch('/api/auth/verify-role', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: cred.user.email || cleanEmail,
-                  role: effectiveRole,
-                  requestedPortal: target,
-                }),
-              });
-              const ct = verifyRes.headers.get('content-type') || '';
-              if (ct.includes('application/json')) {
-                const verifyData = await verifyRes.json().catch(() => null);
-                if (verifyData?.authorized && verifyData?.role) {
-                  effectiveRole = verifyData.role;
-                }
-              }
-            } catch {
-              // Ignore network error in static mode
+          // If Firestore user doc still shows customer on Staff/Delivery/Vendor login, check authoritative synced roster & Firestore staff
+          if (effectiveRole === 'customer' && (target === 'delivery' || target === 'staff' || target === 'vendor')) {
+            const rosterRole = await resolveRosterRoleForUser(cred.user, target);
+            if (rosterRole) {
+              effectiveRole = rosterRole;
             }
           }
 
           if (!verifyRoleAccess(effectiveRole, target)) {
             await signOut(auth).catch(() => {});
+            const portalHint =
+              target === 'delivery'
+                ? ' Ask an Administrator to add this email as a Delivery Rider under Admin Dashboard → Staff & Delivery Team.'
+                : '';
             return {
               success: false,
-              error: `Access Denied: This account (${cred.user.email || cleanEmail}) has role '${effectiveRole}' and is not authorized for the ${target.toUpperCase()} portal.`,
+              error: `Access Denied: This account (${cred.user.email || cleanEmail}) has role '${effectiveRole}' and is not authorized for the ${target.toUpperCase()} portal.${portalHint}`,
             };
           }
 
@@ -1574,36 +1612,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (target === 'delivery' || target === 'staff' || target === 'vendor') &&
         cred.user.email
       ) {
-        try {
-          const idToken = await cred.user.getIdToken().catch(() => '');
-          const verifyRes = await fetch('/api/auth/verify-role', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
-            body: JSON.stringify({
-              email: cred.user.email,
-              requestedPortal: target,
-            }),
-          });
-          const ct = verifyRes.headers.get('content-type') || '';
-          if (verifyRes.ok && ct.includes('application/json')) {
-            const verifyData = await verifyRes.json().catch(() => null);
-            if (verifyData?.authorized && verifyData?.role) {
-              effectiveRole = verifyData.role;
-            }
-          }
-        } catch {
-          // Ignore network error in static mode
+        const rosterRole = await resolveRosterRoleForUser(cred.user, target);
+        if (rosterRole) {
+          effectiveRole = rosterRole;
         }
       }
 
       if (target && !verifyRoleAccess(effectiveRole, target)) {
         await signOut(auth).catch(() => {});
+        const portalHint =
+          target === 'delivery'
+            ? ' Ask an Administrator to add this email as a Delivery Rider under Admin Dashboard → Staff & Delivery Team.'
+            : '';
         return {
           success: false,
-          error: `Access Denied: Google account (${cred.user.email}) has role '${effectiveRole}' and does not have ${target.toUpperCase()} privileges.`,
+          error: `Access Denied: Google account (${cred.user.email}) has role '${effectiveRole}' and does not have ${target.toUpperCase()} privileges.${portalHint}`,
         };
       }
 

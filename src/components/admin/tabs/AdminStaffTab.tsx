@@ -19,7 +19,7 @@ import {
   deleteStaffMember,
   toggleStaffStatus,
 } from '../../../firebase/services';
-import { doc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { isTemporaryEmail } from '../../../validation';
 import { auth, db, formatFirestorePermissionMessage, stripUndefinedFields } from '../../../firebase/config';
 import { useAuth } from '../../../context/AuthContext';
@@ -90,34 +90,50 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
   };
 
   const ensureFirestoreStaffUserDoc = async (staff: StaffMember, firebaseUid?: string) => {
-    if (!firebaseUid) return;
     const cleanEmail = staff.email.trim().toLowerCase();
+    if (!cleanEmail) return;
     const portalRole =
       cleanEmail === 'aanews70@gmail.com'
         ? 'admin'
+        : staff.active === false
+        ? 'customer'
         : staff.role === 'delivery' || staff.role === 'delivery_lead'
         ? 'delivery'
         : staff.role === 'admin'
         ? 'admin'
         : 'staff';
+
+    const matchedUids = new Set<string>();
+    if (firebaseUid) matchedUids.add(firebaseUid);
+
     try {
-      await setDoc(
-        doc(db, 'users', firebaseUid),
-        stripUndefinedFields({
-          id: firebaseUid,
-          uid: firebaseUid,
-          email: cleanEmail,
-          displayName: staff.name,
-          phone: staff.phone || '',
-          role: portalRole,
-          staffId: staff.id,
-          createdAt: staff.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }),
-        { merge: true }
-      );
+      const usersSnap = await getDocs(query(collection(db, 'users'), where('email', '==', cleanEmail)));
+      usersSnap.forEach((d) => matchedUids.add(d.id));
     } catch {
-      // Non-blocking role profile sync
+      // Non-blocking lookup
+    }
+
+    for (const uid of matchedUids) {
+      try {
+        await setDoc(
+          doc(db, 'users', uid),
+          stripUndefinedFields({
+            id: uid,
+            uid,
+            email: cleanEmail,
+            displayName: staff.name,
+            phone: staff.phone || '',
+            role: portalRole,
+            staffId: staff.id,
+            active: staff.active !== false,
+            createdAt: staff.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }),
+          { merge: true }
+        );
+      } catch {
+        // Non-blocking role profile sync
+      }
     }
   };
 
@@ -128,15 +144,19 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       setStaffList(data);
       if (data.length > 0) {
         const syncRes = await syncStaffWithServer({ staffList: data });
+        const provByEmail = new Map<string, string>();
         if (Array.isArray(syncRes?.provisioned)) {
           for (const prov of syncRes.provisioned) {
-            if (!prov.uid) continue;
-            const match = data.find((s) => s.email.trim().toLowerCase() === prov.email.toLowerCase());
-            if (match) {
-              await ensureFirestoreStaffUserDoc(match, prov.uid);
+            if (prov.uid && prov.email) {
+              provByEmail.set(prov.email.toLowerCase(), prov.uid);
             }
           }
         }
+        await Promise.allSettled(
+          data.map((member) =>
+            ensureFirestoreStaffUserDoc(member, provByEmail.get(member.email.trim().toLowerCase()))
+          )
+        );
       }
     } catch (err) {
       console.error('Error fetching staff:', err);
@@ -217,9 +237,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
 
       await saveStaffMember(staffToSave);
       const syncRes = await syncStaffWithServer({ staffMember: staffToSave });
-      if (syncRes?.firebaseUid) {
-        await ensureFirestoreStaffUserDoc(staffToSave, syncRes.firebaseUid);
-      }
+      await ensureFirestoreStaffUserDoc(staffToSave, syncRes?.firebaseUid);
       await loadStaff();
       if (
         syncRes?.firebaseErrorCode === 'OPERATION_NOT_ALLOWED' ||
@@ -247,9 +265,7 @@ export const AdminStaffTab: React.FC<AdminStaffTabProps> = ({ showToast }) => {
       await toggleStaffStatus(s.id, !s.active);
       const updated = { ...s, active: !s.active };
       const syncRes = await syncStaffWithServer({ staffMember: updated });
-      if (syncRes?.firebaseUid) {
-        await ensureFirestoreStaffUserDoc(updated, syncRes.firebaseUid);
-      }
+      await ensureFirestoreStaffUserDoc(updated, syncRes?.firebaseUid);
       setStaffList((prev) =>
         prev.map((item) => (item.id === s.id ? { ...item, active: !item.active } : item))
       );

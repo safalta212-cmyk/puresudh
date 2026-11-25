@@ -669,7 +669,8 @@ function normalizeServerCoupon(d: Record<string, any>): Record<string, any> {
 }
 
 async function fetchFirestoreCollectionResult(
-  collectionName: string
+  collectionName: string,
+  options?: { idToken?: string; filterEmail?: string }
 ): Promise<{ docs: any[]; permissionDenied: boolean }> {
   const envProjectId = process.env.VITE_FIREBASE_PROJECT_ID?.trim();
   const envDbId = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
@@ -699,15 +700,26 @@ async function fetchFirestoreCollectionResult(
       const timer = setTimeout(() => controller.abort(), 3500);
       const keyParam = target.apiKey ? `?key=${encodeURIComponent(target.apiKey)}` : '';
       const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(target.projectId)}/databases/${encodeURIComponent(target.dbId)}/documents:runQuery${keyParam}`;
+      const structuredQuery: Record<string, any> = {
+        from: [{ collectionId: collectionName }],
+        limit: 200,
+      };
+      if (options?.filterEmail) {
+        structuredQuery.where = {
+          fieldFilter: {
+            field: { fieldPath: 'email' },
+            op: 'EQUAL',
+            value: { stringValue: options.filterEmail },
+          },
+        };
+      }
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          structuredQuery: {
-            from: [{ collectionId: collectionName }],
-            limit: 200,
-          },
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options?.idToken ? { Authorization: `Bearer ${options.idToken}` } : {}),
+        },
+        body: JSON.stringify({ structuredQuery }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -3955,6 +3967,7 @@ apiRouter.post('/auth/verify-role', async (req: Request, res: Response) => {
     const { email, role, requestedPortal } = req.body || {};
     const authHeader = String(req.headers.authorization || '');
     let cleanEmail = (email || '').trim().toLowerCase();
+    let verifiedToken = '';
 
     if (authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7).trim();
@@ -3966,6 +3979,7 @@ apiRouter.post('/auth/verify-role', async (req: Request, res: Response) => {
         });
       }
       cleanEmail = verifiedCaller.email;
+      verifiedToken = token;
     }
 
     if (!cleanEmail) {
@@ -4006,9 +4020,12 @@ apiRouter.post('/auth/verify-role', async (req: Request, res: Response) => {
       (target === 'delivery' || target === 'staff' || target === 'vendor') &&
       (!role || role === 'customer')
     ) {
-      // Check Firestore roster if readable and not cached in local JSON yet
+      // Check Firestore staff roster using caller's verified Firebase ID token when available
       try {
-        const fsStaffRes = await fetchFirestoreCollectionResult('staff');
+        const fsStaffRes = await fetchFirestoreCollectionResult('staff', {
+          idToken: verifiedToken || undefined,
+          filterEmail: cleanEmail,
+        });
         const fsStaffEntry = fsStaffRes.docs.find(
           (s: any) => String(s?.email || '').trim().toLowerCase() === cleanEmail
         );
